@@ -1,189 +1,113 @@
-# FuseOS – High Level Design (HLD)
-**Version:** v1.0  
-**Status:** Initial Design  
-**Scope:** Authentication, Device Connectivity, Clipboard Sync
+# FuseOS — High-Level Design (HLD)
+
+**Version:** v2.0
+**Status:** Approved for build
+**Scope:** Authentication, device pairing, clipboard sync, file transfer
+
+> **Note on v1 docs:** the earlier HLD described a "local-first, backend optional" system while the earlier LLD described "the backend is always the coordinator." Those contradicted each other. This document supersedes both and defines the single agreed architecture: a **hybrid** system with a cloud control plane and a LAN data plane. See §2.
 
 ---
 
-## 1. Purpose & Scope
+## 1. Purpose & scope
 
-FuseOS v1 establishes a secure and low-latency bridge between macOS and Android devices.  
-The primary objective of this version is to validate reliable cross-device communication through:
+FuseOS establishes a secure, low-latency bridge between **Android** and **macOS** devices under one user account. v1 delivers: secure authentication, trusted device pairing, real-time clipboard sync (text + images), and file transfer. Screen mirroring, remote control, and call/SMS relay are explicitly out of scope for v1.
 
-- Secure user authentication
-- Trusted device pairing and connectivity
-- Real-time clipboard synchronization (copy–paste)
+## 2. Architecture: control plane vs. data plane
 
-This version is intentionally minimal and foundational. Advanced features are explicitly out of scope.
+FuseOS is **hybrid**. Two planes, kept strictly separate:
 
----
+- **Control plane (cloud).** The `server/` (Node 22 + TypeScript + Fastify) plus PostgreSQL. Responsible for identity, the device registry, pairing/trust, presence, and **signaling** (helping two devices discover each other's LAN address). This is the **only** component that touches the database.
+- **Data plane (LAN).** A **direct, encrypted, device-to-device connection over the local network**. All clipboard content and file bytes travel here. **Payloads never pass through the server and are never stored in the database.**
 
-## 2. System Overview
+The server's job on the data path is limited to *introductions*: it tells device A how to reach device B on the LAN, then gets out of the way.
 
-FuseOS follows a **local-first architecture** where devices communicate directly whenever possible.  
-An optional backend is used only for identity and authentication purposes.
+```mermaid
+flowchart LR
+    A["Android"] <-->|"data plane: clipboard + files (LAN, E2E)"| M["macOS"]
+    A -->|"control plane"| S["server + PostgreSQL + Inngest"]
+    M -->|"control plane"| S
+```
 
-### Design Principles
-- Local network–first communication
-- Persistent encrypted connections
-- Minimal latency
-- Explicit user consent and control
+### Design principles
+- Local-network-first for the data path; the server is never on the payload hot path.
+- Event-driven, persistent connections; no polling.
+- The database is the source of truth for identity/device/trust state — nothing else.
+- Explicit user consent for pairing; trust is revocable.
 
----
+## 3. Components
 
-## 3. System Components
+### 3.1 Android client (Kotlin + Jetpack Compose)
+- Authenticates against the control plane; registers the device.
+- Monitors and injects the system clipboard (`ClipboardManager`).
+- Discovers peers on the LAN via NSD (mDNS) and maintains the direct data-plane connection (foreground service for reliability).
+- Sends/receives files via the Storage Access Framework.
 
-### 3.1 macOS Client
-A native macOS application responsible for:
-- User authentication
-- Device pairing approval
-- Clipboard monitoring and injection
-- Secure connection management
+### 3.2 macOS client (SwiftUI)
+- Authenticates and registers the device.
+- Monitors and injects the clipboard (`NSPasteboard`).
+- Discovers peers via Bonjour / `Network.framework` and maintains the direct data-plane connection.
+- Provides a Share extension ("Send to my phone").
 
----
+### 3.3 Server / control plane (Node 22 + TypeScript + Fastify)
+- **Auth** via Better Auth (email/password, sessions, JWT for REST + WebSocket).
+- **Device registry** and **pairing/trust** management in PostgreSQL (Drizzle ORM).
+- **WebSocket `/signal`**: presence + LAN-address signaling + pairing notifications.
+- **Inngest** for durable async work (pairing pushes, code expiry, presence-timeout sweeps, email verification).
+- Handles **no clipboard or file payloads**.
 
-### 3.2 Android Client
-A native Android application with background services responsible for:
-- User authentication
-- Clipboard monitoring
-- Connection initiation
-- Secure event transmission
+### 3.4 PostgreSQL
+- Source of truth for users, devices, pairing codes, and device trust relationships.
+- Integrity enforced by schema constraints (see [schema.md](schema.md)).
 
----
+## 4. Authentication & identity
 
-### 3.3 Backend (Minimal & Optional)
-The backend is used only for:
-- User identity management
-- Device registration metadata
-- Authentication token issuance
+- **User auth:** one FuseOS account; Better Auth issues a session and a JWT. The JWT authorizes both REST calls and the `/signal` WebSocket. Each device authenticates independently.
+- **Device identity:** on registration each device is assigned a unique device id and generates a device key pair. The public key is stored in the registry; the private key never leaves the device. Device identity is persistent and bound to the user account.
 
-**No clipboard data or device communication passes through the backend.**
+## 5. Pairing & trust
 
----
+1. User initiates pairing on device A → control plane issues a **short-lived, one-time, user-scoped code**.
+2. User enters the code on device B → control plane validates it.
+3. Devices exchange public keys (via the control plane) and record a **trusted relationship**.
+4. Trust is persisted (server registry + locally on each device). Trusted devices reconnect automatically.
+5. Trust is revocable at any time; revocation propagates and the data-plane connection is torn down.
 
-## 4. Authentication Model
+## 6. Connectivity model
 
-### 4.1 User Authentication
-- Users authenticate using a single FuseOS account
-- Authentication occurs independently on each device
-- A short-lived access token is issued upon successful login
+- **Discovery:** mDNS/Bonjour on the LAN (`_fuseos._tcp`), assisted by control-plane signaling that supplies the peer's current LAN address and presence.
+- **Connection:** persistent, bidirectional, **end-to-end encrypted** (TLS/DTLS) directly between the two devices.
+- **Lifecycle:** discover → authenticate peer (device keys) → establish secure channel → maintain with heartbeats → auto-reconnect on network change.
+- **Off-LAN:** out of scope for v1; a future encrypted relay fallback is noted in the roadmap, not built.
 
----
+## 7. Clipboard synchronization (core feature)
 
-### 4.2 Device Identity
-Each device is assigned:
-- A unique device identifier
-- A device-specific cryptographic key pair
+- **Supported data (v1):** plain text and images.
+- **Capture:** both clients watch the local clipboard; only **user-initiated** changes propagate.
+- **Flow:** change on A → serialized (protobuf) + encrypted → sent over the data-plane channel → B validates source → B updates its clipboard → ACK.
+- **Loop prevention:** every event carries a `source_device_id` + monotonic sequence; a receiver **applies but never re-emits**; conflicts resolve last-write-wins. (See [protocol.md](protocol.md).)
 
-Device identity is persistent and bound to the user account.
+## 8. File transfer
 
----
+- File is described by a `FILE_META` message, then streamed as ordered `FILE_CHUNK` messages over the data-plane channel, with integrity verification and progress. Files never touch the server.
 
-## 5. Device Pairing & Trust Establishment
+## 9. Latency
 
-### 5.1 Pairing Flow
-1. User initiates pairing on one device
-2. A one-time pairing code or QR code is generated
-3. The second device verifies the code
-4. Devices exchange public keys
-5. A trusted relationship is stored locally on both devices
+- Persistent connections avoid repeated handshakes; events are lightweight and push-based; no polling. The control plane is never in the payload path. Target: p95 clipboard sync < 300 ms on a healthy LAN.
 
----
+## 10. Failure handling
 
-### 5.2 Trust Rules
-- Pairing requires explicit user approval
-- Trusted devices reconnect automatically
-- Trust can be revoked manually at any time
+- Temporary disconnects trigger automatic reconnection; sync pauses gracefully and resumes.
+- No indefinite queuing of clipboard events.
+- Control-plane calls fail loud (typed errors); data-plane drops fail soft (degrade + reconnect, never crash).
+- Presence timeouts are swept by an Inngest job so stale "online" state self-heals.
 
----
+## 11. Security
 
-## 6. Connectivity Model
+- End-to-end encryption on the LAN channel (TLS/DTLS); session keys per connection.
+- JWT auth on every control-plane request and WebSocket connection.
+- Message authentication / integrity on data-plane messages.
+- Payloads never persisted server-side → minimal data exposure.
 
-### 6.1 Connection Type
-- Persistent, bidirectional connection
-- Transport priority:
-  1. Local Wi-Fi
-  2. USB (fallback)
+## 12. Success criteria
 
----
-
-### 6.2 Connection Lifecycle
-- Discover → Authenticate → Establish secure channel → Maintain
-- Automatic reconnection on network changes
-- Heartbeat mechanism to detect disconnections
-
----
-
-### 6.3 Security
-- End-to-end encrypted communication
-- Session-based encryption keys
-- Message authentication and integrity verification
-
----
-
-## 7. Clipboard Synchronization (Core Feature)
-
-### 7.1 Supported Data
-- Plain text only
-
----
-
-### 7.2 Clipboard Monitoring
-- Both clients monitor local clipboard changes
-- Only user-initiated changes are propagated
-
----
-
-### 7.3 Synchronization Flow
-1. Clipboard change detected on Device A
-2. Change event is serialized and encrypted
-3. Event is transmitted over the secure channel
-4. Device B validates the source
-5. Clipboard is updated on Device B
-6. Acknowledgment is sent back
-
----
-
-### 7.4 Conflict Resolution
-- Last-write-wins strategy
-- Duplicate propagation is suppressed to prevent loops
-
----
-
-## 8. Latency Considerations
-
-- Persistent connections avoid repeated handshakes
-- Clipboard events are event-driven and lightweight
-- No polling mechanisms are used
-- Backend is never part of the critical data path
-
-Expected behavior: clipboard sync should feel instantaneous under normal network conditions.
-
----
-
-## 9. Failure Handling
-
-- Temporary disconnections trigger automatic reconnection
-- Clipboard sync pauses gracefully during outages
-- No indefinite queuing of clipboard events
-- User-visible indicators reflect connection state
-
----
-
-## 10. Non-Goals (v1 Explicit)
-
-- No file transfer
-- No screen mirroring
-- No remote device control
-- No cloud-based clipboard storage
-- No multi-device synchronization beyond one-to-one pairing
-
----
-
-## 11. Success Criteria
-
-FuseOS v1 is considered successful if:
-- Devices pair reliably
-- Connections remain stable
-- Clipboard synchronization is fast and consistent
-- User permissions and trust are always explicit
+FuseOS v1 succeeds if devices pair reliably, connections stay stable, clipboard sync is fast and consistent, file transfer works both ways, and user trust is always explicit and revocable — with **zero payload data ever on the server**.

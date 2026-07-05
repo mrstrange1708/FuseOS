@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package fuseos.v1;
+
+// Source of truth for the FuseOS device-to-device (LAN data plane) wire format.
+// Every platform generates its own bindings from this file. See docs/protocol.md.
+//
+// RULES:
+//  - Tag numbers are PERMANENT. Add fields; never renumber or reuse a tag.
+//  - Every event MUST carry source_device_id + seq (loop prevention & dedupe).
+//  - No control-plane / auth concerns live here — this is data plane only.
+
+// Wraps every message on the LAN channel.
+message Envelope {
+  string source_device_id = 1; // device that originated this event
+  uint64 seq               = 2; // monotonic per source device
+  int64  sent_at_unix_ms   = 3;
+
+  oneof body {
+    ClipText  clip_text  = 10;
+    ClipImage clip_image = 11;
+    FileMeta  file_meta  = 12;
+    FileChunk file_chunk = 13;
+    Ack       ack        = 14;
+    Heartbeat heartbeat  = 15;
+  }
+}
+
+message ClipText {
+  string text = 1; // UTF-8
+}
+
+message ClipImage {
+  string mime  = 1; // e.g. "image/png"
+  bytes  data  = 2; // small images inline; large images use FileChunk streaming
+}
+
+message FileMeta {
+  string transfer_id = 1;
+  string name        = 2;
+  uint64 size        = 3;
+  string mime        = 4;
+  string checksum    = 5; // e.g. sha-256 hex, verified on receipt
+}
+
+message FileChunk {
+  string transfer_id = 1;
+  uint64 index       = 2; // ordered
+  bytes  data        = 3;
+  bool   last        = 4;
+}
+
+message Ack {
+  string ref_transfer_id = 1; // for file transfers
+  uint64 ref_seq         = 2; // for clipboard events
+}
+
+message Heartbeat {}

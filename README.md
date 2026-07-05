@@ -1,59 +1,75 @@
 # FuseOS
 
-## 📌 Problem Statement
+**Cross-device continuity for Android and macOS.** Copy on your phone, paste on your Mac. Send files and shared content between your devices in a tap. Low latency, same WiFi, one account.
 
-Modern users operate across multiple devices such as laptops, desktops, and mobile phones throughout the day. However, these devices function in isolation, forcing users to manually transfer copied content between them using inefficient methods like messaging apps, email, or third-party tools.
-
-This fragmented workflow creates unnecessary friction and reduces productivity. Users experience delays, repetitive actions, and context switching overhead just to move simple data like text, links, or small snippets across devices.
-
-There is a clear need for a seamless, secure, and unified clipboard experience that enables real-time copy-paste functionality across multiple authenticated devices under the same user identity.
+FuseOS brings Apple-ecosystem-style continuity to the **Android ⇄ macOS** pairing that has never had it.
 
 ---
 
-## 🎯 Objectives
+## Why
 
-- Eliminate manual content transfer between devices  
-- Reduce productivity loss caused by context switching  
-- Provide a unified clipboard experience across devices  
-- Ensure secure device authentication and synchronization  
-- Support real-time content availability  
+Modern work spans a phone and a laptop, but an Android phone and a Mac live in separate worlds. Moving a link, a snippet, a screenshot, or a file between them means emailing yourself or piping it through a chat app. FuseOS removes that friction: your devices behave like one system.
 
----
+## What it does (v1)
 
-## 🚀 Key Features
+- **Clipboard sync** — copy text or an image on one device, it's on the clipboard of the other.
+- **File transfer** — send files both ways, Mac ⇄ phone.
+- **Share-sheet send** — "Send to my Mac / my phone" from the native share menu.
+- **Secure pairing** — link 2–3 of your own devices under one account.
 
-- **User Authentication**  
-  Secure login system to manage devices under a single user account.
+**Deferred to later phases:** screen mirroring, remote control, and phone-call / SMS relay.
 
-- **Multi-Device Connectivity**  
-  Ability to connect and manage multiple devices (2–3 devices initially) under the same account.
+## How it works
 
-- **Cross-Device Copy-Paste**  
-  Copy content on one device and paste it on another in real time.
+FuseOS is **hybrid** by design:
 
-- **Local Clipboard Support**  
-  Maintain standard copy-paste functionality within the same device.
+- A small cloud **control plane** (`server/` + PostgreSQL) handles login, the device registry, pairing, and real-time **signaling** — helping your devices find each other.
+- The actual **clipboard and file data travels directly device-to-device over your local network** — it never passes through the server. That keeps it fast and private.
 
-- **Device Management Dashboard**  
-  View, connect, disconnect, and manage authorized devices.
+```
+ Android ──┐        control plane (auth, pairing, signaling)        ┌── macOS
+           ├──────────────────►  server + PostgreSQL  ◄─────────────┤
+           │                                                        │
+           └───────────  direct LAN data plane (clipboard/files)  ──┘
+                         payloads never touch the server
+```
 
-- **Real-Time Synchronization**  
-  Instantly sync clipboard data across connected devices.
+See [`docs/`](docs/) for the full design: [PRD](docs/PRD.md) · [HLD](docs/HLD.md) · [LLD](docs/LLD.md) · [schema](docs/schema.md) · [API](docs/api.md) · [protocol](docs/protocol.md).
 
-- **Secure Data Handling**  
-  Ensure clipboard content is accessible only to authenticated and authorized devices.
+## Tech stack
 
----
+| Layer | Choice |
+| --- | --- |
+| Monorepo | PNPM workspaces + Turborepo, Node 22 |
+| Server | Node 22 + TypeScript + Fastify, `ws` for signaling |
+| Database | PostgreSQL + Drizzle ORM |
+| Durable jobs | Inngest |
+| Auth | Better Auth (self-hosted, JWT) |
+| Analytics | PostHog |
+| Error tracking | Sentry |
+| Android | Kotlin + Jetpack Compose |
+| macOS | SwiftUI |
+| Wire format | Protocol Buffers (`proto/`) |
+| Quality | ESLint · Prettier · TypeScript · Vitest |
+| CI | GitHub Actions (`.github/workflows/ci.yml`) |
 
-## 🧩 Target Users
+## Repository layout
 
-- Developers working across multiple systems  
-- Professionals using both laptop and mobile devices  
-- Students managing projects on multiple platforms  
-- Power users who frequently switch between devices  
+```
+FuseOS/
+├── docs/                 # design of record (start here)
+├── server/               # Node/TS control plane
+├── packages/proto/       # shared protobuf bindings (generated)
+├── proto/                # .proto wire-contract source of truth
+└── clients/
+    ├── android/          # Kotlin + Jetpack Compose
+    └── macos/            # SwiftUI
+```
 
----
+## Status
 
-## 📈 Expected Impact
+**Design phase.** The specifications in `docs/` are complete; the applications are being built against them. See [`CLAUDE.md`](CLAUDE.md) for engineering principles and contributor guidance.
 
-FuseOS aims to simplify digital workflows by removing friction in multi-device environments, improving efficiency, and creating a unified user experience across connected systems.
+## License
+
+See [LICENSE](LICENSE).

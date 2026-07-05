@@ -1,195 +1,105 @@
-# FuseOS – Architecture Notes & Design Clarifications
+# FuseOS — Low-Level Design (LLD)
 
-## 1. Difference Between HLD and LLD
+**Version:** v2.0
+**Status:** Approved for build
 
-### Low-Level Design (LLD)
-LLD describes how the system is implemented internally.
+> Supersedes the original `LLD_v1.md`. That version claimed "the backend is always the coordinator" and routed clipboard events through the backend, contradicting the HLD. **Corrected here:** the backend is a control plane only; the **data plane is LAN-direct** and no clipboard/file payload ever transits the server. The one idea kept from the old LLD is the loop-prevention rule (§6).
 
-It focuses on:
-- Database schemas
-- API request/response structures
-- WebSocket message formats
-- Device lifecycle states
-- Error handling and constraints
-
-LLD answers:
-> How exactly will this system be implemented?
+This document describes *how* FuseOS is implemented. It points into the contract docs: [schema.md](schema.md) (database), [api.md](api.md) (control-plane REST + WebSocket), [protocol.md](protocol.md) (LAN wire format).
 
 ---
 
-### Summary Table
+## 1. System decomposition
 
-| Aspect | HLD | LLD |
-|-----|-----|-----|
-| Abstraction level | High | Detailed |
-| Focus | System structure | Implementation |
-| DB schema | ❌ | ✅ |
-| APIs & sockets | ❌ | ✅ |
-| State handling | ❌ | ✅ |
-| Interview depth | Mid-level | Strong signal |
+| Concern | Where | Notes |
+| --- | --- | --- |
+| Identity, sessions, JWT | `server/` (Better Auth) | source of truth in Postgres |
+| Device registry, pairing, trust | `server/` (Fastify + Drizzle) | Postgres, constraint-enforced |
+| Presence & LAN signaling | `server/` `/signal` WebSocket (`ws`) | no payloads |
+| Durable async jobs | `server/` (Inngest) | expiry, sweeps, notifications |
+| Clipboard/file transport | client ⇄ client (LAN) | protobuf over encrypted channel |
+| Clipboard capture/injection | native clients | `ClipboardManager` / `NSPasteboard` |
 
----
+## 2. Device lifecycle (state machine)
 
-## 2. Core Design Assumptions (V1)
+```
+UNREGISTERED
+   │  register (JWT + device pubkey) → server
+   ▼
+REGISTERED (not paired)
+   │  pairing complete (trust established)
+   ▼
+PAIRED / OFFLINE ──── connect to /signal ────► PAIRED / ONLINE
+   ▲                                               │
+   │            LAN peer connection established     ▼
+   └──────────── disconnect / network loss ──── SYNCING (data plane live)
+```
 
-- A user owns **2–3 personal devices**
-- Devices belong to the **same user account**
-- Clipboard sync is **text-only**
-- Real-time sync is required
-- Internet connectivity is assumed
-- Backend is always the coordinator
+- **REGISTERED → PAIRED:** via the pairing flow (§4). A device may have multiple trusted peers (2–3 devices total per account in v1).
+- **ONLINE:** connected to the control-plane `/signal` socket; presence is visible to the user's other devices.
+- **SYNCING:** a direct LAN data-plane channel to a trusted peer is open; clipboard/file events flow.
+- Transitions are event-driven; reconnection is automatic with backoff.
 
-These assumptions simplify V1 and keep scope realistic.
+## 3. Control-plane request handling
 
----
+- Every request/socket carries a Better Auth **JWT**; Fastify validates it before any handler runs.
+- Input is validated with **Zod** at the boundary; only validated, typed data reaches a Drizzle query.
+- Multi-row writes (e.g. pairing: create trust + mark code used) run in a **transaction**.
+- Errors are typed and returned explicitly (fail loud on the control plane).
 
-## 3. Why No “Main Device” Exists
+Full endpoint list and payloads: [api.md](api.md).
 
-There is **no master or primary device** in FuseOS.
+## 4. Pairing flow (detailed)
 
-Reasons:
-- Any device can go offline
-- Devices must work independently
-- Central coordination avoids conflicts
-- Backend ensures consistency
+1. **Initiate** (`POST /pairing/initiate`, device A): server generates a random short code, stores a `pairing_codes` row (`user_id`, `code`, `expires_at` ~ minutes, `used_at = null`), returns the code. An **Inngest** job is scheduled to expire it.
+2. **Claim** (`POST /pairing/claim`, device B): server validates the code (exists, same `user_id`, not expired, not used) inside a transaction, exchanges the two devices' public keys, writes a `device_trust` relationship, and marks the code `used_at = now()`.
+3. **Notify:** the server pushes a pairing-complete event to both devices over `/signal` (delivery made durable via Inngest).
+4. Both devices persist the peer's public key locally and may now establish the data-plane channel.
 
-Each device:
-- Manages its own clipboard
-- Sends events to backend
-- Receives events from backend
+Codes are **short-lived, one-time, user-scoped** — a code can only ever pair two devices of the same account.
 
----
+## 5. Presence & signaling (`/signal`)
 
-## 4. Device Ownership Model
+- On connect (JWT-authenticated), the device is marked online and `last_seen` is updated; its trusted peers are notified.
+- The device publishes its current **LAN address**; the server relays it to trusted, online peers so they can open a direct connection (signaling only — no payloads).
+- Heartbeats keep the socket alive; a missed-heartbeat threshold marks the device offline. An **Inngest** presence-timeout sweep self-heals stale "online" rows if a socket dies uncleanly.
 
-- One user → multiple devices
-- Devices are peers
-- Backend enforces:
-  - Ownership
-  - Limits
-  - Authorization
+## 6. Data plane: message handling & loop prevention
 
-This prevents:
-- Cross-user leaks
-- Infinite clipboard loops
-- Unauthorized device access
+Once two trusted devices have a direct LAN channel (see [protocol.md](protocol.md)):
 
----
+- Messages are **protobuf**-encoded (`proto/`) over an encrypted (TLS/DTLS) connection.
+- **Every event carries `source_device_id` and a monotonic `seq`.**
+- **Loop-prevention invariant:** a device that *receives* an event **applies it but never re-emits** it. Only user-initiated local changes originate new events. Conflicts resolve **last-write-wins** by `seq`/timestamp. This is the single rule that prevents infinite clipboard loops across devices; do not weaken it.
+- Duplicate suppression: a receiver ignores an event whose `(source_device_id, seq)` it has already applied.
 
-## 5. Clipboard Ownership & Loop Prevention
+### Clipboard events
+- `CLIP_TEXT` — UTF-8 text payload.
+- `CLIP_IMAGE` — image bytes + mime; for larger images, chunk as with files.
 
-### Clipboard Rules
-- Each clipboard event has a `source_device_id`
-- Backend broadcasts to all devices except source
-- Receiving devices do NOT re-emit received content
+### File transfer
+- `FILE_META` (name, size, mime, checksum) → ordered `FILE_CHUNK` stream → receiver verifies checksum → `ACK`. Progress derived from bytes received. Failed transfers are retried at the transport layer, not queued on the server.
 
-This guarantees:
-- No infinite loops
-- No duplicate propagation
-- Clean event flow
+## 7. Error handling
 
----
+| Plane | Strategy |
+| --- | --- |
+| Control (REST/WS) | Fail loud: typed error responses, validated input, transactional writes. |
+| Data (LAN) | Fail soft: a dropped packet or lost peer degrades gracefully and reconnects; never crash the app; no indefinite queuing. |
+| Durable jobs | Inngest retries with backoff; nothing critical is fire-and-forget. |
 
-## 6. Why WebSockets Are Mandatory
+## 8. Constraints & invariants (must hold)
 
-Clipboard sync requires:
-- Low latency
-- Bi-directional communication
-- Server push capability
+- No clipboard/file payload ever reaches the server or the database.
+- The database is authoritative only for identity, devices, pairing codes, and trust.
+- Received events are never re-emitted (§6).
+- Pairing codes are one-time, time-limited, user-scoped.
+- All external input is Zod-validated before touching Drizzle.
+- Schema changes are additive/backward-compatible where possible (see [schema.md](schema.md)).
 
-HTTP polling is rejected because:
-- High latency
-- Battery inefficient
-- Poor UX
+## 9. Known limitations (accepted for v1)
 
-WebSockets provide:
-- Persistent connection
-- Instant broadcast
-- Scalable real-time sync
-
----
-
-## 7. Authentication Design Reasoning
-
-JWT-based authentication is used because:
-- Stateless backend
-- Easy WebSocket integration
-- Horizontal scalability
-
-Each request and socket connection:
-- Is validated independently
-- Uses the same user identity
-
----
-
-## 8. Device Pairing Design Reasoning
-
-Pairing uses short-lived codes to:
-- Avoid QR complexity in V1
-- Keep UX simple
-- Prevent accidental pairing
-
-Security properties:
-- Time-limited
-- One-time use
-- User-scoped
-
----
-
-## 9. Backend as Source of Truth
-
-The backend is responsible for:
-- User identity validation
-- Device ownership mapping
-- Clipboard event ordering
-- Broadcasting consistency
-
-Clients are intentionally kept thin.
-
----
-
-## 10. Scalability Notes (Post-V1)
-
-The current design can scale by:
-- Horizontal WebSocket servers
-- Redis pub/sub for broadcasts
-- Database partitioning by user_id
-
-No architectural rewrite is required for V2.
-
----
-
-## 11. Known Limitations (Accepted for V1)
-
-- No offline clipboard queue
-- No encryption beyond TLS
-- Clipboard size limit
-- No conflict resolution logic
-
-These are consciously postponed.
-
----
-
-## 12. Interview Explanation Strategy
-
-When explaining FuseOS:
-
-1. Start with the problem
-2. Explain peer-device model
-3. Justify backend coordination
-4. Walk through clipboard flow
-5. Mention constraints and trade-offs
-
-Clarity > complexity.
-
----
-
-## 13. Conclusion
-
-FuseOS V1 is designed to:
-- Be simple
-- Be correct
-- Be extensible
-
-The system avoids over-engineering while maintaining
-production-level architectural discipline.
+- Same-LAN only; no off-network relay (roadmap item).
+- No offline clipboard queue.
+- Clipboard/file size bounded by transport limits.
+- Last-write-wins only; no rich conflict resolution.

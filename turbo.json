@@ -1,0 +1,17 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build", "proto:gen"],
+      "outputs": ["dist/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "proto:gen": {
+      "inputs": ["../proto/**/*.proto", "proto/**/*.proto"],
+      "outputs": ["src/gen/**"]
+    }
+  }
+}

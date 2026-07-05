@@ -1,0 +1,27 @@
+{
+  "name": "server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "proto:gen": "echo \"proto:gen: bindings generation not yet wired\" && exit 0",
+    "db:generate": "echo \"db:generate: Drizzle not yet wired (see docs/schema.md)\" && exit 0",
+    "db:migrate": "echo \"db:migrate: Drizzle not yet wired (see docs/schema.md)\" && exit 0"
+  },
+  "dependencies": {
+    "@sentry/node": "^8.40.0",
+    "fastify": "^5.1.0",
+    "posthog-node": "^4.3.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

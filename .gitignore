@@ -1,0 +1,29 @@
+# Node / PNPM
+node_modules/
+dist/
+*.tsbuildinfo
+.turbo/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Generated protobuf output
+**/src/gen/
+
+# Android
+clients/android/.gradle/
+clients/android/build/
+clients/android/**/build/
+clients/android/local.properties
+*.apk
+
+# macOS / Xcode
+.DS_Store
+clients/macos/build/
+clients/macos/**/xcuserdata/
+*.xcuserstate
+
+# Logs
+*.log

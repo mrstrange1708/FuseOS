@@ -1,0 +1,9 @@
+{
+  "name": "@fuseos/proto",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "proto:gen": "echo \"@fuseos/proto: bindings generation not yet wired\" && exit 0"
+  }
+}
