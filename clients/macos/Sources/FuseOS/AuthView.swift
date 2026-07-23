@@ -1,4 +1,5 @@
 import SwiftUI
+import FuseOSCore
 
 struct AuthView: View {
     @StateObject private var viewModel = AuthViewModel()

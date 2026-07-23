@@ -1,4 +1,5 @@
 import SwiftUI
+import FuseOSCore
 
 /// The device kinds a user can pick after signing in. Only Android and macOS are
 /// supported in v1; iOS and Windows are shown but not yet available.

@@ -1,4 +1,5 @@
 import SwiftUI
+import FuseOSCore
 
 /// Connect two of your devices: show a code on one and enter it on the other.
 struct PairingView: View {

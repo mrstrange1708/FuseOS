@@ -17,13 +17,13 @@ import Network
 /// Without that tie-break both ends dial simultaneously and each pair ends up with two
 /// half-used connections.
 @MainActor
-final class LanTransport {
+public final class LanTransport {
     /// Envelopes received from any peer. Heartbeats are consumed here, not republished.
     var onEnvelope: ((FuseEnvelope) -> Void)?
 
     /// Peers with a live direct channel right now — what the UI's "connected" chip reads.
-    private(set) var connectedPeers: Set<String> = []
-    var onConnectedPeersChanged: ((Set<String>) -> Void)?
+    public private(set) var connectedPeers: Set<String> = []
+    public var onConnectedPeersChanged: ((Set<String>) -> Void)?
 
     private var listener: NWListener?
     private var selfDeviceId: String?
@@ -35,7 +35,9 @@ final class LanTransport {
     private var sequenceNumber: UInt64 = 0
 
     /// `ip:port` to advertise over `/signal`, or nil until the listener is bound.
-    func lanAddress() -> String? {
+    public init() {}
+
+    public func lanAddress() -> String? {
         guard let port = listener?.port?.rawValue, let ip = Self.localIPv4() else { return nil }
         return "\(ip):\(port)"
     }
@@ -50,7 +52,7 @@ final class LanTransport {
         return envelope
     }
 
-    func start(deviceId: String) {
+    public func start(deviceId: String) {
         stop()
         selfDeviceId = deviceId
         do {
@@ -68,7 +70,7 @@ final class LanTransport {
         }
     }
 
-    func stop() {
+    public func stop() {
         acceptTask?.cancel()
         heartbeatTask?.cancel()
         acceptTask = nil
@@ -84,7 +86,7 @@ final class LanTransport {
     }
 
     /// Fed from `SignalClient`; drives who we dial and which keys we accept.
-    func updatePeers(_ presence: [String: PeerPresence]) {
+    public func updatePeers(_ presence: [String: PeerPresence]) {
         peers = presence
         guard let selfId = selfDeviceId else { return }
         for peerId in presence.keys where Self.dialsFirst(selfId: selfId, peerId: peerId) {

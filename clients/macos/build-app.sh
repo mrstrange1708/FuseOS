@@ -13,7 +13,7 @@ cd "$(dirname "$0")"
 
 CONFIG="${1:-debug}"
 APP=".build/FuseOS.app"
-GEN="Sources/FuseOS/Generated"
+GEN="Sources/FuseOSCore/Generated"
 
 # Regenerate the device-to-device bindings from the shared contract. Android does the
 # same via protobuf-gradle-plugin; both platforms read ../../proto verbatim.

@@ -1,4 +1,5 @@
 import Foundation
+import FuseOSCore
 
 // MARK: - Wire models (see docs/api.md)
 

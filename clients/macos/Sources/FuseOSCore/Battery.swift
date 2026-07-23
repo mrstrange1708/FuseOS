@@ -3,8 +3,8 @@ import IOKit.ps
 
 /// Reads this Mac's battery percentage (nil on desktops with no battery).
 /// Battery is operational presence metadata — never a user payload.
-enum Battery {
-    static func currentPercent() -> Int? {
+public enum Battery {
+    public static func currentPercent() -> Int? {
         guard
             let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
             let sources = IOPSCopyPowerSourcesList(snapshot)?.takeRetainedValue() as? [CFTypeRef]

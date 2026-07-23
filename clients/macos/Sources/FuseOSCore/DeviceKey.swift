@@ -11,7 +11,7 @@ import Foundation
 /// Public keys cross platforms, so they travel as base64 **SPKI DER**: the encoding that
 /// both `derRepresentation` here and `PublicKey.getEncoded()` on Android emit for the
 /// same key.
-enum DeviceKey {
+public enum DeviceKey {
     private static let service = "com.fuseos.app"
     private static let account = "device-identity"
 
@@ -38,7 +38,7 @@ enum DeviceKey {
     }
 
     /// This device's public key as base64 SPKI DER — the `publicKey` the API expects.
-    static func publicKeyBase64() throws -> String {
+    public static func publicKeyBase64() throws -> String {
         try privateKey().publicKey.derRepresentation.base64EncodedString()
     }
 

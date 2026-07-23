@@ -1,4 +1,5 @@
 import Foundation
+import FuseOSCore
 
 /// Persists the signed-in session (token + email), the chosen device type, and
 /// this install's stable device identity (key + server device id).

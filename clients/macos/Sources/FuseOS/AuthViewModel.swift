@@ -1,4 +1,5 @@
 import Foundation
+import FuseOSCore
 
 @MainActor
 final class AuthViewModel: ObservableObject {

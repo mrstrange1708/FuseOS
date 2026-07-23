@@ -36,7 +36,7 @@ Monorepo managed with **PNPM workspaces + Turborepo** on **Node 22** (see `.node
 - `packages/proto/` — shared **protobuf** wire-contract source and its generated TypeScript. A PNPM workspace.
 - `proto/` — the `.proto` source of truth for the device-to-device protocol. Every platform generates its own bindings from these files; when the wire format changes, it changes here first.
 - `clients/android/` — Kotlin + Jetpack Compose (Gradle toolchain; **outside** the PNPM workspace).
-- `clients/macos/` — SwiftUI (Xcode toolchain; **outside** the PNPM workspace).
+- `clients/macos/` — SwiftPM (**outside** the PNPM workspace). Split into `FuseOSCore` (logic: crypto, LAN transport, clipboard rules — unit-tested) and `FuseOS` (the SwiftUI app). An executable target cannot be imported by tests, which is why the logic lives in its own library.
 - `docs/` — the design of record.
 
 The two native apps coordinate **only** through the shared `proto/` contract — that is the seam between them. A protocol change is a cross-cutting change: update `proto/`, then both clients and the docs.
@@ -70,7 +70,7 @@ All JS/TS commands run from the repo root via Turborepo (they fan out to the wor
 
 The native clients are built with their own toolchains, outside PNPM:
 - **Android** (`clients/android/`): `./gradlew assembleDebug` to produce a debug APK; `./gradlew test` for unit tests.
-- **macOS** (`clients/macos/`): `./build-app.sh` then `open .build/FuseOS.app`; `./run-checks.sh` for the assert-based checks (no SPM test target yet). SwiftPM, no `.xcodeproj`. Run the bundle rather than `swift run` — LAN connections need local-network permission, which only a bundle identifier can hold.
+- **macOS** (`clients/macos/`): `./build-app.sh` then `open .build/FuseOS.app`; `swift test` for the unit tests. SwiftPM, no `.xcodeproj`. Run the bundle rather than `swift run` — LAN connections need local-network permission, which only a bundle identifier can hold.
 
 > Design phase: these scripts are the intended interface. Some workspaces are still stubs — expect a command to be a no-op until its workspace exists.
 
@@ -78,7 +78,7 @@ The native clients are built with their own toolchains, outside PNPM:
 
 - **TypeScript (`server/`, `packages/*`)**: `strict` mode on; no `any` without a written reason. Validate all external input with **Zod** at the boundary, then work with typed data internally. Database access goes through **Drizzle** — no raw SQL strings for normal queries. Keep the HTTP/WebSocket layer (Fastify) thin; put logic in services.
 - **Errors**: fail loud at the control plane (return a typed error response); fail soft on the data plane (a dropped LAN packet should degrade gracefully and reconnect, never crash the app).
-- **Protobuf**: `proto/` is the source of truth for the wire format. Never hand-edit generated bindings. A field is added, never renumbered or reused — protobuf tag numbers are permanent. **Each client generates its own bindings during its own build** — Android via `protobuf-gradle-plugin` (into `app/build/`), macOS via `protoc` in `build-app.sh` (into `Sources/FuseOS/Generated/`, gitignored). Both read `proto/` directly, so there is no generation step to run by hand and `pnpm proto:gen` is a no-op. There are deliberately **no TypeScript bindings**: the server never sees a payload, so it has nothing to decode. macOS needs `brew install protobuf swift-protobuf`.
+- **Protobuf**: `proto/` is the source of truth for the wire format. Never hand-edit generated bindings. A field is added, never renumbered or reused — protobuf tag numbers are permanent. **Each client generates its own bindings during its own build** — Android via `protobuf-gradle-plugin` (into `app/build/`), macOS via `protoc` in `build-app.sh` (into `Sources/FuseOSCore/Generated/`, gitignored). Both read `proto/` directly, so there is no generation step to run by hand and `pnpm proto:gen` is a no-op. There are deliberately **no TypeScript bindings**: the server never sees a payload, so it has nothing to decode. macOS needs `brew install protobuf swift-protobuf`.
 - **Kotlin / Swift**: follow the platform-idiomatic style (Kotlin official style; Swift API Design Guidelines). Match the surrounding code.
 
 ## Common workflows

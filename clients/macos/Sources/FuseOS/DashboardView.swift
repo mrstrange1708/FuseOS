@@ -1,4 +1,5 @@
 import SwiftUI
+import FuseOSCore
 
 /// The main screen after login + device-type selection: this device and the
 /// devices it's connected to, with live presence and battery.

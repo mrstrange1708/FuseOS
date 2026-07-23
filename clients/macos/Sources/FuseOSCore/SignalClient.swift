@@ -5,11 +5,18 @@ import Foundation
 /// `publicKey` and `lanAddress` are what make a direct connection possible: the address
 /// says where to dial, the key says who must answer. Both arrive from the control plane,
 /// which is the only thing that can vouch for them.
-struct PeerPresence {
-    let online: Bool
-    let battery: Int?
-    let publicKey: String?
-    let lanAddress: String?
+public struct PeerPresence {
+    public let online: Bool
+    public let battery: Int?
+    public let publicKey: String?
+    public let lanAddress: String?
+
+    public init(online: Bool, battery: Int?, publicKey: String?, lanAddress: String?) {
+        self.online = online
+        self.battery = battery
+        self.publicKey = publicKey
+        self.lanAddress = lanAddress
+    }
 }
 
 /// A decoded `/signal` server frame (only the fields the dashboard needs).
@@ -35,17 +42,17 @@ private struct PeerCard: Decodable {
 /// heartbeats, and surfaces peer presence via callbacks. Fail-soft — a dropped
 /// socket reconnects with a short delay and never crashes the app.
 @MainActor
-final class SignalClient {
+public final class SignalClient {
     /// Everything currently known about this device's paired peers.
-    private(set) var presence: [String: PeerPresence] = [:]
+    public private(set) var presence: [String: PeerPresence] = [:]
 
-    var onPresenceChanged: (([String: PeerPresence]) -> Void)?
-    var onPaired: (() -> Void)?
+    public var onPresenceChanged: (([String: PeerPresence]) -> Void)?
+    public var onPaired: (() -> Void)?
 
     /// Supplies this device's `ip:port` for peers to dial. The LAN listener binds an
     /// ephemeral port, so this is nil until it is up and changes across restarts — hence
     /// a closure rather than a stored value.
-    var lanAddressProvider: (() -> String?)?
+    public var lanAddressProvider: (() -> String?)?
 
     private var task: URLSessionWebSocketTask?
     private var token: String?
@@ -53,14 +60,16 @@ final class SignalClient {
     private var active = false
     private var heartbeat: Task<Void, Never>?
 
-    func start(token: String, deviceId: String) {
+    public init() {}
+
+    public func start(token: String, deviceId: String) {
         self.token = token
         self.deviceId = deviceId
         active = true
         connect()
     }
 
-    func stop() {
+    public func stop() {
         active = false
         heartbeat?.cancel()
         heartbeat = nil

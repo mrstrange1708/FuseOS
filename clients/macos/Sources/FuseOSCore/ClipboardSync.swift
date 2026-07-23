@@ -11,7 +11,7 @@ import Foundation
 ///
 /// All loop-prevention lives in `LoopGuard`; this class only bridges it to the platform.
 @MainActor
-final class ClipboardSync {
+public final class ClipboardSync {
     /// Fast enough to feel instant against the 300 ms p95 target, slow enough to be free.
     private static let pollInterval: TimeInterval = 0.3
 
@@ -22,12 +22,12 @@ final class ClipboardSync {
     private var watcher: Task<Void, Never>?
     private var lastChangeCount: Int
 
-    init(transport: LanTransport) {
+    public init(transport: LanTransport) {
         self.transport = transport
         lastChangeCount = NSPasteboard.general.changeCount
     }
 
-    func start(selfDeviceId: String) {
+    public func start(selfDeviceId: String) {
         stop()
         guard_ = LoopGuard(selfDeviceId: selfDeviceId)
         // Start from the current count so an item copied before launch is not
@@ -46,7 +46,7 @@ final class ClipboardSync {
         }
     }
 
-    func stop() {
+    public func stop() {
         watcher?.cancel()
         watcher = nil
         transport.onEnvelope = nil

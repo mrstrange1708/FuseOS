@@ -54,7 +54,7 @@ actor LanChannel {
     /// of which mean this connection is finished.
     func receive() async throws -> FuseEnvelope {
         let header = try await connection.receiveExactly(4)
-        let length = Int(header.withUnsafeBytes { $0.load(as: UInt32.self).bigEndian })
+        let length = Int(header.beUInt32)
         guard length > 0, length <= Self.maxFrameBytes else {
             throw Failure.frameTooLarge(length)
         }
@@ -87,7 +87,7 @@ actor LanChannel {
         try await connection.sendData(header + selfId + selfNonce)
 
         let peerLengthData = try await connection.receiveExactly(2)
-        let peerIdLength = Int(peerLengthData.withUnsafeBytes { $0.load(as: UInt16.self).bigEndian })
+        let peerIdLength = Int(peerLengthData.beUInt16)
         guard peerIdLength > 0, peerIdLength <= maxDeviceIdBytes else {
             throw Failure.frameTooLarge(peerIdLength)
         }
@@ -114,6 +114,27 @@ actor LanChannel {
     private func bigEndianLength(_ count: Int) -> Data {
         var value = UInt32(count).bigEndian
         return Data(bytes: &value, count: 4)
+    }
+}
+
+// MARK: - Big-endian reads
+
+extension Data {
+    /// Reads the length prefixes off the wire byte by byte.
+    ///
+    /// Deliberately not `withUnsafeBytes { $0.load(as: UInt32.self) }`: `load` *requires*
+    /// its address to be aligned to the type, and a `Data` handed back by the network
+    /// stack is a slice at an arbitrary offset — measurably unaligned in practice. arm64
+    /// tolerates unaligned loads so that spelling happens to work, but it is undefined
+    /// behaviour the compiler may assume away. Assembling the bytes is exact everywhere,
+    /// and this parses attacker-controlled input on a data plane whose rule is to fail
+    /// soft, never crash.
+    var beUInt32: UInt32 {
+        reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+    }
+
+    var beUInt16: UInt16 {
+        reduce(UInt16(0)) { ($0 << 8) | UInt16($1) }
     }
 }
 

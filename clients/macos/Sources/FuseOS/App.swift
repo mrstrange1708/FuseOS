@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import FuseOSCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     // ponytail: quitting with the last window means clipboard sync stops when the window
