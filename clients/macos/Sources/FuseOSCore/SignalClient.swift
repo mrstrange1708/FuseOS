@@ -138,7 +138,9 @@ public final class SignalClient {
         }
     }
 
-    private func handle(_ text: String) {
+    /// Internal rather than private so tests can feed real server frames straight in,
+    /// without standing up a WebSocket.
+    func handle(_ text: String) {
         guard
             let data = text.data(using: .utf8),
             let event = try? JSONDecoder().decode(SignalEvent.self, from: data)
