@@ -1,14 +1,16 @@
 package com.fuseos.app.data
 
 import android.content.Context
-import android.util.Base64
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.fuseos.app.core.DeviceKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import java.security.SecureRandom
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.security.KeyPair
 
 private val Context.authDataStore by preferencesDataStore(name = "fuse_session")
 
@@ -26,8 +28,16 @@ class SessionStore(private val context: Context) {
         val EMAIL = stringPreferencesKey("email")
         val DEVICE_TYPE = stringPreferencesKey("device_type")
         val DEVICE_ID = stringPreferencesKey("device_id")
-        val DEVICE_KEY = stringPreferencesKey("device_key")
+
+        // Deliberately not the old "device_key": that held a random stand-in in a
+        // different format, and a fresh name lets stale installs re-register cleanly
+        // instead of presenting a key nothing can do ECDH against.
+        val DEVICE_PUBLIC_KEY = stringPreferencesKey("device_public_key")
+        val DEVICE_PRIVATE_KEY = stringPreferencesKey("device_private_key")
     }
+
+    /** Guards the read-then-generate below; two racing callers must not mint two identities. */
+    private val keyMutex = Mutex()
 
     val tokenFlow: Flow<String?> = context.authDataStore.data.map { it[Keys.TOKEN] }
     val emailFlow: Flow<String?> = context.authDataStore.data.map { it[Keys.EMAIL] }
@@ -52,18 +62,32 @@ class SessionStore(private val context: Context) {
     suspend fun currentToken(): String? = tokenFlow.first()
 
     /**
-     * Stable per-install identifier used as the device's public key (a random
-     * stand-in until the LAN data plane brings real keypairs). Generated once.
+     * This device's P-256 identity, minted on first use and then reused forever.
+     *
+     * ponytail: the private key sits in DataStore beside the session token rather than
+     * behind the Android Keystore, because Keystore ECDH (`PURPOSE_AGREE_KEY`) needs
+     * API 31 and minSdk here is 26. Both secrets should move together — either raise
+     * minSdk to 31, or put both behind EncryptedSharedPreferences.
      */
-    suspend fun deviceKey(): String {
-        context.authDataStore.data.first()[Keys.DEVICE_KEY]?.let { return it }
-        val bytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
-        val key = Base64.encodeToString(bytes, Base64.NO_WRAP)
-        context.authDataStore.edit { it[Keys.DEVICE_KEY] = key }
-        return key
+    suspend fun deviceKeyPair(): KeyPair = keyMutex.withLock {
+        val prefs = context.authDataStore.data.first()
+        val stored = prefs[Keys.DEVICE_PRIVATE_KEY] to prefs[Keys.DEVICE_PUBLIC_KEY]
+        val (privateKey, publicKey) = stored
+        if (privateKey != null && publicKey != null) {
+            return@withLock KeyPair(DeviceKey.decodePublic(publicKey), DeviceKey.decodePrivate(privateKey))
+        }
+        val pair = DeviceKey.generate()
+        context.authDataStore.edit {
+            it[Keys.DEVICE_PRIVATE_KEY] = DeviceKey.encodePrivate(pair.private)
+            it[Keys.DEVICE_PUBLIC_KEY] = DeviceKey.encodePublic(pair.public)
+        }
+        pair
     }
 
-    /** Signs out. Keeps `device_key` (the physical device identity) but drops the
+    /** This device's public key as base64 SPKI DER — the `publicKey` the API expects. */
+    suspend fun deviceKey(): String = DeviceKey.encodePublic(deviceKeyPair().public)
+
+    /** Signs out. Keeps the device keypair (the physical device identity) but drops the
      *  session and the per-account server device id. */
     suspend fun clear() {
         context.authDataStore.edit {

@@ -64,7 +64,7 @@ struct ControlPlane {
         let body = DeviceRegisterRequest(
             name: deviceName(),
             platform: "macos",
-            publicKey: SessionStore.shared.deviceKey,
+            publicKey: try SessionStore.shared.deviceKey,
             battery: battery,
         )
         let response: DeviceRegisterResponse = try await send(

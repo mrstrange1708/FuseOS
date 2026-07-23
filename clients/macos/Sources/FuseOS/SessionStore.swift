@@ -18,7 +18,6 @@ final class SessionStore: ObservableObject {
     private let emailKey = "fuse.email"
     private let deviceTypeKey = "fuse.deviceType"
     private let deviceIdKey = "fuse.deviceId"
-    private let deviceKeyKey = "fuse.deviceKey"
 
     private init() {
         token = defaults.string(forKey: tokenKey)
@@ -27,15 +26,10 @@ final class SessionStore: ObservableObject {
         deviceId = defaults.string(forKey: deviceIdKey)
     }
 
-    /// Stable per-install identifier used as the device's public key (a random
-    /// stand-in until the LAN data plane brings real keypairs). Generated once.
+    /// This device's public key as base64 SPKI DER — the `publicKey` the API expects.
+    /// The keypair itself lives in the Keychain; see `DeviceKey`.
     var deviceKey: String {
-        if let existing = defaults.string(forKey: deviceKeyKey) { return existing }
-        var bytes = [UInt8](repeating: 0, count: 32)
-        for i in bytes.indices { bytes[i] = UInt8.random(in: 0 ... 255) }
-        let key = Data(bytes).base64EncodedString()
-        defaults.set(key, forKey: deviceKeyKey)
-        return key
+        get throws { try DeviceKey.publicKeyBase64() }
     }
 
     func save(token: String, email: String) {
@@ -55,8 +49,8 @@ final class SessionStore: ObservableObject {
         defaults.set(id, forKey: deviceIdKey)
     }
 
-    /// Signs out. Keeps `deviceKey` (identifies the physical device) but drops the
-    /// per-account server device id, which is re-established on the next login.
+    /// Signs out. Keeps the Keychain keypair (it identifies the physical device) but
+    /// drops the per-account server device id, re-established on the next login.
     func clear() {
         token = nil
         email = nil
