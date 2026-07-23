@@ -12,4 +12,7 @@ object Config {
      * the app can't reach the server.
      */
     const val BASE_URL: String = "http://192.168.0.112:3000"
+
+    /** The `/signal` presence WebSocket on the same server (http → ws). */
+    val SIGNAL_URL: String = BASE_URL.replaceFirst("http", "ws") + "/signal"
 }

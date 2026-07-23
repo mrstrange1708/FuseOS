@@ -11,19 +11,31 @@ import com.fuseos.app.ui.auth.AuthMode
 import com.fuseos.app.ui.auth.AuthViewModel
 import com.fuseos.app.ui.auth.LoginScreen
 import com.fuseos.app.ui.auth.SignUpScreen
-import com.fuseos.app.ui.home.HomeScreen
+import com.fuseos.app.ui.dashboard.DashboardScreen
+import com.fuseos.app.ui.device.DeviceTypeScreen
 
-/** Top-level router: the persisted session decides auth vs. home. */
+/** Which top-level destination the persisted session resolves to. */
+private enum class RootDestination { Auth, DeviceType, Home }
+
+/** Top-level router: signed out → auth; signed in without a device type → the
+ *  device picker; otherwise home. */
 @Composable
 fun AppRoot() {
     val repository = ServiceLocator.authRepository
     val token by repository.tokenFlow.collectAsState(initial = null)
+    val deviceType by repository.deviceTypeFlow.collectAsState(initial = null)
 
-    Crossfade(targetState = token != null, animationSpec = tween(220), label = "auth-root") { signedIn ->
-        if (signedIn) {
-            HomeScreen()
-        } else {
-            AuthFlow()
+    val destination = when {
+        token == null -> RootDestination.Auth
+        deviceType == null -> RootDestination.DeviceType
+        else -> RootDestination.Home
+    }
+
+    Crossfade(targetState = destination, animationSpec = tween(220), label = "auth-root") { screen ->
+        when (screen) {
+            RootDestination.Auth -> AuthFlow()
+            RootDestination.DeviceType -> DeviceTypeScreen()
+            RootDestination.Home -> DashboardScreen()
         }
     }
 }

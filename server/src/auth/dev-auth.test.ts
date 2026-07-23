@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { buildApp } from '../app.js';
 
-describe('dev auth', () => {
+// These exercise the real Postgres-backed dev-auth, so they need a DATABASE_URL
+// (present locally via server/.env). CI has no database, so they skip there.
+describe.skipIf(!process.env.DATABASE_URL)('dev auth (Postgres)', () => {
   it('signs up then signs in with the same credentials', async () => {
     const app = buildApp();
     const email = `pragya+${Date.now()}@stylicaa.com`;
@@ -39,7 +41,29 @@ describe('dev auth', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/auth/sign-up/email',
-      payload: { email: 'short@stylicaa.com', password: 'short' },
+      payload: { email: 'short@stylicaa.com', password: 'short', name: 'Pragya' },
+    });
+    expect(res.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('rejects a sign-up with no name', async () => {
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/sign-up/email',
+      payload: { email: `noname+${Date.now()}@stylicaa.com`, password: 'supersecret' },
+    });
+    expect(res.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('rejects a blank name', async () => {
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/sign-up/email',
+      payload: { email: `blank+${Date.now()}@stylicaa.com`, password: 'supersecret', name: '   ' },
     });
     expect(res.statusCode).toBe(400);
     await app.close();
@@ -51,12 +75,12 @@ describe('dev auth', () => {
     await app.inject({
       method: 'POST',
       url: '/auth/sign-up/email',
-      payload: { email, password: 'supersecret' },
+      payload: { email, password: 'supersecret', name: 'Pragya' },
     });
     const duplicate = await app.inject({
       method: 'POST',
       url: '/auth/sign-up/email',
-      payload: { email, password: 'supersecret' },
+      payload: { email, password: 'supersecret', name: 'Pragya' },
     });
     expect(duplicate.statusCode).toBe(409);
     await app.close();

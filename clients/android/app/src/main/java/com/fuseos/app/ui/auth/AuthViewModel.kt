@@ -22,6 +22,7 @@ data class AuthUiState(
     val error: String? = null,
     val emailError: String? = null,
     val passwordError: String? = null,
+    val nameError: String? = null,
 )
 
 class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
@@ -36,11 +37,11 @@ class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
         _state.update { it.copy(password = value, passwordError = null, error = null) }
 
     fun onNameChange(value: String) =
-        _state.update { it.copy(name = value, error = null) }
+        _state.update { it.copy(name = value, nameError = null, error = null) }
 
     fun switchTo(mode: AuthMode) =
         _state.update {
-            it.copy(mode = mode, error = null, emailError = null, passwordError = null)
+            it.copy(mode = mode, error = null, emailError = null, passwordError = null, nameError = null)
         }
 
     fun submit() {
@@ -55,13 +56,27 @@ class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
         } else {
             null
         }
-        if (emailError != null || passwordError != null) {
-            _state.update { it.copy(emailError = emailError, passwordError = passwordError) }
+        // Name is required when creating an account.
+        val nameError = if (current.mode == AuthMode.SignUp && current.name.trim().isEmpty()) {
+            "Enter your name"
+        } else {
+            null
+        }
+        if (emailError != null || passwordError != null || nameError != null) {
+            _state.update {
+                it.copy(emailError = emailError, passwordError = passwordError, nameError = nameError)
+            }
             return
         }
 
         _state.update {
-            it.copy(isSubmitting = true, error = null, emailError = null, passwordError = null)
+            it.copy(
+                isSubmitting = true,
+                error = null,
+                emailError = null,
+                passwordError = null,
+                nameError = null,
+            )
         }
         viewModelScope.launch {
             try {

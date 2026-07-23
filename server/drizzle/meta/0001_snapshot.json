@@ -1,0 +1,452 @@
+{
+  "id": "bfdd53ff-c83f-4606-96e0-32c614e9429c",
+  "prevId": "53af65ae-2042-4668-90ec-5b5b5cbe1ca8",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.dev_auth_sessions": {
+      "name": "dev_auth_sessions",
+      "schema": "",
+      "columns": {
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "dev_auth_sessions_user_id_dev_auth_users_id_fk": {
+          "name": "dev_auth_sessions_user_id_dev_auth_users_id_fk",
+          "tableFrom": "dev_auth_sessions",
+          "tableTo": "dev_auth_users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.dev_auth_users": {
+      "name": "dev_auth_users",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "password_salt": {
+          "name": "password_salt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "dev_auth_users_email_unique": {
+          "name": "dev_auth_users_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "dev_auth_users_name_len": {
+          "name": "dev_auth_users_name_len",
+          "value": "length(\"dev_auth_users\".\"name\") between 1 and 100"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.device_trust": {
+      "name": "device_trust",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "device_a": {
+          "name": "device_a",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "device_b": {
+          "name": "device_b",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "device_trust_device_a_devices_id_fk": {
+          "name": "device_trust_device_a_devices_id_fk",
+          "tableFrom": "device_trust",
+          "tableTo": "devices",
+          "columnsFrom": [
+            "device_a"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "device_trust_device_b_devices_id_fk": {
+          "name": "device_trust_device_b_devices_id_fk",
+          "tableFrom": "device_trust",
+          "tableTo": "devices",
+          "columnsFrom": [
+            "device_b"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "device_trust_pair_uq": {
+          "name": "device_trust_pair_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "device_a",
+            "device_b"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "device_trust_distinct": {
+          "name": "device_trust_distinct",
+          "value": "\"device_trust\".\"device_a\" <> \"device_trust\".\"device_b\""
+        },
+        "device_trust_ordered": {
+          "name": "device_trust_ordered",
+          "value": "\"device_trust\".\"device_a\" < \"device_trust\".\"device_b\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.devices": {
+      "name": "devices",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "platform": {
+          "name": "platform",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "public_key": {
+          "name": "public_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "battery": {
+          "name": "battery",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_seen": {
+          "name": "last_seen",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "devices_user_id_idx": {
+          "name": "devices_user_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "devices_user_id_dev_auth_users_id_fk": {
+          "name": "devices_user_id_dev_auth_users_id_fk",
+          "tableFrom": "devices",
+          "tableTo": "dev_auth_users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "devices_public_key_unique": {
+          "name": "devices_public_key_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "public_key"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "devices_name_len": {
+          "name": "devices_name_len",
+          "value": "length(\"devices\".\"name\") between 1 and 100"
+        },
+        "devices_platform": {
+          "name": "devices_platform",
+          "value": "\"devices\".\"platform\" in ('android','macos')"
+        },
+        "devices_battery_range": {
+          "name": "devices_battery_range",
+          "value": "\"devices\".\"battery\" is null or \"devices\".\"battery\" between 0 and 100"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.pairing_codes": {
+      "name": "pairing_codes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "used_at": {
+          "name": "used_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "pairing_codes_user_id_idx": {
+          "name": "pairing_codes_user_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "pairing_codes_active_code_uq": {
+          "name": "pairing_codes_active_code_uq",
+          "columns": [
+            {
+              "expression": "code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"pairing_codes\".\"used_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "pairing_codes_user_id_dev_auth_users_id_fk": {
+          "name": "pairing_codes_user_id_dev_auth_users_id_fk",
+          "tableFrom": "pairing_codes",
+          "tableTo": "dev_auth_users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "pairing_codes_device_id_devices_id_fk": {
+          "name": "pairing_codes_device_id_devices_id_fk",
+          "tableFrom": "pairing_codes",
+          "tableTo": "devices",
+          "columnsFrom": [
+            "device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "pairing_codes_code_len": {
+          "name": "pairing_codes_code_len",
+          "value": "length(\"pairing_codes\".\"code\") between 6 and 12"
+        },
+        "pairing_codes_expiry": {
+          "name": "pairing_codes_expiry",
+          "value": "\"pairing_codes\".\"expires_at\" > \"pairing_codes\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

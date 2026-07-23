@@ -3,7 +3,7 @@ package com.fuseos.app.data
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class SignUpRequest(val email: String, val password: String, val name: String? = null)
+data class SignUpRequest(val email: String, val password: String, val name: String)
 
 @Serializable
 data class SignInRequest(val email: String, val password: String)

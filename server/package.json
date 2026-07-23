@@ -9,17 +9,22 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "proto:gen": "echo \"proto:gen: bindings generation not yet wired\" && exit 0",
-    "db:generate": "echo \"db:generate: Drizzle not yet wired (see docs/schema.md)\" && exit 0",
-    "db:migrate": "echo \"db:migrate: Drizzle not yet wired (see docs/schema.md)\" && exit 0"
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
     "@sentry/node": "^8.40.0",
+    "drizzle-orm": "^0.45.2",
     "fastify": "^5.1.0",
+    "postgres": "^3.4.9",
     "posthog-node": "^4.3.0",
+    "ws": "^8.21.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
+    "@types/ws": "^8.18.1",
+    "drizzle-kit": "^0.31.10",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"

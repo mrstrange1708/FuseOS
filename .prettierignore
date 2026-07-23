@@ -2,5 +2,6 @@ node_modules
 dist
 .turbo
 **/src/gen
+**/drizzle/meta
 pnpm-lock.yaml
 *.md

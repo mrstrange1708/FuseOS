@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+// Load server/.env into process.env for local dev, if present. In CI and
+// production the environment is provided directly, so a missing file is fine.
+try {
+  process.loadEnvFile();
+} catch {
+  // No .env file — fall back to the ambient environment.
+}
+
 // All configuration comes from the environment and is validated here, at the
 // boundary, before anything else in the server runs (see CLAUDE.md: "never let
 // bad data in"). Observability integrations are optional in local dev.

@@ -60,9 +60,10 @@ fun SignUpScreen(viewModel: AuthViewModel) {
         FuseTextField(
             value = state.name,
             onValueChange = viewModel::onNameChange,
-            label = "Your name (optional)",
+            label = "Your name",
             keyboardType = KeyboardType.Text,
             imeAction = ImeAction.Next,
+            errorText = state.nameError,
             enabled = !state.isSubmitting,
         )
         Spacer(Modifier.height(14.dp))

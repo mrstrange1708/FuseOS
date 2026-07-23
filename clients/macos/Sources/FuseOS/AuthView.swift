@@ -77,7 +77,7 @@ struct SignUpView: View {
 
             Spacer().frame(height: 26)
 
-            FuseTextField(title: "Your name (optional)", text: $viewModel.name)
+            FuseTextField(title: "Your name", text: $viewModel.name, error: viewModel.nameError)
             Spacer().frame(height: 12)
             FuseTextField(title: "Email", text: $viewModel.email, error: viewModel.emailError)
             Spacer().frame(height: 12)

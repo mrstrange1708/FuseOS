@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Dev only: allow cleartext HTTP to the local FuseOS server.
-     10.0.2.2 is how the Android emulator reaches the host machine's localhost. -->
+<!-- DEV ONLY: allow cleartext HTTP to the local FuseOS dev server.
+
+     The server runs plain HTTP on the Mac's LAN IP (e.g. 192.168.0.112:3000) or
+     10.0.2.2 for the emulator. That IP changes whenever the Mac rejoins a Wi-Fi
+     network, so instead of pinning one address we permit cleartext broadly for
+     this debug build. This MUST NOT ship to production — the real transport is
+     TLS/encrypted. -->
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">10.0.2.2</domain>
-        <domain includeSubdomains="true">localhost</domain>
-        <domain includeSubdomains="true">127.0.0.1</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

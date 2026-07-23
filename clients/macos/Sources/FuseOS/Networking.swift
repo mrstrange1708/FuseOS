@@ -3,6 +3,8 @@ import Foundation
 enum Config {
     /// The FuseOS control-plane server. `pnpm --filter server dev` runs it on :3000.
     static let baseURL = URL(string: "http://localhost:3000")!
+    /// The `/signal` presence WebSocket on the same server.
+    static let signalURL = URL(string: "ws://localhost:3000/signal")!
 }
 
 // MARK: - Wire models (see docs/api.md)
@@ -10,7 +12,7 @@ enum Config {
 struct SignUpRequest: Encodable {
     let email: String
     let password: String
-    let name: String?
+    let name: String
 }
 
 struct SignInRequest: Encodable {
@@ -49,7 +51,7 @@ struct AuthAPI {
         try await post(path: "/auth/sign-in/email", body: SignInRequest(email: email, password: password))
     }
 
-    func signUp(email: String, password: String, name: String?) async throws -> AuthResponse {
+    func signUp(email: String, password: String, name: String) async throws -> AuthResponse {
         try await post(path: "/auth/sign-up/email", body: SignUpRequest(email: email, password: password, name: name))
     }
 
@@ -89,7 +91,7 @@ struct AuthRepository {
     }
 
     @MainActor
-    func signUp(email: String, password: String, name: String?) async throws {
+    func signUp(email: String, password: String, name: String) async throws {
         let result = try await api.signUp(email: email, password: password, name: name)
         SessionStore.shared.save(token: result.token, email: result.user.email)
     }

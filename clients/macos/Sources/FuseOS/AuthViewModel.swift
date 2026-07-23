@@ -15,6 +15,7 @@ final class AuthViewModel: ObservableObject {
     @Published var error: String?
     @Published var emailError: String?
     @Published var passwordError: String?
+    @Published var nameError: String?
 
     private let repository = AuthRepository.shared
 
@@ -23,13 +24,17 @@ final class AuthViewModel: ObservableObject {
         error = nil
         emailError = nil
         passwordError = nil
+        nameError = nil
     }
 
     func submit() {
         let trimmedEmail = email.trimmed
+        let trimmedName = name.trimmed
         emailError = Self.isValidEmail(trimmedEmail) ? nil : "Enter a valid email address"
         passwordError = password.count >= 8 ? nil : "Use at least 8 characters"
-        guard emailError == nil, passwordError == nil else { return }
+        // Name is required when creating an account.
+        nameError = (mode == .signUp && trimmedName.isEmpty) ? "Enter your name" : nil
+        guard emailError == nil, passwordError == nil, nameError == nil else { return }
 
         error = nil
         isSubmitting = true
@@ -38,12 +43,7 @@ final class AuthViewModel: ObservableObject {
                 if mode == .signIn {
                     try await repository.signIn(email: trimmedEmail, password: password)
                 } else {
-                    let trimmedName = name.trimmed
-                    try await repository.signUp(
-                        email: trimmedEmail,
-                        password: password,
-                        name: trimmedName.isEmpty ? nil : trimmedName,
-                    )
+                    try await repository.signUp(email: trimmedEmail, password: password, name: trimmedName)
                 }
                 // On success, SessionStore updates and the app swaps to Home.
             } catch {

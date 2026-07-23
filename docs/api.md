@@ -34,12 +34,22 @@ Better Auth mounts its own routes (email/password sign-up, sign-in, session, ref
 
 **`POST /devices`**
 ```jsonc
-// request
-{ "name": "Pixel 8", "platform": "android", "publicKey": "base64…" }
+// request  (battery optional, 0–100)
+{ "name": "Pixel 8", "platform": "android", "publicKey": "base64…", "battery": 47 }
 // response 201
 { "id": "uuid", "name": "Pixel 8", "platform": "android", "createdAt": "…" }
 ```
-Validation: `platform ∈ {android, macos}`, `name` length 1–100, `publicKey` non-empty and unique. Bound to the JWT's user.
+Validation: `platform ∈ {android, macos}`, `name` length 1–100, `publicKey` non-empty and unique. Bound to the caller's user. **Idempotent by `publicKey`** — a client may call this on every launch and always gets back its stable device id.
+
+**`GET /devices`** — lists the caller's devices for the dashboard. Optional `?self=<deviceId>` flags which peers the caller is paired with.
+```jsonc
+// response 200
+{ "devices": [
+  { "id": "uuid", "name": "Mac mini", "platform": "macos",
+    "online": true, "battery": 88, "lastSeen": "…", "trusted": true, "isSelf": false }
+] }
+```
+`online` and `battery` reflect live `/signal` presence (falling back to the last persisted value).
 
 ## Pairing
 
@@ -52,36 +62,39 @@ Validation: `platform ∈ {android, macos}`, `name` length 1–100, `publicKey` 
 ```jsonc
 // request  { "deviceId": "uuid-of-A" }
 // response 201
-{ "code": "K7QP2M", "expiresAt": "2026-07-05T12:34:56Z" }
+{ "code": "A7X2-9QKM", "expiresAt": "2026-07-05T12:34:56Z" }
 ```
-Creates a `pairing_codes` row scoped to the user; schedules an Inngest job to expire it.
+The code is **8 uppercase alphanumerics shown grouped `XXXX-XXXX`** (alphabet omits the ambiguous `I O 0 1`), valid for 5 minutes. Creates a `pairing_codes` row scoped to the user and to the initiating `device_id`; an Inngest job expires it. The claim side normalizes leniently (case- and dash-insensitive).
 
 **`POST /pairing/claim`**
 ```jsonc
-// request  { "deviceId": "uuid-of-B", "code": "K7QP2M" }
+// request  { "deviceId": "uuid-of-B", "code": "A7X2-9QKM" }
 // response 200
-{ "trustedWith": { "deviceId": "uuid-of-A", "publicKey": "base64…" } }
+{ "trustedWith": { "deviceId": "uuid-of-A", "name": "Mac mini", "platform": "macos", "publicKey": "base64…" } }
 ```
-In a single transaction: validate the code (exists, same user, not expired, not used), write `device_trust`, mark the code `used_at`. Returns A's public key to B; A is notified over `/signal`. Errors: `code_invalid`, `code_expired`, `code_used`.
+In a single transaction: validate the code (exists, same user, not expired, not used), write `device_trust` (canonically ordered), mark the code `used_at`. Returns A to B; A is notified over `/signal` with a `paired` event. Errors: `code_invalid`, `code_expired`, `same_device`.
 
 ## WebSocket — `/signal`
 
-JWT-authenticated (token via `Sec-WebSocket-Protocol` or a first auth frame). Carries **presence, pairing notifications, and LAN-address signaling only — never payloads.**
+Authenticated by a **first `hello` frame carrying the bearer token** (dev stand-in; a JWT via `Sec-WebSocket-Protocol` under Better Auth). Carries **presence, pairing notifications, and LAN-address signaling only — never payloads.** A socket that doesn't authenticate within 5s is closed.
 
 Client → server:
 ```jsonc
-{ "type": "hello", "deviceId": "uuid", "lanAddress": "192.168.1.20:47100" }
-{ "type": "heartbeat" }
+{ "type": "hello", "token": "…", "deviceId": "uuid", "lanAddress": "192.168.1.20:47100", "battery": 90 }
+{ "type": "heartbeat", "battery": 88, "lanAddress": "192.168.1.20:47100" }
 ```
 Server → client:
 ```jsonc
-{ "type": "peer-online",  "deviceId": "uuid", "lanAddress": "192.168.1.31:47100" }
+{ "type": "hello-ok",     "deviceId": "uuid", "peers": [ { "deviceId": "uuid", "name": "…", "platform": "macos", "lanAddress": "…", "battery": 88, "online": true } ] }
+{ "type": "peer-online",  "deviceId": "uuid", "name": "…", "platform": "…", "lanAddress": "…", "battery": 88 }
+{ "type": "peer-update",  "deviceId": "uuid", "battery": 42 }
 { "type": "peer-offline", "deviceId": "uuid" }
-{ "type": "paired",       "deviceId": "uuid", "publicKey": "base64…" }
+{ "type": "paired",       "deviceId": "uuid", "name": "…", "platform": "…", "publicKey": "base64…" }
 ```
 
 Semantics:
-- On `hello`, the server marks the device online, updates `last_seen`, and relays its `lanAddress` to trusted, online peers (and their addresses back). This is the introduction that lets the two devices open a **direct** LAN connection.
+- On `hello`, the server authenticates the token, marks the device online, updates `last_seen`/`battery`, replies with `hello-ok` (its trusted, online peers), and relays `peer-online` to those peers. This is the introduction that lets the two devices open a **direct** LAN connection.
+- `battery` is operational presence metadata (never a user payload); `peer-update` propagates changes to trusted peers for the dashboard.
 - Heartbeats keep the socket alive; a missed threshold marks the device offline. An Inngest presence-timeout sweep self-heals stale state if a socket dies uncleanly.
 - The server does not proxy any clipboard/file data — after the introduction, devices talk directly (see [protocol.md](protocol.md)).
 

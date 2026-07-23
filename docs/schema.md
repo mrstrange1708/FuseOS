@@ -56,6 +56,18 @@ User identity is owned by **Better Auth**, which manages its own tables in our P
 | `email` | text | NOT NULL, UNIQUE |
 | `created_at` | timestamptz | NOT NULL, default `now()` |
 
+> **Dev stand-in — `dev_auth_users` / `dev_auth_sessions`.** Until Better Auth is
+> wired, the dev-auth login (`server/src/auth/dev-auth.ts`) persists accounts in a
+> `dev_auth_users` table (`id`, `email` UNIQUE, `name` NOT NULL + length CHECK,
+> `password_salt`, `password_hash`, `created_at`) and issues opaque bearer tokens
+> stored in `dev_auth_sessions` (`token` PK → `user_id`). Both are defined in
+> `server/src/db/schema.ts` and are **temporary** — dropped once Better Auth owns
+> credentials, sessions, and JWTs.
+>
+> For the same reason, the `devices`, `pairing_codes`, and `device_trust` tables
+> below currently FK to `dev_auth_users(id)` (not a real `users` table yet); the
+> FK target moves to the Better Auth user id when it lands.
+
 ### `devices`
 One row per registered device. A user has 2–3 in v1.
 
@@ -66,6 +78,7 @@ One row per registered device. A user has 2–3 in v1.
 | `name` | text | NOT NULL, CHECK (`length(name) between 1 and 100`) |
 | `platform` | text | NOT NULL, CHECK (`platform in ('android','macos')`) |
 | `public_key` | text | NOT NULL, UNIQUE |
+| `battery` | int | nullable, CHECK (`battery is null or battery between 0 and 100`) — presence metadata, never payload |
 | `last_seen` | timestamptz | nullable |
 | `created_at` | timestamptz | NOT NULL, default `now()` |
 
@@ -78,7 +91,8 @@ Short-lived, one-time, user-scoped pairing codes.
 | --- | --- | --- |
 | `id` | uuid | PK |
 | `user_id` | uuid | NOT NULL, FK → users(id) ON DELETE CASCADE |
-| `code` | text | NOT NULL, CHECK (`length(code) between 6 and 12`) |
+| `device_id` | uuid | NOT NULL, FK → devices(id) ON DELETE CASCADE — the initiator (device A) |
+| `code` | text | NOT NULL, CHECK (`length(code) between 6 and 12`) — 8 chars in practice |
 | `expires_at` | timestamptz | NOT NULL, CHECK (`expires_at > created_at`) |
 | `used_at` | timestamptz | nullable |
 | `created_at` | timestamptz | NOT NULL, default `now()` |

@@ -1,0 +1,37 @@
+package com.fuseos.app.data
+
+import com.fuseos.app.core.DeviceInfo
+
+/** Coordinates device registration, listing, and pairing. The UI talks to this. */
+class DeviceRepository(
+    private val api: ControlPlaneApi,
+    private val session: SessionStore,
+    private val deviceInfo: DeviceInfo,
+) {
+    val deviceIdFlow = session.deviceIdFlow
+
+    /** Registers (idempotently) this device and stores its stable server id. */
+    suspend fun registerThisDevice(): String {
+        val response = api.registerDevice(
+            DeviceRegisterRequest(
+                name = deviceInfo.deviceName(),
+                platform = "android",
+                publicKey = session.deviceKey(),
+                battery = deviceInfo.batteryPercent(),
+            ),
+        )
+        session.saveDeviceId(response.id)
+        return response.id
+    }
+
+    suspend fun listDevices(selfId: String?): List<DeviceItem> =
+        api.listDevices(selfId).devices
+
+    suspend fun initiatePairing(deviceId: String): PairInitiateResponse =
+        api.initiatePairing(PairInitiateRequest(deviceId))
+
+    suspend fun claimPairing(deviceId: String, code: String): PairClaimResponse =
+        api.claimPairing(PairClaimRequest(deviceId, code))
+
+    fun batteryPercent(): Int? = deviceInfo.batteryPercent()
+}
