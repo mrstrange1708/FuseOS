@@ -4,6 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "proto:gen": "echo \"@fuseos/proto: bindings generation not yet wired\" && exit 0"
+    "proto:gen": "echo \"@fuseos/proto: no TS bindings — Android and macOS generate their own from proto/\" && exit 0"
   }
 }

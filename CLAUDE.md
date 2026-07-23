@@ -60,7 +60,7 @@ All JS/TS commands run from the repo root via Turborepo (they fan out to the wor
 | Build all workspaces | `pnpm build` |
 | Lint / typecheck / test all | `pnpm lint` · `pnpm typecheck` · `pnpm test` |
 | Format (write / check) | `pnpm format` · `pnpm format:check` |
-| Regenerate protobuf bindings | `pnpm proto:gen` |
+| Regenerate protobuf bindings | no-op — see below |
 | Generate a Drizzle migration | `pnpm db:generate` |
 | Apply migrations | `pnpm db:migrate` |
 | Work in one workspace only | `pnpm --filter server <script>` |
@@ -78,12 +78,12 @@ The native clients are built with their own toolchains, outside PNPM:
 
 - **TypeScript (`server/`, `packages/*`)**: `strict` mode on; no `any` without a written reason. Validate all external input with **Zod** at the boundary, then work with typed data internally. Database access goes through **Drizzle** — no raw SQL strings for normal queries. Keep the HTTP/WebSocket layer (Fastify) thin; put logic in services.
 - **Errors**: fail loud at the control plane (return a typed error response); fail soft on the data plane (a dropped LAN packet should degrade gracefully and reconnect, never crash the app).
-- **Protobuf**: `proto/` is the source of truth for the wire format. Never hand-edit generated bindings. A field is added, never renumbered or reused — protobuf tag numbers are permanent.
+- **Protobuf**: `proto/` is the source of truth for the wire format. Never hand-edit generated bindings. A field is added, never renumbered or reused — protobuf tag numbers are permanent. **Each client generates its own bindings during its own build** — Android via `protobuf-gradle-plugin` (into `app/build/`), macOS via `protoc` in `build-app.sh` (into `Sources/FuseOS/Generated/`, gitignored). Both read `proto/` directly, so there is no generation step to run by hand and `pnpm proto:gen` is a no-op. There are deliberately **no TypeScript bindings**: the server never sees a payload, so it has nothing to decode. macOS needs `brew install protobuf swift-protobuf`.
 - **Kotlin / Swift**: follow the platform-idiomatic style (Kotlin official style; Swift API Design Guidelines). Match the surrounding code.
 
 ## Common workflows
 
-- **Changing the device-to-device wire format**: edit `proto/` first → `pnpm proto:gen` → update the server, the Android client, and the macOS client to match → update `docs/protocol.md`. It's a cross-cutting change by nature.
+- **Changing the device-to-device wire format**: edit `proto/` first → rebuild both clients (each regenerates its own bindings) → update the Android and macOS code to match → update `docs/protocol.md`. It's a cross-cutting change by nature. The server is not involved; it never sees the data plane.
 - **Adding a control-plane endpoint or table**: update `docs/schema.md`/`docs/api.md`, add the Drizzle schema (with constraints), generate a migration (`pnpm db:generate`), add the Zod-validated Fastify route. Keep the docs and the code in step.
 - **Adding durable async work**: model it as an Inngest function — don't hand-roll a queue or a `setTimeout`.
 

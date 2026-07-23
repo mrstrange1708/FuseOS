@@ -2,6 +2,12 @@ syntax = "proto3";
 
 package fuseos.v1;
 
+// Naming only — these affect generated symbol names, never the wire format.
+// Java:  com.fuseos.proto.Envelope     Swift: FuseEnvelope
+option java_package = "com.fuseos.proto";
+option java_multiple_files = true;
+option swift_prefix = "Fuse";
+
 // Source of truth for the FuseOS device-to-device (LAN data plane) wire format.
 // Every platform generates its own bindings from this file. See docs/protocol.md.
 //

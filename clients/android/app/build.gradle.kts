@@ -1,8 +1,11 @@
+import com.google.protobuf.gradle.proto
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.protobuf)
 }
 
 android {
@@ -37,6 +40,25 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // The device-to-device wire contract lives at the repo root and is shared verbatim
+    // with the macOS client. Never hand-edit the generated bindings.
+    sourceSets {
+        named("main") {
+            proto { srcDir("../../../proto") }
+        }
+    }
+}
+
+protobuf {
+    protoc { artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.get()}" }
+    generateProtoTasks {
+        all().forEach { task ->
+            task.builtins {
+                create("java") { option("lite") }
+            }
+        }
+    }
 }
 
 dependencies {
@@ -61,6 +83,8 @@ dependencies {
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.client.websockets)
     implementation(libs.ktor.serialization.kotlinx.json)
+
+    implementation(libs.protobuf.javalite)
 
     debugImplementation(libs.androidx.ui.tooling)
 }
