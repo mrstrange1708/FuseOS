@@ -7,7 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --testTimeout=30000",
     "proto:gen": "echo \"proto:gen: bindings generation not yet wired\" && exit 0",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"

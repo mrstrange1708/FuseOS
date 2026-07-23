@@ -85,9 +85,9 @@ Client → server:
 ```
 Server → client:
 ```jsonc
-{ "type": "hello-ok",     "deviceId": "uuid", "peers": [ { "deviceId": "uuid", "name": "…", "platform": "macos", "lanAddress": "…", "battery": 88, "online": true } ] }
-{ "type": "peer-online",  "deviceId": "uuid", "name": "…", "platform": "…", "lanAddress": "…", "battery": 88 }
-{ "type": "peer-update",  "deviceId": "uuid", "battery": 42 }
+{ "type": "hello-ok",     "deviceId": "uuid", "peers": [ { "deviceId": "uuid", "name": "…", "platform": "macos", "publicKey": "base64…", "lanAddress": "…", "battery": 88, "online": true } ] }
+{ "type": "peer-online",  "deviceId": "uuid", "name": "…", "platform": "…", "publicKey": "base64…", "lanAddress": "…", "battery": 88 }
+{ "type": "peer-update",  "deviceId": "uuid", "battery": 42, "lanAddress": "192.168.1.20:47100" }
 { "type": "peer-offline", "deviceId": "uuid" }
 { "type": "paired",       "deviceId": "uuid", "name": "…", "platform": "…", "publicKey": "base64…" }
 ```
@@ -95,6 +95,7 @@ Server → client:
 Semantics:
 - On `hello`, the server authenticates the token, marks the device online, updates `last_seen`/`battery`, replies with `hello-ok` (its trusted, online peers), and relays `peer-online` to those peers. This is the introduction that lets the two devices open a **direct** LAN connection.
 - `battery` is operational presence metadata (never a user payload); `peer-update` propagates changes to trusted peers for the dashboard.
+- A peer card carries `publicKey` and `lanAddress` together because both are needed to open the LAN channel: the address says where to dial, the key says who must answer. `peer-update` fires when either `battery` or `lanAddress` changes — an address change matters because a peer that moved is unreachable until its peers hear about it.
 - Heartbeats keep the socket alive; a missed threshold marks the device offline. An Inngest presence-timeout sweep self-heals stale state if a socket dies uncleanly.
 - The server does not proxy any clipboard/file data — after the introduction, devices talk directly (see [protocol.md](protocol.md)).
 

@@ -38,12 +38,15 @@ function parse(data: RawData): unknown {
   }
 }
 
-/** A device's public presence card, sent to its trusted peers. */
+/** A device's public presence card, sent to its trusted peers.
+ *  `publicKey` is what the peer authenticates the LAN handshake against, so it must
+ *  travel with the address rather than relying on state persisted at pairing time. */
 function card(device: Device, lanAddress?: string, battery?: number) {
   return {
     deviceId: device.id,
     name: device.name,
     platform: device.platform,
+    publicKey: device.publicKey,
     lanAddress: lanAddress ?? null,
     battery: battery ?? device.battery ?? null,
   };
@@ -140,19 +143,28 @@ export function attachSignal(app: FastifyInstance): void {
 
         const heartbeat = heartbeatSchema.safeParse(payload);
         if (heartbeat.success) {
+          const { battery, lanAddress } = heartbeat.data;
           const conn = presence.get(device.id);
+          // A peer that moved to a new address is unreachable until its peers hear about
+          // it, so an address change must propagate just like a battery change.
+          const changed =
+            (battery !== undefined && battery !== conn?.battery) ||
+            (lanAddress !== undefined && lanAddress !== conn?.lanAddress);
           if (conn) {
-            if (heartbeat.data.battery !== undefined) conn.battery = heartbeat.data.battery;
-            if (heartbeat.data.lanAddress !== undefined)
-              conn.lanAddress = heartbeat.data.lanAddress;
+            if (battery !== undefined) conn.battery = battery;
+            if (lanAddress !== undefined) conn.lanAddress = lanAddress;
           }
-          const battery = heartbeat.data.battery;
           await getDb()
             .update(devices)
             .set({ lastSeen: new Date(), ...(battery !== undefined ? { battery } : {}) })
             .where(eq(devices.id, device.id));
-          if (battery !== undefined) {
-            await broadcastToPeers({ type: 'peer-update', deviceId: device.id, battery });
+          if (changed) {
+            await broadcastToPeers({
+              type: 'peer-update',
+              deviceId: device.id,
+              battery: conn?.battery ?? null,
+              lanAddress: conn?.lanAddress ?? null,
+            });
           }
         }
       })();
