@@ -15,16 +15,19 @@ public final class ClipboardSync {
     /// Fast enough to feel instant against the 300 ms p95 target, slow enough to be free.
     private static let pollInterval: TimeInterval = 0.3
 
-    private let pasteboard = NSPasteboard.general
+    private let pasteboard: NSPasteboard
     private let transport: LanTransport
 
     private var guard_: LoopGuard?
     private var watcher: Task<Void, Never>?
     private var lastChangeCount: Int
 
-    public init(transport: LanTransport) {
+    /// The pasteboard is injectable so tests can drive a private one — exercising this
+    /// against `NSPasteboard.general` would fight whoever is using the machine.
+    public init(transport: LanTransport, pasteboard: NSPasteboard = .general) {
         self.transport = transport
-        lastChangeCount = NSPasteboard.general.changeCount
+        self.pasteboard = pasteboard
+        lastChangeCount = pasteboard.changeCount
     }
 
     public func start(selfDeviceId: String) {
@@ -54,7 +57,10 @@ public final class ClipboardSync {
     }
 
     /// A local copy — broadcast it unless it is the echo of something we just injected.
-    private func checkForLocalChange() {
+    ///
+    /// Internal rather than private so tests can step the poll deterministically instead
+    /// of sleeping through the 300 ms timer.
+    func checkForLocalChange() {
         let count = pasteboard.changeCount
         guard count != lastChangeCount else { return }
         lastChangeCount = count
@@ -93,7 +99,7 @@ public final class ClipboardSync {
         transport.broadcast(body(transport.newEnvelope()))
     }
 
-    private func apply(_ envelope: FuseEnvelope) {
+    func apply(_ envelope: FuseEnvelope) {
         // Resolve the payload and its identity before touching the guard, so text and
         // images go through exactly the same loop-prevention path.
         let write: () -> Void
@@ -133,10 +139,12 @@ public final class ClipboardSync {
         guard_ = loopGuard
 
         write()
-        // Writing bumps changeCount; absorb it here so the next poll does not treat our
-        // own injection as a user copy. The hash suppression in LoopGuard covers the
-        // same case, but not paying for a wasted comparison is free.
-        lastChangeCount = pasteboard.changeCount
+        // Deliberately do NOT absorb the bumped changeCount here. Letting the next poll
+        // see the change is what delivers the echo to `checkForLocalChange`, where the
+        // one-shot hash suppression consumes it. Absorbing it instead leaves that
+        // suppression armed indefinitely, so a genuine copy of the same content later —
+        // minutes later, by the user — gets silently swallowed. It also keeps this
+        // identical to Android, where writing the clipboard fires the change listener.
     }
 
     /// PNG straight through; TIFF (what a Finder copy usually yields) converted, so the
