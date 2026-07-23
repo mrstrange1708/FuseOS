@@ -17,12 +17,14 @@ export const presence = {
     byDevice.set(conn.deviceId, conn);
   },
 
-  /** Remove only if the stored socket is the one closing (avoids clobbering a reconnect). */
-  remove(deviceId: string, socket: WebSocket): void {
+  /** Remove only if the stored socket is the one closing (avoids clobbering a reconnect).
+   *  Returns whether the device actually went offline — false means a newer socket
+   *  has already taken over and the device is still connected. */
+  remove(deviceId: string, socket: WebSocket): boolean {
     const existing = byDevice.get(deviceId);
-    if (existing && existing.socket === socket) {
-      byDevice.delete(deviceId);
-    }
+    if (!existing || existing.socket !== socket) return false;
+    byDevice.delete(deviceId);
+    return true;
   },
 
   get(deviceId: string): Connection | undefined {

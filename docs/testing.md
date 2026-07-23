@@ -44,12 +44,18 @@ If a wire-format change is intended, **both** vectors move in the same commit. T
 
 ## Tests must be able to fail
 
-A test that cannot fail is worse than no test: it costs the same to run and buys false confidence. Non-trivial suites here are mutation-checked — the production code is deliberately broken, the suite is confirmed red, and the change is reverted. Two done so far:
+A test that cannot fail is worse than no test: it costs the same to run and buys false confidence. Non-trivial suites here are mutation-checked — the production code is deliberately broken, the suite is confirmed red, and the change is reverted. Done so far, across all three suites:
 
 - removing the frame-counter increment in `LanChannel` → the multi-frame round trip fails
-- collapsing the per-direction key split in `LanCrypto` → 5 tests fail, including the loopback handshake
+- collapsing the per-direction key split in `LanCrypto` → 5 macOS tests fail, and 8 on Android
+- removing `synchronized` from `LanChannel.send` → the concurrency test fails, and only that one
+- widening the frame-length floor below the GCM tag size → the short-frame case fails
+- comparing `seq` signed instead of unsigned → the wraparound test fails
+- flipping the last-write-wins comparison from `<` to `<=` → one test fails, pinning the boundary exactly
+- weakening the zombie-socket guard → the stale-heartbeat test fails
+- reordering the handshake so the nonce precedes the id → all three wire-format tests fail
 
-Where a suite has been mutation-checked, say so in the commit message.
+**This is not a formality — it caught a worthless test.** A first attempt at covering the auth-timer fix passed with the fix reverted, because a fast local database clears the timer before it could fire either way. It was replaced with `ws-slow-auth.test.ts`, which mocks the auth lookup to be slower than the timeout and does discriminate. Where a suite has been mutation-checked, say so in the commit message.
 
 ## What the tests are not allowed to do
 
@@ -66,6 +72,32 @@ Some things are only real on hardware. These are listed in [flows/slice-02-clipb
 - **Real latency** against the p95 < 300 ms target. Loopback says nothing about Wi-Fi.
 - **The central invariant** — that no payload byte reaches the server. Verified by running `tcpdump` during a copy, because it is an architectural claim and deserves a direct measurement rather than an assumption.
 - **Router AP/client isolation**, which silently blocks device-to-device traffic on many networks and is the first thing to check when nothing connects.
+
+## Where the coverage is today
+
+| Suite | Tests | Notes |
+| --- | --- | --- |
+| `server/` | 79 across 9 files | includes `/signal` driven by a real listening socket |
+| `clients/android/` | 54 across 4 files | JVM only, no Robolectric or device needed |
+| `clients/macos/` | 89 across 7 files | `FuseOSCore`; the app target has no tests by design |
+
+Started from 12 server tests, 12 Android tests, and no macOS tests at all.
+
+## Bugs this found
+
+Writing the tests was worth more than the tests. Every one of these was silent:
+
+- **`load(as:)` on unaligned network bytes** (macOS) — undefined behaviour on the frame-length path, surviving only because arm64 tolerates it.
+- **A clipboard injection could swallow a later genuine copy** (macOS) — the one-shot echo suppression was never consumed, so it stayed armed indefinitely.
+- **`peer-offline` announced for a device that was actually online** (server) — on a network flap, peers stopped dialling a device that had just reconnected.
+- **A zombie socket could overwrite the live `lanAddress`** (server) — pointing every peer at a dead address, the exact failure that propagating `lanAddress` exists to prevent.
+- **The auth timer punished a slow database** (server) — disconnecting well-behaved clients precisely during the reconnect storm that made the database slow.
+- **`seq` compared signed against a `uint64` wire type** (Android) — one malformed envelope could permanently wedge a peer's clipboard until app restart.
+- **Frames of 1–15 bytes reached the cipher** (Android) — throwing an unchecked exception instead of the documented one.
+- **Undialable peer addresses were dialled anyway** (macOS) — empty host, or port 0.
+- **Re-registering a device wiped its stored battery** (server).
+
+Three of them — the `seq` comparison, the short-frame floor, and the address validation — were cases where the two clients had quietly diverged. That is the failure mode the mirrored tests and frozen vectors exist to catch, and it is why they are worth their maintenance cost.
 
 ## Running everything
 

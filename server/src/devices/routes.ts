@@ -54,7 +54,10 @@ export function registerDeviceRoutes(app: FastifyInstance): void {
         set: {
           name: parsed.data.name,
           platform: parsed.data.platform,
-          battery: parsed.data.battery ?? null,
+          // Only overwrite battery when the client actually reported one. This runs on
+          // every launch, and a re-register that omits it must not erase the last known
+          // level — the dashboard would show a peer's battery blanking out for no reason.
+          ...(parsed.data.battery !== undefined ? { battery: parsed.data.battery } : {}),
           lastSeen: now,
         },
         setWhere: eq(devices.userId, userId),

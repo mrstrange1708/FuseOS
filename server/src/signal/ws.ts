@@ -93,6 +93,13 @@ export function attachSignal(app: FastifyInstance): void {
             send(ws, { type: 'error', message: 'Expected a hello frame with a valid token.' });
             return;
           }
+
+          // The timer guards against sockets that never speak, and this one has. Stop it
+          // before the database round trips below: a slow control plane would otherwise
+          // time out clients that said hello immediately, exactly when a reconnect storm
+          // makes the database slowest. A bad token still closes the socket right after.
+          clearTimeout(authTimer);
+
           const userId = await userIdForToken(hello.data.token);
           if (!userId) {
             send(ws, { type: 'error', message: 'Invalid token.' });
@@ -111,7 +118,6 @@ export function attachSignal(app: FastifyInstance): void {
           }
 
           device = row;
-          clearTimeout(authTimer);
           const lanAddress = hello.data.lanAddress;
           const battery = hello.data.battery;
           await getDb()
@@ -145,15 +151,21 @@ export function attachSignal(app: FastifyInstance): void {
         if (heartbeat.success) {
           const { battery, lanAddress } = heartbeat.data;
           const conn = presence.get(device.id);
+
+          // Ignore a heartbeat from a socket a reconnect has already replaced. It says
+          // nothing about the live connection, and letting it write would overwrite the
+          // fresh lanAddress with a dead one — pointing peers at an address nobody is
+          // listening on, which is the exact failure lanAddress propagation prevents.
+          if (conn?.socket !== ws) return;
+
           // A peer that moved to a new address is unreachable until its peers hear about
           // it, so an address change must propagate just like a battery change.
           const changed =
-            (battery !== undefined && battery !== conn?.battery) ||
-            (lanAddress !== undefined && lanAddress !== conn?.lanAddress);
-          if (conn) {
-            if (battery !== undefined) conn.battery = battery;
-            if (lanAddress !== undefined) conn.lanAddress = lanAddress;
-          }
+            (battery !== undefined && battery !== conn.battery) ||
+            (lanAddress !== undefined && lanAddress !== conn.lanAddress);
+          if (battery !== undefined) conn.battery = battery;
+          if (lanAddress !== undefined) conn.lanAddress = lanAddress;
+
           await getDb()
             .update(devices)
             .set({ lastSeen: new Date(), ...(battery !== undefined ? { battery } : {}) })
@@ -162,8 +174,8 @@ export function attachSignal(app: FastifyInstance): void {
             await broadcastToPeers({
               type: 'peer-update',
               deviceId: device.id,
-              battery: conn?.battery ?? null,
-              lanAddress: conn?.lanAddress ?? null,
+              battery: conn.battery ?? null,
+              lanAddress: conn.lanAddress ?? null,
             });
           }
         }
@@ -174,7 +186,10 @@ export function attachSignal(app: FastifyInstance): void {
       clearTimeout(authTimer);
       if (!device) return;
       const closed = device;
-      presence.remove(closed.id, ws);
+      // A reconnect may already have replaced this socket (network flap: the new
+      // hello lands before the old socket's close event). The device is still
+      // online in that case, so announcing it offline would strand its peers.
+      if (!presence.remove(closed.id, ws)) return;
       void broadcastToPeers({ type: 'peer-offline', deviceId: closed.id });
     });
 

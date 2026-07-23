@@ -30,7 +30,7 @@ Better Auth mounts its own routes (email/password sign-up, sign-in, session, ref
 | --- | --- | --- |
 | POST | `/devices` | Register this device (name, platform, public_key) |
 | GET | `/devices` | List the caller's devices |
-| DELETE | `/devices/:id` | Revoke/remove a device (cascades trust) |
+| DELETE | `/devices/:id` | **Not implemented.** Revoke/remove a device (cascades trust) — lands when device management becomes a screen |
 
 **`POST /devices`**
 ```jsonc

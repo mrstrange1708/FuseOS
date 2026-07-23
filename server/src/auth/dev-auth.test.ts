@@ -1,18 +1,35 @@
-import { describe, it, expect } from 'vitest';
+import { afterAll, describe, it, expect } from 'vitest';
 import { buildApp } from '../app.js';
+import { deleteUsers } from '../test-support.js';
 
 // These exercise the real Postgres-backed dev-auth, so they need a DATABASE_URL
 // (present locally via server/.env). CI has no database, so they skip there.
 describe.skipIf(!process.env.DATABASE_URL)('dev auth (Postgres)', () => {
+  // The dev database is shared, so every account these tests create is removed again.
+  const createdUsers: string[] = [];
+  const track = <T extends { statusCode: number; json: () => { user?: { id?: string } } }>(
+    res: T,
+  ): T => {
+    const id = res.statusCode === 201 ? res.json().user?.id : undefined;
+    if (id) createdUsers.push(id);
+    return res;
+  };
+
+  afterAll(async () => {
+    await deleteUsers(...createdUsers);
+  }, 60_000);
+
   it('signs up then signs in with the same credentials', async () => {
     const app = buildApp();
     const email = `pragya+${Date.now()}@stylicaa.com`;
 
-    const signUp = await app.inject({
-      method: 'POST',
-      url: '/auth/sign-up/email',
-      payload: { email, password: 'supersecret', name: 'Pragya' },
-    });
+    const signUp = track(
+      await app.inject({
+        method: 'POST',
+        url: '/auth/sign-up/email',
+        payload: { email, password: 'supersecret', name: 'Pragya' },
+      }),
+    );
     expect(signUp.statusCode).toBe(201);
     const signUpBody = signUp.json();
     expect(typeof signUpBody.token).toBe('string');
@@ -72,11 +89,13 @@ describe.skipIf(!process.env.DATABASE_URL)('dev auth (Postgres)', () => {
   it('rejects a duplicate email', async () => {
     const app = buildApp();
     const email = `dup+${Date.now()}@stylicaa.com`;
-    await app.inject({
-      method: 'POST',
-      url: '/auth/sign-up/email',
-      payload: { email, password: 'supersecret', name: 'Pragya' },
-    });
+    track(
+      await app.inject({
+        method: 'POST',
+        url: '/auth/sign-up/email',
+        payload: { email, password: 'supersecret', name: 'Pragya' },
+      }),
+    );
     const duplicate = await app.inject({
       method: 'POST',
       url: '/auth/sign-up/email',
