@@ -54,7 +54,10 @@ class LanChannel private constructor(
      */
     fun receive(): Envelope {
         val length = input.readInt()
-        if (length !in 1..MAX_FRAME_BYTES) {
+        // The floor is the GCM tag, not 1: a shorter frame cannot carry one, and handing
+        // it to the cipher throws an unchecked ProviderException instead of the
+        // GeneralSecurityException this function documents. macOS rejects the same way.
+        if (length !in GCM_TAG_BYTES..MAX_FRAME_BYTES) {
             throw GeneralSecurityException("frame length $length out of range")
         }
         val frame = ByteArray(length)
@@ -69,6 +72,9 @@ class LanChannel private constructor(
     companion object {
         /** Bounds what a peer can make us allocate from a single length prefix. */
         private const val MAX_FRAME_BYTES = 4 * 1024 * 1024
+
+        /** An AES-GCM frame is at minimum its authentication tag. */
+        private const val GCM_TAG_BYTES = 16
         private const val MAX_DEVICE_ID_BYTES = 128
 
         /**

@@ -35,8 +35,12 @@ class LoopGuard(private val selfDeviceId: String) {
         // Our own event coming back means someone re-emitted; never apply it.
         if (sourceDeviceId == selfDeviceId) return false
 
+        // `seq` is uint64 on the wire but Long here, so anything at or above 2^63 arrives
+        // negative. A signed comparison would read it as older than everything — and once
+        // a large value was accepted, nothing from that device would ever apply again.
+        // Compare unsigned, matching the proto type and the macOS client's UInt64.
         val highest = highestSeqBySource[sourceDeviceId]
-        if (highest != null && seq <= highest) return false
+        if (highest != null && java.lang.Long.compareUnsigned(seq, highest) <= 0) return false
 
         // Last-write-wins: a straggler must not overwrite newer content.
         if (sentAtUnixMs < lastAppliedAtMs) return false
