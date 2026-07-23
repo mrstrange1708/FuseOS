@@ -107,9 +107,16 @@ fun DashboardScreen() {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 for (peer in state.peers) {
                     val presence = viewModel.presenceFor(peer)
+                    // "connected" is stronger than "online": online means the server can
+                    // see the peer, connected means we have a direct channel to it.
+                    val status = when {
+                        peer.id in state.connected -> "connected · direct"
+                        presence.online -> "online"
+                        else -> "offline"
+                    }
                     DeviceCard(
                         name = peer.name,
-                        subtitle = "${peer.platform} · ${if (presence.online) "online" else "offline"}",
+                        subtitle = "${peer.platform} · $status",
                         platform = peer.platform,
                         online = presence.online,
                         battery = presence.battery,

@@ -3,6 +3,7 @@ package com.fuseos.app.data
 import android.content.Context
 import com.fuseos.app.core.Config
 import com.fuseos.app.core.DeviceInfo
+import com.fuseos.app.net.LanTransport
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -21,6 +22,8 @@ object ServiceLocator {
     lateinit var deviceRepository: DeviceRepository
         private set
     lateinit var signalClient: SignalClient
+        private set
+    lateinit var lanTransport: LanTransport
         private set
     lateinit var session: SessionStore
         private set
@@ -44,6 +47,17 @@ object ServiceLocator {
 
         val controlPlaneApi = ControlPlaneApi(httpClient, Config.BASE_URL) { sessionStore.currentToken() }
         deviceRepository = DeviceRepository(controlPlaneApi, sessionStore, deviceInfo)
-        signalClient = SignalClient(httpClient, Config.SIGNAL_URL, appScope) { deviceInfo.batteryPercent() }
+
+        val transport = LanTransport(appScope, sessionStore)
+        lanTransport = transport
+        signalClient = SignalClient(
+            client = httpClient,
+            signalUrl = Config.SIGNAL_URL,
+            scope = appScope,
+            batteryProvider = { deviceInfo.batteryPercent() },
+            // The listener binds an ephemeral port, so this is null until it is up and
+            // changes across restarts — hence a provider rather than a fixed value.
+            lanAddressProvider = { transport.lanAddress() },
+        )
     }
 }

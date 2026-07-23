@@ -10,6 +10,7 @@ import com.fuseos.app.data.PeerPresence
 import com.fuseos.app.data.ServiceLocator
 import com.fuseos.app.data.SessionStore
 import com.fuseos.app.data.SignalClient
+import com.fuseos.app.net.LanTransport
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,12 +22,15 @@ class DashboardViewModel(
     private val repo: DeviceRepository,
     private val signal: SignalClient,
     private val session: SessionStore,
+    private val transport: LanTransport,
 ) : ViewModel() {
 
     data class UiState(
         val selfDevice: DeviceItem? = null,
         val peers: List<DeviceItem> = emptyList(),
         val presence: Map<String, PeerPresence> = emptyMap(),
+        /** Peers reachable over a direct LAN channel, not merely online. */
+        val connected: Set<String> = emptySet(),
         val error: String? = null,
         val loading: Boolean = false,
     )
@@ -40,12 +44,16 @@ class DashboardViewModel(
     init {
         viewModelScope.launch { bootstrap() }
         viewModelScope.launch { signal.presence.collect { p -> _state.update { it.copy(presence = p) } } }
+        viewModelScope.launch { transport.connectedPeers.collect { c -> _state.update { it.copy(connected = c) } } }
         viewModelScope.launch { signal.paired.collect { refresh() } }
     }
 
     private suspend fun bootstrap() {
         try {
             val deviceId = repo.registerThisDevice()
+            // Bring the listener up before saying hello, so the very first hello can
+            // already carry a lanAddress for peers to dial.
+            transport.start(deviceId, signal.presence)
             session.currentToken()?.let { token -> signal.start(token, deviceId) }
             refresh()
         } catch (e: Exception) {
@@ -87,10 +95,12 @@ class DashboardViewModel(
     fun selfBattery(): Int? = repo.batteryPercent()
 
     fun presenceFor(device: DeviceItem): PeerPresence =
-        _state.value.presence[device.id] ?: PeerPresence(device.online, device.battery)
+        _state.value.presence[device.id]
+            ?: PeerPresence(device.online, device.battery, publicKey = null, lanAddress = null)
 
     fun signOut() {
         signal.stop()
+        transport.stop()
         viewModelScope.launch { session.clear() }
     }
 
@@ -101,6 +111,7 @@ class DashboardViewModel(
                     ServiceLocator.deviceRepository,
                     ServiceLocator.signalClient,
                     ServiceLocator.session,
+                    ServiceLocator.lanTransport,
                 )
             }
         }

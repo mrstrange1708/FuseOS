@@ -45,7 +45,11 @@ struct DashboardView: View {
                 } else {
                     VStack(spacing: 10) {
                         ForEach(viewModel.peers) { peer in
-                            DeviceRow(device: peer, presence: viewModel.onlineState(for: peer))
+                            DeviceRow(
+                                device: peer,
+                                presence: viewModel.onlineState(for: peer),
+                                isConnected: viewModel.isConnected(peer),
+                            )
                         }
                     }
                 }
@@ -100,7 +104,10 @@ struct DashboardView: View {
 /// One connected device with presence + battery.
 struct DeviceRow: View {
     let device: DeviceItem
-    let presence: DashboardViewModel.PeerPresence
+    let presence: PeerPresence
+    /// A direct encrypted LAN channel, which is stronger than merely being online:
+    /// online means the server can see it, connected means we can talk to it.
+    let isConnected: Bool
 
     var body: some View {
         HStack(spacing: 14) {
@@ -109,7 +116,7 @@ struct DeviceRow: View {
                 Text(device.name)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(FuseColor.ink)
-                Text("\(device.platform) · \(presence.online ? "online" : "offline")")
+                Text(statusText)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(presence.online ? FuseColor.accent : FuseColor.muted)
             }
@@ -120,6 +127,11 @@ struct DeviceRow: View {
         .background(FuseColor.surface)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(FuseColor.outline.opacity(0.6), lineWidth: 1))
+    }
+
+    private var statusText: String {
+        if isConnected { return "\(device.platform) · connected · direct" }
+        return "\(device.platform) · \(presence.online ? "online" : "offline")"
     }
 }
 

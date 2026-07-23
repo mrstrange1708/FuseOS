@@ -87,4 +87,6 @@ dependencies {
     implementation(libs.protobuf.javalite)
 
     debugImplementation(libs.androidx.ui.tooling)
+
+    testImplementation(libs.junit)
 }

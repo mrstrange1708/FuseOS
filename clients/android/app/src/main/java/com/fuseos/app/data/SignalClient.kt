@@ -23,7 +23,19 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-data class PeerPresence(val online: Boolean, val battery: Int?)
+/**
+ * What we know about a paired peer right now.
+ *
+ * [publicKey] and [lanAddress] are what make a direct connection possible: the address
+ * says where to dial, the key says who must answer. Both arrive from the control plane,
+ * which is the only thing that can vouch for them.
+ */
+data class PeerPresence(
+    val online: Boolean,
+    val battery: Int?,
+    val publicKey: String?,
+    val lanAddress: String?,
+)
 
 @Serializable
 private data class Hello(
@@ -31,10 +43,15 @@ private data class Hello(
     val token: String,
     val deviceId: String,
     val battery: Int? = null,
+    val lanAddress: String? = null,
 )
 
 @Serializable
-private data class Heartbeat(val type: String = "heartbeat", val battery: Int? = null)
+private data class Heartbeat(
+    val type: String = "heartbeat",
+    val battery: Int? = null,
+    val lanAddress: String? = null,
+)
 
 @Serializable
 private data class SignalEvent(
@@ -42,11 +59,19 @@ private data class SignalEvent(
     val deviceId: String? = null,
     val battery: Int? = null,
     val online: Boolean? = null,
+    val publicKey: String? = null,
+    val lanAddress: String? = null,
     val peers: List<PeerCard>? = null,
 )
 
 @Serializable
-private data class PeerCard(val deviceId: String, val battery: Int? = null, val online: Boolean? = null)
+private data class PeerCard(
+    val deviceId: String,
+    val battery: Int? = null,
+    val online: Boolean? = null,
+    val publicKey: String? = null,
+    val lanAddress: String? = null,
+)
 
 /**
  * Maintains the `/signal` WebSocket: authenticates with a `hello`, sends battery
@@ -58,6 +83,7 @@ class SignalClient(
     private val signalUrl: String,
     private val scope: CoroutineScope,
     private val batteryProvider: () -> Int?,
+    private val lanAddressProvider: () -> String? = { null },
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
@@ -84,11 +110,31 @@ class SignalClient(
         while (currentCoroutineContext().isActive) {
             try {
                 client.webSocket(signalUrl) {
-                    send(Frame.Text(json.encodeToString(Hello(token = token, deviceId = deviceId, battery = batteryProvider()))))
+                    send(
+                        Frame.Text(
+                            json.encodeToString(
+                                Hello(
+                                    token = token,
+                                    deviceId = deviceId,
+                                    battery = batteryProvider(),
+                                    lanAddress = lanAddressProvider(),
+                                ),
+                            ),
+                        ),
+                    )
                     val heartbeat = launch {
                         while (isActive) {
                             delay(20_000)
-                            send(Frame.Text(json.encodeToString(Heartbeat(battery = batteryProvider()))))
+                            send(
+                                Frame.Text(
+                                    json.encodeToString(
+                                        Heartbeat(
+                                            battery = batteryProvider(),
+                                            lanAddress = lanAddressProvider(),
+                                        ),
+                                    ),
+                                ),
+                            )
                         }
                     }
                     try {
@@ -116,18 +162,36 @@ class SignalClient(
             return
         }
         when (event.type) {
-            "hello-ok" -> event.peers?.forEach { setPresence(it.deviceId, it.online ?: true, it.battery) }
-            "peer-online" -> event.deviceId?.let { setPresence(it, true, event.battery) }
-            "peer-update" -> event.deviceId?.let { setPresence(it, true, event.battery) }
-            "peer-offline" -> event.deviceId?.let { setPresence(it, false, null) }
+            "hello-ok" -> event.peers?.forEach {
+                setPresence(it.deviceId, it.online ?: true, it.battery, it.publicKey, it.lanAddress)
+            }
+            "peer-online", "peer-update" -> event.deviceId?.let {
+                setPresence(it, true, event.battery, event.publicKey, event.lanAddress)
+            }
+            // Keep the key and address on the way down: the peer is unreachable now, but
+            // the details are still valid when it comes back and save a round trip.
+            "peer-offline" -> event.deviceId?.let { setPresence(it, false, null, null, null) }
             "paired" -> _paired.tryEmit(Unit)
         }
     }
 
-    private fun setPresence(deviceId: String, online: Boolean, battery: Int?) {
+    private fun setPresence(
+        deviceId: String,
+        online: Boolean,
+        battery: Int?,
+        publicKey: String?,
+        lanAddress: String?,
+    ) {
         _presence.update { current ->
             val existing = current[deviceId]
-            current + (deviceId to PeerPresence(online, battery ?: existing?.battery))
+            current + (
+                deviceId to PeerPresence(
+                    online = online,
+                    battery = battery ?: existing?.battery,
+                    publicKey = publicKey ?: existing?.publicKey,
+                    lanAddress = lanAddress ?: existing?.lanAddress,
+                )
+                )
         }
     }
 }
