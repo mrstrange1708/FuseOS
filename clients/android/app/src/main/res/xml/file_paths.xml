@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Backs the clipboard FileProvider: Android can only put an image on the clipboard
+     as a content URI, so received images are staged in the cache and shared from here. -->
+<paths>
+    <cache-path name="clipboard" path="clipboard/" />
+</paths>

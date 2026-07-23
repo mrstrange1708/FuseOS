@@ -58,27 +58,68 @@ final class ClipboardSync {
         let count = pasteboard.changeCount
         guard count != lastChangeCount else { return }
         lastChangeCount = count
+        guard var loopGuard = guard_ else { return }
 
-        guard
-            var loopGuard = guard_,
-            let text = pasteboard.string(forType: .string),
-            !text.isEmpty
-        else { return }
+        // Images first: a copied image often also carries a text representation (a file
+        // path), and syncing that instead of the picture would be the wrong choice.
+        var body: (FuseEnvelope) -> FuseEnvelope
+        var hash: String
+        if let (mime, data) = currentImage() {
+            guard data.count <= Self.maxInlineImageBytes else { return }
+            hash = LoopGuard.hash(data)
+            body = { envelope in
+                var copy = envelope
+                copy.clipImage = FuseClipImage.with {
+                    $0.mime = mime
+                    $0.data = data
+                }
+                return copy
+            }
+        } else if let text = pasteboard.string(forType: .string), !text.isEmpty {
+            hash = LoopGuard.hash(text)
+            body = { envelope in
+                var copy = envelope
+                copy.clipText = FuseClipText.with { $0.text = text }
+                return copy
+            }
+        } else {
+            return
+        }
 
-        let allowed = loopGuard.shouldEmit(contentHash: LoopGuard.hash(text))
+        let allowed = loopGuard.shouldEmit(contentHash: hash)
         guard_ = loopGuard // shouldEmit consumes the one-shot suppression
         guard allowed else { return }
 
-        var envelope = transport.newEnvelope()
-        envelope.clipText = FuseClipText.with { $0.text = text }
-        transport.broadcast(envelope)
+        transport.broadcast(body(transport.newEnvelope()))
     }
 
     private func apply(_ envelope: FuseEnvelope) {
-        guard case .clipText = envelope.body else { return }
-        let text = envelope.clipText.text
-        guard !text.isEmpty, var loopGuard = guard_ else { return }
+        // Resolve the payload and its identity before touching the guard, so text and
+        // images go through exactly the same loop-prevention path.
+        let write: () -> Void
+        let hash: String
+        switch envelope.body {
+        case .clipText:
+            let text = envelope.clipText.text
+            guard !text.isEmpty else { return }
+            hash = LoopGuard.hash(text)
+            write = { [pasteboard] in
+                pasteboard.clearContents()
+                pasteboard.setString(text, forType: .string)
+            }
+        case .clipImage:
+            let image = envelope.clipImage
+            guard !image.data.isEmpty else { return }
+            hash = LoopGuard.hash(image.data)
+            write = { [pasteboard] in
+                pasteboard.clearContents()
+                pasteboard.setData(image.data, forType: Self.pasteboardType(for: image.mime))
+            }
+        default:
+            return
+        }
 
+        guard var loopGuard = guard_ else { return }
         let allowed = loopGuard.shouldApply(
             sourceDeviceId: envelope.sourceDeviceID,
             seq: envelope.seq,
@@ -88,16 +129,37 @@ final class ClipboardSync {
             guard_ = loopGuard
             return
         }
-        loopGuard.recordApplied(
-            contentHash: LoopGuard.hash(text), sentAtUnixMs: envelope.sentAtUnixMs,
-        )
+        loopGuard.recordApplied(contentHash: hash, sentAtUnixMs: envelope.sentAtUnixMs)
         guard_ = loopGuard
 
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        write()
         // Writing bumps changeCount; absorb it here so the next poll does not treat our
         // own injection as a user copy. The hash suppression in LoopGuard covers the
         // same case, but not paying for a wasted comparison is free.
         lastChangeCount = pasteboard.changeCount
     }
+
+    /// PNG straight through; TIFF (what a Finder copy usually yields) converted, so the
+    /// receiving device never has to know about a Mac-specific format.
+    private func currentImage() -> (String, Data)? {
+        if let png = pasteboard.data(forType: .png) { return ("image/png", png) }
+        guard
+            let tiff = pasteboard.data(forType: .tiff),
+            let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:])
+        else { return nil }
+        return ("image/png", png)
+    }
+
+    private static func pasteboardType(for mime: String) -> NSPasteboard.PasteboardType {
+        switch mime {
+        case "image/tiff": return .tiff
+        default: return .png
+        }
+    }
+
+    /// Images ride inline in a single `ClipImage` frame rather than being chunked. A
+    /// screenshot is typically 1–2 MB, one frame on a LAN is faster than a chunked
+    /// stream, and `LanChannel` already caps a frame at 4 MB. Anything larger is not
+    /// synced today; it will be covered when file transfer brings chunk reassembly.
+    private static let maxInlineImageBytes = 3 * 1024 * 1024
 }

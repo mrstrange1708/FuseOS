@@ -1,4 +1,4 @@
-# Slice 02 — Clipboard Sync (text)
+# Slice 02 — Clipboard Sync (text + images)
 
 **Status:** Built, pending verification on two physical devices.
 **Goal:** copy on one device, paste on the other, with no loop and no byte of content touching the server.
@@ -13,7 +13,7 @@ This slice built the **data plane** that [slice-01](slice-01-device-login.md) st
 
 **The LAN channel** (`LanTransport` + `LanChannel` + `LanCrypto`, mirrored on both platforms). Each device listens on an ephemeral TCP port and advertises it as `lanAddress` over `/signal`. The lower device id dials. The handshake exchanges ids and nonces in the clear, authenticates the peer's static key against what the control plane vouched for, then derives per-direction AES-GCM keys by ECDH + HKDF. See [protocol.md](../protocol.md) §1.
 
-**Clipboard sync** (`ClipboardSync` + `LoopGuard`). All four loop-prevention rules live in `LoopGuard`, deliberately separated from the platform clipboard APIs so they can be tested without a device.
+**Clipboard sync** (`ClipboardSync` + `LoopGuard`), text and images. All four loop-prevention rules live in `LoopGuard`, deliberately separated from the platform clipboard APIs so they can be tested without a device. Images ride inline in a single frame up to 3 MB rather than being chunked — faster on a LAN and far less code, and it covers the screenshot case that matters. Both sides normalise to PNG.
 
 ## What this slice discovered
 
@@ -35,11 +35,12 @@ Done in-process:
 2. Copy text on the phone (with FuseOS on screen), paste on the Mac. Then the reverse.
 3. Time the round trip against the p95 < 300 ms target in [PRD.md](../PRD.md) §7.
 4. Copy on both devices within the same second — confirm it settles, with no ping-pong.
-5. Run `tcpdump -i any port 3000` during a copy and confirm **zero payload bytes** reach the server. This is the architecture's central invariant and deserves a direct measurement rather than an assumption.
-6. Toggle Wi-Fi off and on; confirm the channel returns within a few seconds.
+5. Copy a screenshot each way; confirm it arrives as an image and not as a `content://` URI or a file path.
+6. Run `tcpdump -i any port 3000` during a copy and confirm **zero payload bytes** reach the server. This is the architecture's central invariant and deserves a direct measurement rather than an assumption.
+7. Toggle Wi-Fi off and on; confirm the channel returns within a few seconds.
 
 **A likely environment trap:** many routers enable AP/client isolation, which silently blocks all device-to-device traffic. If step 1 fails, verify a plain `nc` between the two devices before debugging FuseOS.
 
 ## Next
 
-Clipboard images (`ClipImage` inline under ~256 KB, `FileMeta`/`FileChunk` above), then share-sheet send, then file transfer.
+Share-sheet send — promoted ahead of file transfer, because on Android it is the only way to send anything while the app is off screen. Then file transfer, which brings `FileMeta`/`FileChunk` reassembly and with it images above 3 MB.
