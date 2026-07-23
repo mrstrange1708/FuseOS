@@ -221,14 +221,23 @@ public final class LanTransport {
     // MARK: - Helpers
 
     /// The lower device id dials; the higher one listens.
-    private static func dialsFirst(selfId: String, peerId: String) -> Bool { selfId < peerId }
+    /// Internal so the tie-break, which decides whether a pair connects at all, is testable.
+    static func dialsFirst(selfId: String, peerId: String) -> Bool { selfId < peerId }
 
-    private static func parseAddress(_ value: String) -> (String, NWEndpoint.Port)? {
+    /// Parses a peer's advertised `host:port`.
+    ///
+    /// This is peer-supplied input arriving over the network, so everything malformed
+    /// must come back nil and skip the dial rather than produce an endpoint that cannot
+    /// work. Splits on the LAST colon so a bracketed IPv6 literal survives.
+    static func parseAddress(_ value: String) -> (String, NWEndpoint.Port)? {
         guard
             let separator = value.lastIndex(of: ":"),
-            let port = NWEndpoint.Port(String(value[value.index(after: separator)...]))
+            let port = NWEndpoint.Port(String(value[value.index(after: separator)...])),
+            port.rawValue > 0 // port 0 is "any port", never something to dial
         else { return nil }
-        return (String(value[value.startIndex ..< separator]), port)
+        let host = String(value[value.startIndex ..< separator])
+        guard !host.isEmpty else { return nil }
+        return (host, port)
     }
 
     /// This Mac's LAN IPv4 address, as peers must dial it.
