@@ -37,7 +37,7 @@ Monorepo managed with **PNPM workspaces + Turborepo** on **Node 22** (see `.node
 - `proto/` — the `.proto` source of truth for the device-to-device protocol. Every platform generates its own bindings from these files; when the wire format changes, it changes here first.
 - `clients/android/` — Kotlin + Jetpack Compose (Gradle toolchain; **outside** the PNPM workspace).
 - `clients/macos/` — SwiftPM (**outside** the PNPM workspace). Split into `FuseOSCore` (logic: crypto, LAN transport, clipboard rules — unit-tested) and `FuseOS` (the SwiftUI app). An executable target cannot be imported by tests, which is why the logic lives in its own library.
-- `docs/` — the design of record.
+- `docs/` — the design of record. [`docs/testing.md`](docs/testing.md) explains the test strategy: what is verified where, and what only two physical devices can confirm.
 
 The two native apps coordinate **only** through the shared `proto/` contract — that is the seam between them. A protocol change is a cross-cutting change: update `proto/`, then both clients and the docs.
 
