@@ -1,6 +1,6 @@
 # Slice 01 — Device Login & Connect
 
-**Status:** In progress — **login / sign-up built** on Android + macOS (see `clients/`); device pairing & connection still to come.
+**Status:** Complete. Login, sign-up, device registration, pairing by code, presence, and the direct encrypted LAN connection are all built on Android + macOS. Clipboard text sync followed in [slice-02](slice-02-clipboard-sync.md).
 **Goal:** the smallest thing we can actually run and test — log in, know which device you're on, and open a live connection between an Android phone and a Mac on the same Wi-Fi.
 
 > Visual mock: the "Device Login" design review (published artifact). This doc is the spec behind it.

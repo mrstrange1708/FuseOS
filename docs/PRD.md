@@ -56,6 +56,8 @@ These are deferred deliberately to keep v1 focused, shippable, and honest about 
 1. **Sign up / sign in** — the user creates a FuseOS account (email + password) and signs in on each device. Each device registers itself under the account.
 2. **Pair devices** — on device A the user starts pairing and gets a short-lived code; on device B they enter the code. The devices exchange keys and establish trust. Trusted devices reconnect automatically thereafter.
 3. **Clipboard sync** — the user copies text or an image on the phone; within a moment it is on the Mac's clipboard (and vice versa). Only user-initiated copies propagate; received content is not re-broadcast.
+
+   **This is not symmetric, and the asymmetry is imposed by Android, not by our design.** Mac → phone always works. Phone → Mac auto-capture only works while FuseOS is on screen, because Android forbids background apps from reading the clipboard (API 29+). Sending from the phone in the background is done through the Share sheet. See [protocol.md](protocol.md) §5.1 — this materially changes what the product can promise, and it is why share-sheet send matters more on Android than the ordering below suggests.
 4. **File transfer** — the user picks a file and sends it to the paired device; it arrives and is saved / offered to save.
 5. **Share-sheet send** — from any app's native share sheet, the user picks "Send to my Mac / my phone" and the content lands on the other device.
 

@@ -14,6 +14,7 @@ final class DashboardViewModel: ObservableObject {
 
     let signal = SignalClient()
     let transport = LanTransport()
+    private lazy var clipboard = ClipboardSync(transport: transport)
     private var started = false
 
     func start() {
@@ -39,6 +40,7 @@ final class DashboardViewModel: ObservableObject {
 
     func stop() {
         signal.stop()
+        clipboard.stop()
         transport.stop()
     }
 
@@ -48,6 +50,7 @@ final class DashboardViewModel: ObservableObject {
             // Bring the listener up before saying hello, so the very first hello can
             // already carry a lanAddress for peers to dial.
             transport.start(deviceId: deviceId)
+            clipboard.start(selfDeviceId: deviceId)
             if let token = SessionStore.shared.token {
                 signal.start(token: token, deviceId: deviceId)
             }

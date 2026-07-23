@@ -2,6 +2,7 @@ package com.fuseos.app.data
 
 import android.content.Context
 import com.fuseos.app.core.Config
+import com.fuseos.app.clipboard.ClipboardSync
 import com.fuseos.app.core.DeviceInfo
 import com.fuseos.app.net.LanTransport
 import io.ktor.client.HttpClient
@@ -24,6 +25,8 @@ object ServiceLocator {
     lateinit var signalClient: SignalClient
         private set
     lateinit var lanTransport: LanTransport
+        private set
+    lateinit var clipboardSync: ClipboardSync
         private set
     lateinit var session: SessionStore
         private set
@@ -50,6 +53,7 @@ object ServiceLocator {
 
         val transport = LanTransport(appScope, sessionStore)
         lanTransport = transport
+        clipboardSync = ClipboardSync(appContext, transport, appScope)
         signalClient = SignalClient(
             client = httpClient,
             signalUrl = Config.SIGNAL_URL,

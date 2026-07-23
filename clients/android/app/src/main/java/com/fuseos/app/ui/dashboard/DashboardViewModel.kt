@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.fuseos.app.clipboard.ClipboardSync
 import com.fuseos.app.data.DeviceItem
 import com.fuseos.app.data.DeviceRepository
 import com.fuseos.app.data.PeerPresence
@@ -23,6 +24,7 @@ class DashboardViewModel(
     private val signal: SignalClient,
     private val session: SessionStore,
     private val transport: LanTransport,
+    private val clipboard: ClipboardSync,
 ) : ViewModel() {
 
     data class UiState(
@@ -54,6 +56,7 @@ class DashboardViewModel(
             // Bring the listener up before saying hello, so the very first hello can
             // already carry a lanAddress for peers to dial.
             transport.start(deviceId, signal.presence)
+            clipboard.start(deviceId)
             session.currentToken()?.let { token -> signal.start(token, deviceId) }
             refresh()
         } catch (e: Exception) {
@@ -100,6 +103,7 @@ class DashboardViewModel(
 
     fun signOut() {
         signal.stop()
+        clipboard.stop()
         transport.stop()
         viewModelScope.launch { session.clear() }
     }
@@ -112,6 +116,7 @@ class DashboardViewModel(
                     ServiceLocator.signalClient,
                     ServiceLocator.session,
                     ServiceLocator.lanTransport,
+                    ServiceLocator.clipboardSync,
                 )
             }
         }

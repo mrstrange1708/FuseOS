@@ -8,10 +8,15 @@ This is the **data plane**: the actual clipboard and file bytes moving **directl
 
 ## 1. Discovery & connection
 
-1. **Discovery:** each device advertises/browses the mDNS service `_fuseos._tcp` on the LAN (NSD on Android, Bonjour/`Network.framework` on macOS). The control plane's `/signal` also supplies a peer's current `lanAddress` as a fast path / fallback to raw mDNS.
-2. **Connect:** the initiating device opens a **TLS/DTLS** connection directly to the peer's LAN address.
-3. **Peer authentication:** both sides verify the other's **device public key** against the trust established at pairing ([schema.md](schema.md) `device_trust`). An unknown or untrusted key is rejected — a device only ever syncs with its owner's paired devices.
-4. **Maintain:** the channel is persistent and bidirectional; `HEARTBEAT` keeps it alive; loss triggers automatic reconnection with backoff.
+1. **Discovery:** `/signal` relays each peer's current `lanAddress` and `publicKey` on the peer card — the address says where to dial, the key says who must answer. That is everything needed to open the channel, so **mDNS (`_fuseos._tcp`) is not implemented yet**; it is the fallback for when pairing has to work without internet, and it is deliberately deferred.
+2. **Who dials:** every device listens on an ephemeral TCP port, but only the device with the **lexicographically lower device id** dials. Without that tie-break both ends dial at once and every pair ends up with two half-used connections.
+3. **Connect & authenticate:** the dialer opens a plain TCP connection and both sides exchange a handshake frame — `[2-byte BE id length][device id UTF-8][32-byte nonce]` — in the clear. The device id is there because the listening side sees only an IP address and needs to know whose key to look up. Each side then requires the peer's **static P-256 public key** to be one the control plane vouched for ([schema.md](schema.md) `device_trust`); an unknown key closes the socket before anything is decrypted.
+4. **Channel keys:** ECDH over the two static keys, salted with both nonces, expanded by HKDF-SHA256 into **one key per direction** (`fuseos:lan:v1:low-to-high` and `…:high-to-low`, ordered by device id so both ends agree without extra negotiation). Every frame after the handshake is `[4-byte BE length][AES-GCM ciphertext || 16-byte tag]` over a serialised `Envelope`, with the frame counter as the GCM nonce.
+
+   This is TLS-shaped rather than literally TLS: the same guarantees (authenticated peers, per-session keys, per-frame integrity) without a certificate chain, because the control plane already distributes the keys that a PKI would otherwise establish.
+5. **Maintain:** the channel is persistent and bidirectional; a `Heartbeat` envelope every 15s keeps it alive; loss triggers reconnection with exponential backoff capped at 15s.
+
+> **No forward secrecy.** The ECDH is static-static, so an attacker holding a device's private key can decrypt recorded sessions. The upgrade is ephemeral keys plus signatures (Noise IK); it was skipped because it costs a full handshake protocol to defend against someone who already has the device.
 
 ## 2. Message envelope
 
@@ -72,6 +77,22 @@ User copies on A
                                                         B emits Envelope{ Ack } ──► A
 ```
 
+### 5.1 Platform constraints on clipboard access
+
+Two facts about the host platforms shape what clipboard sync can actually promise. Neither is a bug to engineer around.
+
+**Android only lets the focused app read the clipboard.** Since Android 10 (API 29) a background app gets nothing back; Android 12+ also shows a toast on every read. No permission, foreground service, or manifest flag lifts this — the only escapes are an `AccessibilityService` (Play Store policy risk) or the user explicitly sharing. So:
+
+| Direction | Works when |
+| --- | --- |
+| macOS → Android (inject) | Always. Writing the clipboard is unrestricted. |
+| Android → macOS (auto-capture) | Only while FuseOS is on screen. |
+| Android → macOS (background) | Via the Share sheet only. |
+
+This is why **Share-sheet send is not a convenience feature on Android — it is the primary background path out of the device**, and it should land before file transfer.
+
+**`NSPasteboard` has no change notification.** No observer, no delegate, no notification: the only way to detect a copy on macOS is to poll `changeCount`. `ClipboardSync` does so every 300 ms. This is the one sanctioned exception to the project's "never poll" rule (`CLAUDE.md`), which is about network round trips — this is a local integer read with no I/O behind it.
+
 ## 6. File transfer flow
 
 1. Sender emits `FILE_META` (name, size, mime, checksum).
@@ -82,10 +103,12 @@ User copies on A
 
 ## 7. Security
 
-- **End-to-end encryption** on the channel (TLS/DTLS); session keys per connection.
-- **Peer authentication** by device public key against `device_trust`.
-- **Integrity**: message authentication on every frame; file checksums verified on receipt.
+- **End-to-end encryption** on the channel: AES-256-GCM with keys derived per connection and per direction (§1).
+- **Peer authentication** by device public key against `device_trust`, checked before any frame is decrypted.
+- **Integrity**: the GCM tag authenticates every frame, and the frame counter is the nonce, so a reordered or replayed frame fails its tag check rather than being applied. File checksums are verified on receipt.
+- **No forward secrecy** — see the note in §1.
 - Because payloads never touch the server, there is no server-side exposure of clipboard/file content.
+- Private keys never leave their device: the macOS login keychain, and Android DataStore (Keystore ECDH needs API 31 and minSdk is 26 — tracked as a `ponytail:` note in `SessionStore.kt`).
 
 ## 8. Failure behavior (fail soft)
 

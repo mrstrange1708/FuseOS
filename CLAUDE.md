@@ -70,7 +70,7 @@ All JS/TS commands run from the repo root via Turborepo (they fan out to the wor
 
 The native clients are built with their own toolchains, outside PNPM:
 - **Android** (`clients/android/`): `./gradlew assembleDebug` to produce a debug APK; `./gradlew test` for unit tests.
-- **macOS** (`clients/macos/`): `./build-app.sh` then `open .build/FuseOS.app`; `swift test` for unit tests. SwiftPM, no `.xcodeproj`. Run the bundle rather than `swift run` — LAN connections need local-network permission, which only a bundle identifier can hold.
+- **macOS** (`clients/macos/`): `./build-app.sh` then `open .build/FuseOS.app`; `./run-checks.sh` for the assert-based checks (no SPM test target yet). SwiftPM, no `.xcodeproj`. Run the bundle rather than `swift run` — LAN connections need local-network permission, which only a bundle identifier can hold.
 
 > Design phase: these scripts are the intended interface. Some workspaces are still stubs — expect a command to be a no-op until its workspace exists.
 
