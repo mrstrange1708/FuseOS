@@ -15,9 +15,10 @@ import com.fuseos.app.net.LanTransport
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class DashboardViewModel(
     private val repo: DeviceRepository,
@@ -40,6 +41,10 @@ class DashboardViewModel(
     private val _state = MutableStateFlow(UiState())
     val state = _state.asStateFlow()
 
+    /** Set once registration and the LAN stack have come up; null means "not yet, retry". */
+    private var startedDeviceId: String? = null
+    private val startLock = Mutex()
+
     /** Emits when a pairing completes (so an open pairing sheet can close). */
     val paired: SharedFlow<Unit> = signal.paired
 
@@ -52,23 +57,39 @@ class DashboardViewModel(
 
     private suspend fun bootstrap() {
         try {
-            val deviceId = repo.registerThisDevice()
-            // Bring the listener up before saying hello, so the very first hello can
-            // already carry a lanAddress for peers to dial.
-            transport.start(deviceId, signal.presence)
-            clipboard.start(deviceId)
-            session.currentToken()?.let { token -> signal.start(token, deviceId) }
+            ensureStarted()
             refresh()
         } catch (e: Exception) {
             _state.update { it.copy(error = e.message ?: "Unable to load your devices.") }
         }
     }
 
+    /**
+     * Registers this device and brings the LAN + signal stack up, returning our device id.
+     *
+     * Every action that needs the id goes through here rather than reading the stored one,
+     * because this runs at launch — when the server may be unreachable. Doing it once and
+     * giving up left the app reporting "this device isn't registered" for the rest of its
+     * life, with a force-quit as the only way out. A failed attempt sets nothing, so the
+     * next action retries the whole thing.
+     */
+    private suspend fun ensureStarted(): String = startLock.withLock {
+        startedDeviceId?.let { return@withLock it }
+        // Idempotent server-side, and it refreshes this device's battery and lastSeen.
+        val deviceId = repo.registerThisDevice()
+        // Bring the listener up before saying hello, so the very first hello can
+        // already carry a lanAddress for peers to dial.
+        transport.start(deviceId, signal.presence)
+        clipboard.start(deviceId)
+        session.currentToken()?.let { token -> signal.start(token, deviceId) }
+        startedDeviceId = deviceId
+        deviceId
+    }
+
     suspend fun refresh() {
-        val selfId = session.deviceIdFlow.first() ?: return
         _state.update { it.copy(loading = true) }
         try {
-            val all = repo.listDevices(selfId)
+            val all = repo.listDevices(ensureStarted())
             _state.update {
                 it.copy(
                     selfDevice = all.firstOrNull { d -> d.isSelf },
@@ -82,16 +103,10 @@ class DashboardViewModel(
         }
     }
 
-    suspend fun initiatePairing(): String {
-        val selfId = session.deviceIdFlow.first()
-            ?: throw IllegalStateException("This device isn't registered yet.")
-        return repo.initiatePairing(selfId).code
-    }
+    suspend fun initiatePairing(): String = repo.initiatePairing(ensureStarted()).code
 
     suspend fun claimPairing(code: String) {
-        val selfId = session.deviceIdFlow.first()
-            ?: throw IllegalStateException("This device isn't registered yet.")
-        repo.claimPairing(selfId, code)
+        repo.claimPairing(ensureStarted(), code)
         refresh()
     }
 

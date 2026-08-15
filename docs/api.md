@@ -66,6 +66,8 @@ Validation: `platform ∈ {android, macos}`, `name` length 1–100, `publicKey` 
 ```
 The code is **8 uppercase alphanumerics shown grouped `XXXX-XXXX`** (alphabet omits the ambiguous `I O 0 1`), valid for 5 minutes. Creates a `pairing_codes` row scoped to the user and to the initiating `device_id`; an Inngest job expires it. The claim side normalizes leniently (case- and dash-insensitive).
 
+The initiating device may also render the code as a **QR** carrying `fuseos://pair?code=XXXX-XXXX` — the same code by another route, so there is no extra endpoint and no extra trust. macOS shows one (CoreImage) and Android scans it (CameraX + ML Kit); the scanner accepts only that URI or a bare complete code, so an unrelated QR can never become a claim. The parsing rules live in `PairingCode` on both clients (`core/PairingCode.kt`, `FuseOSCore/PairingCode.swift`) with mirrored test vectors.
+
 **`POST /pairing/claim`**
 ```jsonc
 // request  { "deviceId": "uuid-of-B", "code": "A7X2-9QKM" }

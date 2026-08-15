@@ -17,6 +17,8 @@ final class DashboardViewModel: ObservableObject {
     let transport = LanTransport()
     private lazy var clipboard = ClipboardSync(transport: transport)
     private var started = false
+    /// In flight or finished registration. Cleared on failure so the next action retries.
+    private var startTask: Task<String, Error>?
 
     func start() {
         guard !started else { return }
@@ -47,6 +49,24 @@ final class DashboardViewModel: ObservableObject {
 
     private func bootstrap() async {
         do {
+            _ = try await ensureStarted()
+            await refresh()
+        } catch {
+            errorMessage = (error as? AuthError)?.message ?? error.localizedDescription
+        }
+    }
+
+    /// Registers this device and brings the LAN + signal stack up, returning our device id.
+    ///
+    /// Every action that needs the id goes through here rather than reading the stored one,
+    /// because this runs at launch — when the server may be unreachable. Doing it once and
+    /// giving up left the app reporting "this device isn't registered" for the rest of its
+    /// life, with a relaunch as the only way out. A failed attempt clears `startTask`, so
+    /// the next action retries; concurrent callers await the same attempt rather than
+    /// registering twice.
+    func ensureStarted() async throws -> String {
+        if let startTask { return try await startTask.value }
+        let task = Task { () async throws -> String in
             let deviceId = try await ControlPlane.registerThisDevice(battery: Battery.currentPercent())
             // Bring the listener up before saying hello, so the very first hello can
             // already carry a lanAddress for peers to dial.
@@ -55,17 +75,21 @@ final class DashboardViewModel: ObservableObject {
             if let token = SessionStore.shared.token {
                 signal.start(token: token, deviceId: deviceId)
             }
-            await refresh()
+            return deviceId
+        }
+        startTask = task
+        do {
+            return try await task.value
         } catch {
-            errorMessage = (error as? AuthError)?.message ?? error.localizedDescription
+            startTask = nil
+            throw error
         }
     }
 
     func refresh() async {
-        guard let selfId = SessionStore.shared.deviceId else { return }
         isLoading = true
         do {
-            let all = try await ControlPlane.listDevices(selfId: selfId)
+            let all = try await ControlPlane.listDevices(selfId: try await ensureStarted())
             selfDevice = all.first { $0.isSelf }
             peers = all.filter { !$0.isSelf }
             errorMessage = nil
@@ -73,6 +97,17 @@ final class DashboardViewModel: ObservableObject {
             errorMessage = (error as? AuthError)?.message ?? error.localizedDescription
         }
         isLoading = false
+    }
+
+    /// Both pairing calls resolve the device id through `ensureStarted`, so opening the
+    /// pairing sheet after a failed launch registers then rather than refusing.
+    func initiatePairing() async throws -> String {
+        try await ControlPlane.initiatePairing(deviceId: ensureStarted()).code
+    }
+
+    func claimPairing(code: String) async throws {
+        _ = try await ControlPlane.claimPairing(deviceId: ensureStarted(), code: code)
+        await refresh()
     }
 
     /// Live presence merged over the last REST snapshot for display.

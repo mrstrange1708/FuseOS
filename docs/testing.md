@@ -78,8 +78,8 @@ Some things are only real on hardware. These are listed in [flows/slice-02-clipb
 | Suite | Tests | Notes |
 | --- | --- | --- |
 | `server/` | 79 across 9 files | includes `/signal` driven by a real listening socket |
-| `clients/android/` | 54 across 4 files | JVM only, no Robolectric or device needed |
-| `clients/macos/` | 89 across 7 files | `FuseOSCore`; the app target has no tests by design |
+| `clients/android/` | 61 across 5 files | JVM only, no Robolectric or device needed |
+| `clients/macos/` | 96 across 8 files | `FuseOSCore`; the app target has no tests by design |
 
 Started from 12 server tests, 12 Android tests, and no macOS tests at all.
 
@@ -96,6 +96,7 @@ Writing the tests was worth more than the tests. Every one of these was silent:
 - **Frames of 1–15 bytes reached the cipher** (Android) — throwing an unchecked exception instead of the documented one.
 - **Undialable peer addresses were dialled anyway** (macOS) — empty host, or port 0.
 - **Re-registering a device wiped its stored battery** (server).
+- **Any QR could become a pairing code** (both clients) — the scan parser stripped punctuation before checking, so `https://example.com` normalized to eight characters and would have been sent to `/pairing/claim`. The mirrored vectors failed on macOS and Android in the same run.
 
 Three of them — the `seq` comparison, the short-frame floor, and the address validation — were cases where the two clients had quietly diverged. That is the failure mode the mirrored tests and frozen vectors exist to catch, and it is why they are worth their maintenance cost.
 

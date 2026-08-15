@@ -14,6 +14,8 @@ Built with SwiftPM (no hand-written Xcode project) and assembled into a real `.a
 
 Prereqs: **Xcode / Swift toolchain** (macOS 13+).
 
+From the repo root, `pnpm start` brings up the server, this app, and the Android app as mprocs panes (`mac` is this one; `r` rebuilds and relaunches). To build this app on its own:
+
 1. Start the server: from the repo root, `pnpm --filter server dev` (listens on `:3000`).
 2. Build & run:
    ```bash
@@ -35,6 +37,9 @@ dev; sign with a real identity to make the grant stick.
 Default `Config.baseURL = http://localhost:3000` (in `Sources/FuseOS/Networking.swift`),
 which assumes the server runs on this Mac. Cleartext to the LAN is allowed via
 `NSAllowsLocalNetworking` in `Resources/Info.plist` — remove it once the server is https.
+
+### Pairing
+"Connect a device" generates a code and shows it as a **QR** (CoreImage, no dependency) above the same code in eight boxes — the phone scans the QR, or you read the code off it. "Enter a code" is the same eight boxes as an input: lowercase auto-uppercases and it pairs on the last character. The QR keeps a white backing in dark mode so it still scans.
 
 ## What works
 Sign up → lands on the home screen; sign in with the same credentials; validation (email format, 8-char password) and server error messages surface inline; sign out clears the session. Device pairing / connection is the next slice.

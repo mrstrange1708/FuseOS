@@ -34,6 +34,30 @@ FuseOS is **hybrid** by design:
                          payloads never touch the server
 ```
 
+## Run it
+
+```bash
+pnpm install
+pnpm start            # every service in one mprocs screen
+```
+
+`pnpm start` runs [mprocs](https://github.com/pvolok/mprocs) against
+[`mprocs.yaml`](mprocs.yaml) — one pane per service, each one live and restartable:
+
+| Pane | What it does |
+| --- | --- |
+| `server` | Control plane on `:3000`, hot-reloading. |
+| `mac` | Builds `FuseOS.app` and launches it. |
+| `android` | Waits for a USB phone, then installs and launches the app with this Mac's current LAN IP baked in — so the phone finds the server without editing any file. |
+| `logcat` | Phone-side logs. Off by default; press `s` to start it. |
+
+Keys: `j`/`k` switch pane, `s` start/stop, `r` restart, `q` quit everything. The phone
+must be on the same Wi-Fi as the Mac.
+
+Prereqs: Node 22 + PNPM, `brew install mprocs`, `server/.env` (copy
+`server/.env.example`), Xcode toolchain plus `brew install protobuf swift-protobuf` for
+the Mac app, and JDK 17 + Android SDK with `adb` on `PATH` for the phone.
+
 See [`docs/`](docs/) for the full design: [PRD](docs/PRD.md) · [HLD](docs/HLD.md) · [LLD](docs/LLD.md) · [schema](docs/schema.md) · [API](docs/api.md) · [protocol](docs/protocol.md).
 
 ## Tech stack

@@ -18,6 +18,11 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "0.1"
+
+        // Where the app looks for the control plane. `./dev.sh` passes this Mac's
+        // current LAN IP; the default is the emulator's alias for the host.
+        val serverUrl = (project.findProperty("serverUrl") as String?) ?: "http://10.0.2.2:3000"
+        buildConfigField("String", "SERVER_URL", "\"$serverUrl\"")
     }
 
     buildTypes {
@@ -39,6 +44,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     // The device-to-device wire contract lives at the repo root and is shared verbatim
@@ -73,6 +79,12 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material.icons.extended)
+
+    // Scanning the pairing QR: CameraX for the preview, ML Kit for the decode.
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.mlkit.barcode.scanning)
 
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)

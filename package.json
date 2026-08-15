@@ -8,6 +8,7 @@
     "node": ">=22 <23"
   },
   "scripts": {
+    "start": "mprocs",
     "dev": "pnpm --filter server dev",
     "build": "turbo run build",
     "proto:gen": "turbo run proto:gen",

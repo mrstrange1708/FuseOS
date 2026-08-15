@@ -7,9 +7,12 @@ import com.fuseos.app.core.DeviceInfo
 import com.fuseos.app.net.LanTransport
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.HttpSend
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.plugin
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.serialization.kotlinx.json.json
+import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,6 +44,19 @@ object ServiceLocator {
                 json(Json { ignoreUnknownKeys = true })
             }
             install(WebSockets)
+        }
+        // A phone that can't see the server fails with a raw "Connect timeout has expired
+        // [url=…]" from the engine, which tells the user nothing actionable. One place
+        // covers every call — auth, devices, pairing — because they share this client.
+        httpClient.plugin(HttpSend).intercept { request ->
+            try {
+                execute(request)
+            } catch (e: IOException) {
+                throw AuthException(
+                    "Can't reach the FuseOS server at ${Config.BASE_URL}. Check that it's " +
+                        "running and that this phone is on the same Wi-Fi as your Mac.",
+                )
+            }
         }
         val sessionStore = SessionStore(appContext)
         val deviceInfo = DeviceInfo(appContext)

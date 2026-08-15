@@ -1,0 +1,33 @@
+# Every FuseOS dev service in one screen: `pnpm start` (or just `mprocs`).
+# Each pane is a live process — j/k to switch, s to stop, r to restart, x to kill,
+# q to quit everything. Full keymap: https://github.com/pvolok/mprocs
+procs:
+  server:
+    shell: pnpm --filter server dev
+
+  mac:
+    # Run the .app bundle, not `swift run` — LAN permission is keyed to a bundle id
+    # (see clients/macos/README.md). The pane exits once the app is launched; press
+    # `r` to rebuild and relaunch after a code change. `open` detaches, so quitting
+    # mprocs leaves the app running — quit it from the Dock.
+    shell: >
+      clients/macos/build-app.sh &&
+      open clients/macos/.build/FuseOS.app &&
+      echo '✔ FuseOS.app launched — press r here to rebuild'
+
+  android:
+    # The phone reaches the server over Wi-Fi, so it needs this Mac's LAN IP, not
+    # localhost. Baked into BuildConfig.SERVER_URL at install time, so a changed
+    # Wi-Fi address needs no code edit. `adb wait-for-device` parks the pane until
+    # the phone is plugged in with USB debugging on.
+    shell: >
+      adb wait-for-device &&
+      clients/android/gradlew -p clients/android installDebug
+      -PserverUrl="http://$(ipconfig getifaddr en0 || ipconfig getifaddr en1):3000" &&
+      adb shell am start -n com.fuseos.app/.MainActivity &&
+      echo '✔ FuseOS installed and launched — press r here to rebuild'
+
+  logcat:
+    # Phone-side logs. Off by default; press `s` to start it once the app is running.
+    shell: adb logcat --pid=$(adb shell pidof -s com.fuseos.app)
+    autostart: false
