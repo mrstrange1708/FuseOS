@@ -43,6 +43,14 @@ Done in-process:
 
 **A likely environment trap:** many routers enable AP/client isolation, which silently blocks all device-to-device traffic. If step 1 fails, verify a plain `nc` between the two devices before debugging FuseOS.
 
+## Feedback: the island
+
+Sync is invisible by nature — content simply appears on the other device — which leaves no way to tell "it worked" apart from "it is broken". `ClipIsland.swift` is that signal on macOS: a glass capsule that drops under the notch for 2.6 s on every clip, in either direction, then gets out of the way.
+
+It hangs off `ClipboardSync.onClipEvent`, which fires once per clip from `record` — the single funnel both directions already pass through. Deliberately not `onHistoryChanged`, which also fires on eviction and on sign-out clearing; neither is an event worth showing anyone.
+
+It is an `NSPanel` (`.statusBar` level, `canJoinAllSpaces`, `fullScreenAuxiliary`, non-activating) rather than a SwiftUI window, so it sits above full-screen apps, follows the user across Spaces, and never steals focus from whatever they are typing into. A second clip replaces the first rather than queueing: a backlog of stale animations is noise, and only the newest clip is still true.
+
 ## Next
 
 Share-sheet send — promoted ahead of file transfer, because on Android it is the only way to send anything while the app is off screen. Then file transfer, which brings `FileMeta`/`FileChunk` reassembly and with it images above 3 MB.

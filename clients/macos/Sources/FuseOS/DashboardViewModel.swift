@@ -18,6 +18,8 @@ final class DashboardViewModel: ObservableObject {
     let signal = SignalClient()
     let transport = LanTransport()
     private lazy var clipboard = ClipboardSync(transport: transport)
+    /// The notch HUD. Owned here because this is where clip events already arrive.
+    private let island = ClipIsland()
     private var started = false
     /// In flight or finished registration. Cleared on failure so the next action retries.
     private var startTask: Task<String, Error>?
@@ -43,10 +45,19 @@ final class DashboardViewModel: ObservableObject {
         clipboard.onHistoryChanged = { [weak self] entries in
             self?.history = entries
         }
+        clipboard.onClipEvent = { [weak self] entry in
+            guard let self else { return }
+            // Named after whichever peer is actually reachable — with one paired device
+            // that is always the right name, and with several the connected one is the
+            // only one the clip can have come from or gone to.
+            let peer = self.peers.first { self.connected.contains($0.id) }
+            self.island.present(entry, peerName: peer?.name)
+        }
         Task { await bootstrap() }
     }
 
     func stop() {
+        island.dismiss()
         signal.stop()
         clipboard.stop()
         transport.stop()

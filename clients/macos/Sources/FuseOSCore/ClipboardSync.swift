@@ -46,6 +46,11 @@ public final class ClipboardSync {
     /// rather than `@Published` keeps this type free of Combine, matching `LanTransport`.
     public var onHistoryChanged: (([ClipEntry]) -> Void)?
 
+    /// Fires once per clip as it happens, in either direction — what the island animates.
+    /// Separate from `onHistoryChanged` because that also fires on eviction and on
+    /// sign-out clearing, neither of which is an event worth showing anyone.
+    public var onClipEvent: ((ClipEntry) -> Void)?
+
     private var nextId = 0
 
     /// The pasteboard is injectable so tests can drive a private one — exercising this
@@ -95,6 +100,7 @@ public final class ClipboardSync {
             fromSelf: fromSelf, at: Date(),
         )
         nextId += 1
+        onClipEvent?(entry)
 
         var trimmed = Array(([entry] + history).prefix(Self.maxEntries))
         var bytes = 0
