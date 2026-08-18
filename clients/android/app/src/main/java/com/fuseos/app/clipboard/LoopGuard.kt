@@ -14,14 +14,22 @@ import java.security.MessageDigest
  *  3. an event already applied is ignored, identified by (source device, seq);
  *  4. conflicts resolve last-write-wins.
  *
- * Sequence numbers are monotonic per source device, so tracking the highest seen per
- * source is enough for rule 3 — no growing set of identifiers.
+ * Sequence numbers are monotonic per source device *within one run of that device's app*.
+ * They restart at zero when the peer's process does — constant on Android, where the OS
+ * freezes and kills apps freely. So the highest-seq check alone would reject everything
+ * from a restarted peer, permanently, until this side restarted too. The peer's own send
+ * timestamp breaks that tie: it always moves forward across a restart, and comparing it
+ * only against previous events *from the same source* keeps it on one clock, immune to
+ * skew between devices.
  *
  * Not thread-safe; callers serialise access (one clipboard, one owner).
  */
 class LoopGuard(private val selfDeviceId: String) {
 
-    private val highestSeqBySource = mutableMapOf<String, Long>()
+    /** The peer's session and how far its counter has got within it. */
+    private data class SourceState(val sessionId: String, val highestSeq: Long)
+
+    private val bySource = mutableMapOf<String, SourceState>()
     private var suppressedHash: String? = null
     private var lastAppliedAtMs = 0L
 
@@ -31,7 +39,12 @@ class LoopGuard(private val selfDeviceId: String) {
      * Consumes the sequence number when it returns true, so calling it twice for the same
      * event reports a duplicate the second time.
      */
-    fun shouldApply(sourceDeviceId: String, seq: Long, sentAtUnixMs: Long): Boolean {
+    fun shouldApply(
+        sourceDeviceId: String,
+        sessionId: String,
+        seq: Long,
+        sentAtUnixMs: Long,
+    ): Boolean {
         // Our own event coming back means someone re-emitted; never apply it.
         if (sourceDeviceId == selfDeviceId) return false
 
@@ -39,13 +52,18 @@ class LoopGuard(private val selfDeviceId: String) {
         // negative. A signed comparison would read it as older than everything — and once
         // a large value was accepted, nothing from that device would ever apply again.
         // Compare unsigned, matching the proto type and the macOS client's UInt64.
-        val highest = highestSeqBySource[sourceDeviceId]
-        if (highest != null && java.lang.Long.compareUnsigned(seq, highest) <= 0) return false
+        val seen = bySource[sourceDeviceId]
+        if (seen != null && seen.sessionId == sessionId) {
+            // Same session, so the counter is comparable and this is a replay or straggler.
+            if (java.lang.Long.compareUnsigned(seq, seen.highestSeq) <= 0) return false
+        }
+        // A different session id means the peer restarted; its counter began again and
+        // nothing we remember about the old one applies.
 
         // Last-write-wins: a straggler must not overwrite newer content.
         if (sentAtUnixMs < lastAppliedAtMs) return false
 
-        highestSeqBySource[sourceDeviceId] = seq
+        bySource[sourceDeviceId] = SourceState(sessionId, seq)
         return true
     }
 

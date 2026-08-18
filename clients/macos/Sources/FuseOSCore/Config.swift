@@ -13,3 +13,18 @@ public enum Config {
     /// The `/signal` presence WebSocket on the same server.
     public static let signalURL = URL(string: "ws://localhost:3000/signal")!
 }
+
+
+import os
+
+/// Diagnostics for the data plane, readable with:
+/// `log stream --predicate 'subsystem == "com.fuseos.app"' --level info`
+///
+/// Deliberately narrow: whether a channel exists, and why an inbound clip was refused.
+/// Those two questions account for every "it says connected but nothing syncs" report,
+/// and neither is answerable from outside the process without this. Never logs clipboard
+/// content — payloads stay off every diagnostic surface (see docs/observability.md).
+public enum FuseLog {
+    public static let lan = Logger(subsystem: "com.fuseos.app", category: "lan")
+    public static let clipboard = Logger(subsystem: "com.fuseos.app", category: "clipboard")
+}

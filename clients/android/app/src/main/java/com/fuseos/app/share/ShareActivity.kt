@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
@@ -42,6 +43,7 @@ class ShareActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             val sent = withContext(Dispatchers.IO) { send(text, uri) }
+            Log.i(TAG, "share result: $sent")
             finishWith(
                 when (sent) {
                     SendResult.Sent -> "Sent to your devices."
@@ -101,6 +103,8 @@ class ShareActivity : ComponentActivity() {
     }
 
     private companion object {
+        const val TAG = "FuseShare"
+
         /** Long enough to dial a peer on a LAN, short enough not to feel hung. */
         const val CONNECT_TIMEOUT_MS = 6_000L
     }

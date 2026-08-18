@@ -12,13 +12,22 @@ import Foundation
 ///  3. an event already applied is ignored, identified by (source device, seq);
 ///  4. conflicts resolve last-write-wins.
 ///
-/// Sequence numbers are monotonic per source device, so tracking the highest seen per
-/// source is enough for rule 3 — no growing set of identifiers.
+/// Sequence numbers are monotonic per source device *within one session*: they restart at
+/// zero whenever that device's process does, which on Android is constant. So the highest
+/// seq is tracked per (source, session), and a new session id resets it. Without that, a
+/// peer restarting looked exactly like a replay, and every clip it sent afterwards was
+/// dropped until this side restarted too.
 ///
 /// The Android `LoopGuard` is the mirror of this file; the rules must not diverge.
 struct LoopGuard {
+    /// The peer's session and how far its counter has got within it.
+    private struct SourceState {
+        var sessionId: String
+        var highestSeq: UInt64
+    }
+
     private let selfDeviceId: String
-    private var highestSeqBySource: [String: UInt64] = [:]
+    private var bySource: [String: SourceState] = [:]
     private var suppressedHash: String?
     private var lastAppliedAtMs: Int64 = 0
 
@@ -31,17 +40,22 @@ struct LoopGuard {
     /// Consumes the sequence number when it returns true, so calling it twice for the
     /// same event reports a duplicate the second time.
     mutating func shouldApply(
-        sourceDeviceId: String, seq: UInt64, sentAtUnixMs: Int64,
+        sourceDeviceId: String, sessionId: String, seq: UInt64, sentAtUnixMs: Int64,
     ) -> Bool {
         // Our own event coming back means someone re-emitted; never apply it.
         guard sourceDeviceId != selfDeviceId else { return false }
 
-        if let highest = highestSeqBySource[sourceDeviceId], seq <= highest { return false }
+        if let seen = bySource[sourceDeviceId], seen.sessionId == sessionId {
+            // Same session, so the counter is comparable and this is a replay or straggler.
+            guard seq > seen.highestSeq else { return false }
+        }
+        // A different session id means the peer restarted; its counter began again and
+        // nothing we remember about the old one applies.
 
         // Last-write-wins: a straggler must not overwrite newer content.
         guard sentAtUnixMs >= lastAppliedAtMs else { return false }
 
-        highestSeqBySource[sourceDeviceId] = seq
+        bySource[sourceDeviceId] = SourceState(sessionId: sessionId, highestSeq: seq)
         return true
     }
 

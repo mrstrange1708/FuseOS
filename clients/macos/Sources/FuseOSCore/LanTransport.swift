@@ -34,6 +34,11 @@ public final class LanTransport {
     private var heartbeatTask: Task<Void, Never>?
     private var sequenceNumber: UInt64 = 0
 
+    /// Identifies this run of the process, so a peer can tell our restarted `seq` counter
+    /// from a replay. Minted once per LanTransport rather than per connection: it has to
+    /// survive reconnects, or every dropped channel would look like a restart.
+    private let sessionId = UUID().uuidString
+
     /// `ip:port` to advertise over `/signal`, or nil until the listener is bound.
     public init() {}
 
@@ -48,11 +53,18 @@ public final class LanTransport {
         var envelope = FuseEnvelope()
         envelope.sourceDeviceID = selfDeviceId ?? ""
         envelope.seq = sequenceNumber
+        envelope.sessionID = sessionId
         envelope.sentAtUnixMs = Int64(Date().timeIntervalSince1970 * 1000)
         return envelope
     }
 
-    public func start(deviceId: String) {
+    /// Brings the listener up, returning only once it is bound and has a port.
+    ///
+    /// The caller announces this device over `/signal` immediately after this returns, and
+    /// that hello carries `lanAddress()`. Returning early left the very first hello
+    /// advertising no address at all, so the peer had nothing to dial and could not reach
+    /// this Mac until the next reconnect — which looked exactly like a network fault.
+    public func start(deviceId: String) async {
         stop()
         selfDeviceId = deviceId
         do {
@@ -61,7 +73,22 @@ public final class LanTransport {
             listener.newConnectionHandler = { [weak self] connection in
                 Task { @MainActor in self?.accept(connection) }
             }
-            listener.start(queue: .global(qos: .userInitiated))
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                // Resumed exactly once: a continuation resumed twice traps, and this
+                // handler fires again on every later state change.
+                var resumed = false
+                listener.stateUpdateHandler = { state in
+                    switch state {
+                    case .ready, .failed, .cancelled:
+                        guard !resumed else { return }
+                        resumed = true
+                        continuation.resume()
+                    default:
+                        break
+                    }
+                }
+                listener.start(queue: .global(qos: .userInitiated))
+            }
             heartbeatTask = Task { [weak self] in await self?.heartbeatLoop() }
         } catch {
             // Fail soft: without a listener this device can still dial peers whose id
@@ -122,6 +149,7 @@ public final class LanTransport {
                 let channel = try await self.handshake(connection, selfId: selfId)
                 await self.pump(channel)
             } catch {
+                FuseLog.lan.warning("inbound handshake failed: \(error.localizedDescription, privacy: .public)")
                 connection.cancel() // fail soft: a bad caller is just dropped
             }
         }
@@ -152,6 +180,7 @@ public final class LanTransport {
             await pump(channel)
             return true
         } catch {
+            FuseLog.lan.warning("dial to \(peerId, privacy: .public) at \(address, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             connection.cancel()
             return false
         }
@@ -200,6 +229,7 @@ public final class LanTransport {
     }
 
     private func register(_ channel: LanChannel) {
+        FuseLog.lan.info("channel up with \(channel.peerDeviceId, privacy: .public)")
         // A reconnect replaces the previous channel rather than racing it.
         channels[channel.peerDeviceId]?.close()
         channels[channel.peerDeviceId] = channel

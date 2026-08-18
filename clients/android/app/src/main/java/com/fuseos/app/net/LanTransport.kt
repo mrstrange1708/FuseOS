@@ -1,5 +1,6 @@
 package com.fuseos.app.net
 
+import android.util.Log
 import com.fuseos.app.core.DeviceKey
 import com.fuseos.app.data.PeerPresence
 import com.fuseos.app.data.SessionStore
@@ -65,6 +66,13 @@ class LanTransport(
     private val peers = MutableStateFlow<Map<String, PeerPresence>>(emptyMap())
     private val seq = AtomicLong(0)
 
+    /**
+     * Identifies this run of the process, so a peer can tell our restarted [seq] counter
+     * from a replay. Minted once per LanTransport rather than per connection: it has to
+     * survive reconnects, or every dropped channel would look like a restart.
+     */
+    private val sessionId = java.util.UUID.randomUUID().toString()
+
     @Volatile private var server: ServerSocket? = null
 
     @Volatile private var selfDeviceId: String? = null
@@ -82,6 +90,7 @@ class LanTransport(
         Envelope.newBuilder()
             .setSourceDeviceId(selfDeviceId.orEmpty())
             .setSeq(seq.incrementAndGet())
+            .setSessionId(sessionId)
             .setSentAtUnixMs(System.currentTimeMillis())
 
     /** Fail-soft broadcast to every connected peer; a dead channel is dropped, not thrown. */
@@ -99,12 +108,18 @@ class LanTransport(
     fun start(deviceId: String, presence: StateFlow<Map<String, PeerPresence>>) {
         stop()
         selfDeviceId = deviceId
+        // Bind before returning, not inside the coroutine below. The caller announces this
+        // device over /signal immediately after this call, and that hello carries
+        // lanAddress() — so a listener that binds a moment later means the first hello
+        // advertises nothing to dial, and the peer cannot reach us until the next
+        // reconnect. Binding a local socket is not a network round trip; it is cheap
+        // enough to do inline, and doing it inline is what removes the race.
+        val listener = ServerSocket().apply {
+            reuseAddress = true
+            bind(InetSocketAddress(0)) // ephemeral port
+        }
+        server = listener
         job = scope.launch(Dispatchers.IO) {
-            val listener = ServerSocket().apply {
-                reuseAddress = true
-                bind(InetSocketAddress(0)) // ephemeral port
-            }
-            server = listener
             try {
                 coroutineScope {
                     launch { presence.collect { snapshot -> peers.value = snapshot } }
@@ -146,6 +161,10 @@ class LanTransport(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
+                    // An inbound peer whose key we do not trust lands here. Silence made
+                    // "TCP connects but nothing syncs" impossible to tell from "never
+                    // connected", which is exactly the case this log exists for.
+                    Log.w(TAG, "inbound handshake from ${socket.inetAddress} failed: ${e.message}")
                     runCatching { socket.close() } // fail soft: a bad caller is just dropped
                 }
             }
@@ -175,6 +194,10 @@ class LanTransport(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
+                    // Fail soft, but never silently: a dial that keeps failing is the
+                    // single most common reason nothing syncs, and without this line it
+                    // is invisible from outside the process.
+                    Log.w(TAG, "dial to $peerId (${peer.lanAddress}) failed: ${e.message}")
                     false
                 }
                 backoffMs = if (ok) 500L else (backoffMs * 2).coerceAtMost(MAX_BACKOFF_MS)
@@ -232,6 +255,7 @@ class LanTransport(
     }
 
     private fun register(channel: LanChannel) {
+        Log.i(TAG, "channel up with ${channel.peerDeviceId}")
         // A reconnect replaces the previous channel rather than racing it.
         channels.put(channel.peerDeviceId, channel)?.close()
         _connectedPeers.update { it + channel.peerDeviceId }
@@ -244,6 +268,8 @@ class LanTransport(
     }
 
     private companion object {
+        const val TAG = "FuseLan"
+
         const val CONNECT_TIMEOUT_MS = 3_000
         const val HEARTBEAT_MS = 15_000L
         const val MAX_BACKOFF_MS = 15_000L

@@ -18,6 +18,21 @@ This is the **data plane**: the actual clipboard and file bytes moving **directl
 
 > **No forward secrecy.** The ECDH is static-static, so an attacker holding a device's private key can decrypt recorded sessions. The upgrade is ephemeral keys plus signatures (Noise IK); it was skipped because it costs a full handshake protocol to defend against someone who already has the device.
 
+
+### Session ids and `seq`
+
+`seq` is monotonic per source device **within one session**, not forever: it restarts at zero whenever that device's process does. On Android that is constant — the OS freezes and kills apps freely, and OEM battery managers (ColorOS/HANS on Realme and Oppo) are more aggressive still.
+
+So every envelope also carries `session_id`, random per app launch. A receiver tracks the highest `seq` per `(source_device_id, session_id)`; a new session id resets that tracking.
+
+Without it, `(source, seq)` alone cannot distinguish a restarted counter from a replayed event, and either reading is broken:
+
+- treat a lower `seq` as a replay → every clip from a restarted peer is silently dropped until the *receiver* also restarts;
+- treat it as a restart → replay protection is gone.
+
+This was a real, observed failure: a phone restart permanently killed phone → Mac sync while the Mac kept running, with both sides reporting a healthy connection.
+
+
 ## 2. Message envelope
 
 Every message shares a common header carrying the fields that make sync safe:

@@ -71,6 +71,7 @@ public final class ClipboardSync {
         transport.onEnvelope = { [weak self] envelope in
             self?.apply(envelope)
         }
+        FuseLog.clipboard.info("clipboard sync started as \(selfDeviceId, privacy: .public)")
 
         watcher = Task { [weak self] in
             while !Task.isCancelled {
@@ -146,7 +147,10 @@ public final class ClipboardSync {
         let count = pasteboard.changeCount
         guard count != lastChangeCount else { return }
         lastChangeCount = count
-        guard var loopGuard = guard_ else { return }
+        guard var loopGuard = guard_ else {
+            FuseLog.clipboard.warning("inbound clip dropped: sync not started")
+            return
+        }
 
         // Images first: a copied image often also carries a text representation (a file
         // path), and syncing that instead of the picture would be the wrong choice.
@@ -214,13 +218,20 @@ public final class ClipboardSync {
             return
         }
 
-        guard var loopGuard = guard_ else { return }
+        guard var loopGuard = guard_ else {
+            FuseLog.clipboard.warning("inbound clip dropped: sync not started")
+            return
+        }
         let allowed = loopGuard.shouldApply(
             sourceDeviceId: envelope.sourceDeviceID,
+            sessionId: envelope.sessionID,
             seq: envelope.seq,
             sentAtUnixMs: envelope.sentAtUnixMs,
         )
         guard allowed else {
+            FuseLog.clipboard.info(
+                "inbound clip refused by loop guard from \(envelope.sourceDeviceID, privacy: .public) seq \(envelope.seq) session \(envelope.sessionID, privacy: .public)",
+            )
             guard_ = loopGuard
             return
         }

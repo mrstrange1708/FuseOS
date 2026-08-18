@@ -1,5 +1,6 @@
 package com.fuseos.app.data
 
+import android.util.Log
 import com.fuseos.app.clipboard.ClipboardSync
 import com.fuseos.app.net.LanTransport
 import kotlinx.coroutines.sync.Mutex
@@ -26,6 +27,10 @@ class ConnectionManager(
 ) {
     private val lock = Mutex()
 
+    private companion object {
+        const val TAG = "FuseConn"
+    }
+
     @Volatile
     private var deviceId: String? = null
 
@@ -33,13 +38,22 @@ class ConnectionManager(
     suspend fun ensureStarted(): String = lock.withLock {
         deviceId?.let { return@withLock it }
         // Idempotent server-side, and it refreshes this device's battery and lastSeen.
-        val id = repo.registerThisDevice()
+        val id = try {
+            repo.registerThisDevice()
+        } catch (e: Exception) {
+            // The single most consequential failure in the app: without a device id the
+            // LAN listener never binds, so the phone can neither send nor receive and
+            // every symptom downstream looks like a network problem instead.
+            Log.e(TAG, "device registration failed — nothing will sync: ${e.message}")
+            throw e
+        }
         // Bring the listener up before saying hello, so the very first hello can already
         // carry a lanAddress for peers to dial.
         transport.start(id, signal.presence)
         clipboard.start(id)
         session.currentToken()?.let { token -> signal.start(token, id) }
         deviceId = id
+        Log.i(TAG, "connection stack up as device $id, listening on ${transport.lanAddress()}")
         id
     }
 

@@ -13,14 +13,20 @@ option swift_prefix = "Fuse";
 //
 // RULES:
 //  - Tag numbers are PERMANENT. Add fields; never renumber or reuse a tag.
-//  - Every event MUST carry source_device_id + seq (loop prevention & dedupe).
+//  - Every event MUST carry source_device_id + session_id + seq (loop prevention & dedupe).
 //  - No control-plane / auth concerns live here — this is data plane only.
 
 // Wraps every message on the LAN channel.
 message Envelope {
   string source_device_id = 1; // device that originated this event
-  uint64 seq               = 2; // monotonic per source device
+  uint64 seq               = 2; // monotonic per source device, WITHIN one session
   int64  sent_at_unix_ms   = 3;
+  // Random per app launch. `seq` restarts at zero whenever a device's process does —
+  // constant on Android, where the OS kills apps freely — so (source_device_id, seq)
+  // alone cannot tell a restarted counter from a replayed event, and a receiver that
+  // guessed wrong either dropped everything from that peer until it restarted too, or
+  // lost its replay protection. This field removes the guess.
+  string session_id        = 4;
 
   oneof body {
     ClipText  clip_text  = 10;

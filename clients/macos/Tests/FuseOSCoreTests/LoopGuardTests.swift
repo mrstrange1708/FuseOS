@@ -15,35 +15,35 @@ final class LoopGuardTests: XCTestCase {
 
     func testAppliesAFreshEventFromAPeer() {
         var g = guardFor()
-        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer", seq: 1, sentAtUnixMs: 100))
+        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer", sessionId: "s1", seq: 1, sentAtUnixMs: 100))
     }
 
     func testNeverAppliesAnEventWeOriginated() {
         // The echo of our own copy coming back is the first half of a sync loop.
         var g = guardFor()
-        XCTAssertFalse(g.shouldApply(sourceDeviceId: "self", seq: 1, sentAtUnixMs: 100))
+        XCTAssertFalse(g.shouldApply(sourceDeviceId: "self", sessionId: "s1", seq: 1, sentAtUnixMs: 100))
     }
 
     func testIgnoresAReplayedOrDuplicatedSequenceNumber() {
         var g = guardFor()
-        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer", seq: 5, sentAtUnixMs: 100))
-        XCTAssertFalse(g.shouldApply(sourceDeviceId: "peer", seq: 5, sentAtUnixMs: 100))
-        XCTAssertFalse(g.shouldApply(sourceDeviceId: "peer", seq: 4, sentAtUnixMs: 100))
-        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer", seq: 6, sentAtUnixMs: 101))
+        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer", sessionId: "s1", seq: 5, sentAtUnixMs: 100))
+        XCTAssertFalse(g.shouldApply(sourceDeviceId: "peer", sessionId: "s1", seq: 5, sentAtUnixMs: 100))
+        XCTAssertFalse(g.shouldApply(sourceDeviceId: "peer", sessionId: "s1", seq: 4, sentAtUnixMs: 100))
+        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer", sessionId: "s1", seq: 6, sentAtUnixMs: 101))
     }
 
     func testTracksSequenceNumbersPerSourceDevice() {
         var g = guardFor()
-        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer-a", seq: 9, sentAtUnixMs: 100))
+        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer-a", sessionId: "s1", seq: 9, sentAtUnixMs: 100))
         // A different device's low sequence number is not a duplicate.
-        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer-b", seq: 1, sentAtUnixMs: 100))
+        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer-b", sessionId: "s1", seq: 1, sentAtUnixMs: 100))
     }
 
     func testAStragglerDoesNotOverwriteNewerContent() {
         var g = guardFor()
-        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer", seq: 1, sentAtUnixMs: 500))
+        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer", sessionId: "s1", seq: 1, sentAtUnixMs: 500))
         g.recordApplied(contentHash: LoopGuard.hash("newer"), sentAtUnixMs: 500)
-        XCTAssertFalse(g.shouldApply(sourceDeviceId: "peer", seq: 2, sentAtUnixMs: 400))
+        XCTAssertFalse(g.shouldApply(sourceDeviceId: "peer", sessionId: "s1", seq: 2, sentAtUnixMs: 400))
     }
 
     /// The boundary of the last-write-wins comparison. Equal timestamps must be ACCEPTED
@@ -51,9 +51,9 @@ final class LoopGuardTests: XCTestCase {
     /// rejecting equality would silently drop legitimate copies.
     func testAnEventWithAnEqualTimestampIsStillApplied() {
         var g = guardFor()
-        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer", seq: 1, sentAtUnixMs: 500))
+        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer", sessionId: "s1", seq: 1, sentAtUnixMs: 500))
         g.recordApplied(contentHash: LoopGuard.hash("first"), sentAtUnixMs: 500)
-        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer", seq: 2, sentAtUnixMs: 500))
+        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer", sessionId: "s1", seq: 2, sentAtUnixMs: 500))
     }
 
     func testSwallowsTheEchoOfContentItJustInjected() {
@@ -85,26 +85,26 @@ final class LoopGuardTests: XCTestCase {
         let hash = LoopGuard.hash("hello")
 
         XCTAssertTrue(deviceA.shouldEmit(contentHash: hash))
-        XCTAssertTrue(deviceB.shouldApply(sourceDeviceId: "A", seq: 1, sentAtUnixMs: 100))
+        XCTAssertTrue(deviceB.shouldApply(sourceDeviceId: "A", sessionId: "s1", seq: 1, sentAtUnixMs: 100))
         deviceB.recordApplied(contentHash: hash, sentAtUnixMs: 100)
         XCTAssertFalse(deviceB.shouldEmit(contentHash: hash)) // the loop ends here
     }
 
     func testInterleavedEventsFromTwoPeersDoNotInterfere() {
         var g = guardFor()
-        XCTAssertTrue(g.shouldApply(sourceDeviceId: "A", seq: 1, sentAtUnixMs: 100))
-        XCTAssertTrue(g.shouldApply(sourceDeviceId: "B", seq: 1, sentAtUnixMs: 101))
-        XCTAssertTrue(g.shouldApply(sourceDeviceId: "A", seq: 2, sentAtUnixMs: 102))
-        XCTAssertFalse(g.shouldApply(sourceDeviceId: "B", seq: 1, sentAtUnixMs: 103)) // replay
+        XCTAssertTrue(g.shouldApply(sourceDeviceId: "A", sessionId: "s1", seq: 1, sentAtUnixMs: 100))
+        XCTAssertTrue(g.shouldApply(sourceDeviceId: "B", sessionId: "s1", seq: 1, sentAtUnixMs: 101))
+        XCTAssertTrue(g.shouldApply(sourceDeviceId: "A", sessionId: "s1", seq: 2, sentAtUnixMs: 102))
+        XCTAssertFalse(g.shouldApply(sourceDeviceId: "B", sessionId: "s1", seq: 1, sentAtUnixMs: 103)) // replay
     }
 
     func testHandlesVeryLargeSequenceNumbers() {
         // seq is a uint64 on the wire; a device that has been up a long time must not
         // wrap into rejecting everything.
         var g = guardFor()
-        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer", seq: UInt64.max - 1, sentAtUnixMs: 100))
-        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer", seq: UInt64.max, sentAtUnixMs: 101))
-        XCTAssertFalse(g.shouldApply(sourceDeviceId: "peer", seq: UInt64.max, sentAtUnixMs: 102))
+        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer", sessionId: "s1", seq: UInt64.max - 1, sentAtUnixMs: 100))
+        XCTAssertTrue(g.shouldApply(sourceDeviceId: "peer", sessionId: "s1", seq: UInt64.max, sentAtUnixMs: 101))
+        XCTAssertFalse(g.shouldApply(sourceDeviceId: "peer", sessionId: "s1", seq: UInt64.max, sentAtUnixMs: 102))
     }
 
     // MARK: - Hashing
@@ -126,5 +126,27 @@ final class LoopGuardTests: XCTestCase {
     func testTextAndByteHashingAgreeForTheSameContent() {
         // Images hash bytes, text hashes UTF-8 — the two paths must not disagree.
         XCTAssertEqual(LoopGuard.hash("abc"), LoopGuard.hash(Data("abc".utf8)))
+    }
+
+    /// The bug this pins: `seq` restarts at zero when the peer's process does, but this
+    /// side keeps running and remembers the old high-water mark. Before session ids, a
+    /// phone restart made every later clip from it invisible until the Mac restarted too —
+    /// and Android kills apps constantly, so that was most of the time.
+    func testPeerRestartingItsSequenceCounterStillApplies() {
+        var g = guardFor()
+        XCTAssertTrue(g.shouldApply(sourceDeviceId: "phone", sessionId: "s1", seq: 7, sentAtUnixMs: 1_000))
+
+        // Phone restarts: new session, counter back to 1.
+        XCTAssertTrue(g.shouldApply(sourceDeviceId: "phone", sessionId: "s2", seq: 1, sentAtUnixMs: 2_000))
+        XCTAssertTrue(g.shouldApply(sourceDeviceId: "phone", sessionId: "s2", seq: 2, sentAtUnixMs: 3_000))
+    }
+
+    /// A new session must not become a hole in replay protection: within the new session
+    /// the counter is tracked from scratch, and duplicates there are still rejected.
+    func testReplayProtectionRestartsWithTheNewSession() {
+        var g = guardFor()
+        XCTAssertTrue(g.shouldApply(sourceDeviceId: "phone", sessionId: "s1", seq: 7, sentAtUnixMs: 1_000))
+        XCTAssertTrue(g.shouldApply(sourceDeviceId: "phone", sessionId: "s2", seq: 1, sentAtUnixMs: 2_000))
+        XCTAssertFalse(g.shouldApply(sourceDeviceId: "phone", sessionId: "s2", seq: 1, sentAtUnixMs: 3_000))
     }
 }

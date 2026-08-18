@@ -86,7 +86,7 @@ final class DashboardViewModel: ObservableObject {
             let deviceId = try await ControlPlane.registerThisDevice(battery: Battery.currentPercent())
             // Bring the listener up before saying hello, so the very first hello can
             // already carry a lanAddress for peers to dial.
-            transport.start(deviceId: deviceId)
+            await transport.start(deviceId: deviceId)
             clipboard.start(selfDeviceId: deviceId)
             if let token = SessionStore.shared.token {
                 signal.start(token: token, deviceId: deviceId)

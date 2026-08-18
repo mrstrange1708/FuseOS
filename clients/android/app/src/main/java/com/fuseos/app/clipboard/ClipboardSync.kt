@@ -214,7 +214,13 @@ class ClipboardSync(
         } ?: return
 
         val (payload, hash) = content
-        if (!guard.shouldApply(envelope.sourceDeviceId, envelope.seq, envelope.sentAtUnixMs)) {
+        if (!guard.shouldApply(
+                envelope.sourceDeviceId,
+                envelope.sessionId,
+                envelope.seq,
+                envelope.sentAtUnixMs,
+            )
+        ) {
             return
         }
         // Record before writing: setPrimaryClip can notify the listener synchronously, and
