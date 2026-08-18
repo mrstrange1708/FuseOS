@@ -8,6 +8,8 @@
 	<string>FuseOS</string>
 	<key>CFBundleExecutable</key>
 	<string>FuseOS</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.fuseos.app</string>
 	<key>CFBundlePackageType</key>

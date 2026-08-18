@@ -47,3 +47,16 @@ Sign up → lands on the dashboard; sign in with the same credentials; validatio
 The dashboard shows this device, every paired device with live presence, battery and whether there is a direct LAN channel (`connected · direct`), and the **clipboard history** — the last 50 items copied here or received from a peer, newest first, each tagged with where it came from. Click one to put it back on the clipboard. The history is in memory only: clipboard content is never written to disk, and never leaves the LAN.
 
 Peers connect on their own — there is no "connect" button beyond pairing. `LanTransport` dials whatever `/signal` reports as online.
+
+## The app icon
+
+`clients/make-icon.py` draws the mark and writes both clients' icons: `Resources/AppIcon.icns`
+here, and Android's legacy launcher PNGs. Run it after changing the mark:
+
+```
+python3 clients/make-icon.py   # needs Pillow
+```
+
+The output is committed, so neither build needs Pillow. Android's real icon is the adaptive
+vector in `res/drawable/ic_launcher_foreground.xml`; the PNGs only cover launchers that
+still reach for the legacy asset.

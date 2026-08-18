@@ -31,6 +31,10 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$BIN" "$APP/Contents/MacOS/FuseOS"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+# The icon is committed rather than generated here: it changes about never, and a build
+# should not need Pillow. Regenerate with `python3 make-icon.py` after changing the mark.
+mkdir -p "$APP/Contents/Resources"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 # ponytail: ad-hoc signature — there is no Developer ID on this machine. The cdhash
 # changes every build, so macOS re-asks for local-network permission after a rebuild.

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The FuseOS mark: two devices joined by a link.
+     Adaptive icons are 108x108dp but launchers may mask anything outside the middle
+     72x72dp, and shrink further when they animate. So the whole mark sits inside roughly
+     the central 56dp — small enough that no launcher shape can clip a device off. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- The link, starting at the hollow device's edge rather than its centre: drawn
+         through, it leaves a stray dot inside the ring and the ring stops reading hollow. -->
+    <path
+        android:fillColor="#E85D2A"
+        android:pathData="M40,52.1h22v3.8h-22z" />
+
+    <!-- The link's own node, so the bar reads as a connection and not a hyphen. -->
+    <path
+        android:fillColor="#E85D2A"
+        android:pathData="M54,54m-3.8,0a3.8,3.8 0,1 1,7.6 0a3.8,3.8 0,1 1,-7.6 0" />
+
+    <!-- The hollow device. Two circles rather than a stroke: a stroked path scales its
+         width with the icon, and at small sizes the ring fills in. -->
+    <path
+        android:fillColor="#ECEFF4"
+        android:pathData="M37,54m-11,0a11,11 0,1 1,22 0a11,11 0,1 1,-22 0" />
+    <path
+        android:fillColor="#161922"
+        android:pathData="M37,54m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" />
+
+    <!-- The filled device. -->
+    <path
+        android:fillColor="#E85D2A"
+        android:pathData="M71,54m-11,0a11,11 0,1 1,22 0a11,11 0,1 1,-22 0" />
+</vector>
