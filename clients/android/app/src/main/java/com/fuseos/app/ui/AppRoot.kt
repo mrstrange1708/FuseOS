@@ -12,7 +12,7 @@ import com.fuseos.app.ui.auth.AuthViewModel
 import com.fuseos.app.ui.auth.LoginScreen
 import com.fuseos.app.ui.auth.SignUpScreen
 import com.fuseos.app.ui.connect.ConnectScreen
-import com.fuseos.app.ui.dashboard.DashboardScreen
+import com.fuseos.app.ui.shell.FuseShell
 import com.fuseos.app.ui.device.DeviceTypeScreen
 
 /** Which top-level destination the persisted session resolves to. */
@@ -41,7 +41,7 @@ fun AppRoot() {
             RootDestination.Auth -> AuthFlow()
             RootDestination.DeviceType -> DeviceTypeScreen()
             RootDestination.Connect -> ConnectScreen()
-            RootDestination.Home -> DashboardScreen()
+            RootDestination.Home -> FuseShell()
         }
     }
 }

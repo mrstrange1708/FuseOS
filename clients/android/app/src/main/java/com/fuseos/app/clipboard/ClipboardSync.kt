@@ -59,6 +59,7 @@ class ClipboardSync(
     private val scope: CoroutineScope,
 ) {
     private val appContext = context.applicationContext
+    private val store = ClipHistoryStore(File(appContext.filesDir, "clip-history"))
     private val clipboard =
         appContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
@@ -71,10 +72,15 @@ class ClipboardSync(
     /** Newest first. In memory only — clipboard content is never written to disk here. */
     val history: StateFlow<List<ClipEntry>> = _history.asStateFlow()
 
+    // Restored ids continue upward rather than restarting, so a reloaded entry and a fresh
+    // one can never collide in a list keyed by id.
     private var nextId = 0L
 
     fun start(selfDeviceId: String) {
         stop()
+        val restored = store.load()
+        _history.value = restored
+        nextId = (restored.maxOfOrNull { it.id } ?: -1L) + 1
         val guard = LoopGuard(selfDeviceId)
         this.guard = guard
 
@@ -93,8 +99,15 @@ class ClipboardSync(
         inboundJob?.cancel()
         inboundJob = null
         guard = null
-        // Sign-out must not leave the last user's copied content on screen.
+        // Backgrounding calls this too, so the list is only cleared from memory; what is
+        // on disk is what a relaunch restores. `forget()` is the sign-out path.
         _history.value = emptyList()
+    }
+
+    /** Sign-out: drop the history from memory *and* disk. */
+    fun forget() {
+        stop()
+        store.clear()
     }
 
     /**
@@ -120,6 +133,9 @@ class ClipboardSync(
                 bytes <= MAX_HISTORY_BYTES
             }
         }
+        // Written on every change so an app the OS kills without warning — the norm on
+        // Android — still has its history on the next launch.
+        scope.launch(Dispatchers.IO) { store.save(_history.value) }
     }
 
     /** Put a history entry back on this device's clipboard — the point of a history. */
@@ -168,6 +184,22 @@ class ClipboardSync(
         record(text = body, imageBytes = null, mime = null, fromSelf = true)
         broadcast { it.setClipText(ClipText.newBuilder().setText(body)) }
         return true
+    }
+
+    /**
+     * Sends whatever is on the clipboard right now, on the user's explicit request.
+     *
+     * The nav bar's centre button. Reading the clipboard succeeds here because the app is
+     * on screen — the same reason automatic capture only works in the foreground.
+     * Returns false when there is nothing readable to send.
+     */
+    fun sendCurrent(): Boolean {
+        val image = currentImage()
+        if (image != null) {
+            val (mime, bytes) = image
+            return share(text = null, imageBytes = bytes, mime = mime)
+        }
+        return share(text = currentText(), imageBytes = null, mime = null)
     }
 
     /** A local copy — broadcast it unless it is the echo of something we just injected. */
