@@ -3,11 +3,10 @@ import AppKit
 import FuseOSCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    // ponytail: quitting with the last window means clipboard sync stops when the window
-    // closes, which is wrong for a continuity app. Flip this to `false` once there is a
-    // menu bar item to reopen the window and quit from.
+    /// Closing the window no longer quits: the menu bar item can reopen it and quit, and
+    /// sync has to outlive the window for a continuity app to be worth anything.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
+        false
     }
 }
 
@@ -21,21 +20,44 @@ struct FuseOSApp: App {
     @AppStorage("hasCompletedConnect") private var hasCompletedConnect = false
 
     var body: some Scene {
-        WindowGroup("FuseOS") {
+        WindowGroup("FuseOS", id: "main") {
             Group {
                 if session.token == nil {
                     AuthView()
                 } else if session.deviceType == nil {
                     DeviceTypeView()
                 } else if hasCompletedConnect {
-                    DashboardView(viewModel: dashboard)
+                    ShellView(viewModel: dashboard)
                 } else {
                     ConnectView(viewModel: dashboard) { hasCompletedConnect = true }
                 }
             }
             .environmentObject(session)
-            .frame(minWidth: 420, minHeight: 600)
+            .frame(minWidth: 420, minHeight: 560)
         }
-        .windowResizability(.contentSize)
+        // Not .contentSize: the signed-in shell is a split view the user resizes, while
+        // the auth screens are a fixed column. Pinning the window to its content would
+        // let the narrow screens dictate the size of the wide one.
+        .windowResizability(.automatic)
+
+        // The menu bar item is the app's real home on a Mac: continuity is something you
+        // reach for mid-task, and hunting for a window to paste yesterday's link defeats
+        // the point. Only shown once signed in — there is nothing to offer before that.
+        MenuBarExtra("FuseOS", systemImage: "link") {
+            if session.token == nil {
+                Button("Open FuseOS") { openMainWindow() }
+                Button("Quit") { NSApplication.shared.terminate(nil) }
+            } else {
+                MenuBarContent(viewModel: dashboard)
+            }
+        }
+        .menuBarExtraStyle(.window)
+    }
+
+    /// `openWindow` is unavailable outside a scene's content, so the pre-login menu goes
+    /// through AppKit instead of duplicating the environment plumbing for two buttons.
+    private func openMainWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.windows.first { $0.canBecomeMain }?.makeKeyAndOrderFront(nil)
     }
 }

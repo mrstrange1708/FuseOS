@@ -63,6 +63,14 @@ final class DashboardViewModel: ObservableObject {
         transport.stop()
     }
 
+    /// Sign-out, as distinct from `stop()`: the stored history goes too.
+    func signOut() {
+        island.dismiss()
+        signal.stop()
+        clipboard.forget()
+        transport.stop()
+    }
+
     private func bootstrap() async {
         do {
             _ = try await ensureStarted()

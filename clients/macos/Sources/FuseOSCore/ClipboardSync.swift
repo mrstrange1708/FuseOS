@@ -52,6 +52,7 @@ public final class ClipboardSync {
     public var onClipEvent: ((ClipEntry) -> Void)?
 
     private var nextId = 0
+    private let store = ClipHistoryStore()
 
     /// The pasteboard is injectable so tests can drive a private one — exercising this
     /// against `NSPasteboard.general` would fight whoever is using the machine.
@@ -64,6 +65,11 @@ public final class ClipboardSync {
     public func start(selfDeviceId: String) {
         stop()
         guard_ = LoopGuard(selfDeviceId: selfDeviceId)
+        // Restored ids continue upward rather than restarting, so a reloaded entry and a
+        // fresh one can never collide in a list keyed by id.
+        history = store.load()
+        nextId = (history.map(\.id).max() ?? -1) + 1
+        onHistoryChanged?(history)
         // Start from the current count so an item copied before launch is not
         // broadcast as if the user just copied it.
         lastChangeCount = pasteboard.changeCount
@@ -86,9 +92,16 @@ public final class ClipboardSync {
         watcher = nil
         transport.onEnvelope = nil
         guard_ = nil
-        // Sign-out must not leave the last user's copied content on screen.
+        // Only clears memory; what is on disk is what the next launch restores.
+        // `forget()` is the sign-out path.
         history = []
         onHistoryChanged?(history)
+    }
+
+    /// Sign-out: drop the history from memory *and* disk.
+    public func forget() {
+        stop()
+        store.clear()
     }
 
     /// Adds to the visible history, newest first, and evicts to keep it bounded.
@@ -111,6 +124,12 @@ public final class ClipboardSync {
         }
         history = Array(trimmed)
         onHistoryChanged?(history)
+        // Written on every change so a crash or a force-quit does not lose the history.
+        // Off the main actor: a screenshot is megabytes, and the pasteboard watcher must
+        // not wait on a disk write.
+        let snapshot = history
+        let store = store
+        Task.detached(priority: .utility) { store.save(snapshot) }
     }
 
     /// Put a history entry back on this device's clipboard — the point of a history.

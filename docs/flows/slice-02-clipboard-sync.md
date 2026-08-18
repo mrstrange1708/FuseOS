@@ -54,3 +54,24 @@ It is an `NSPanel` (`.statusBar` level, `canJoinAllSpaces`, `fullScreenAuxiliary
 ## Next
 
 Share-sheet send — promoted ahead of file transfer, because on Android it is the only way to send anything while the app is off screen. Then file transfer, which brings `FileMeta`/`FileChunk` reassembly and with it images above 3 MB.
+
+## History that survives a restart
+
+History was memory-only, so every clip vanished when the app closed — and on Android the OS closes it constantly. `ClipHistoryStore` (both clients) now writes it on every change: text in a JSON index, image bytes in files beside it, because base64-ing a 2 MB screenshot into JSON would triple it and force the whole history to be parsed to read one entry.
+
+**Local storage only.** Clipboard content still never reaches the server or the database — that invariant is about the control plane, and this is the device that already has the content on its own clipboard. Sign-out deletes it; backgrounding does not.
+
+The time filter (24 hours / 7 days / 30 days / All) is a *view* over what is held, not a retention policy: eviction remains the size and count caps in `ClipboardSync`, so narrowing hides nothing permanently.
+
+## Shell
+
+Both clients now have the same five areas, in platform-appropriate furniture:
+
+| | Android | macOS |
+| --- | --- | --- |
+| Chrome | floating glass bar, raised centre action | sidebar (`NavigationSplitView`) + menu bar extra |
+| Areas | Home · Screen · **Send** · History · You | Home · History · Devices · Screen · Account |
+
+Android's centre slot is a verb, not a page — pushing the clipboard is what people open the app to do, and it can read the clipboard precisely because the app is on screen. On macOS the menu bar item carries that weight instead: continuity is reached for mid-task, so the last six clips are one click away without hunting for a window. Closing the window no longer quits the Mac app.
+
+Screen sharing has a slot on both and is locked on both. It is out of scope for v1 (see CLAUDE.md) and would change the transport design; reserving the slot keeps the shape of the app from shifting under people later.
