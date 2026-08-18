@@ -29,6 +29,7 @@ struct LoopGuard {
     private let selfDeviceId: String
     private var bySource: [String: SourceState] = [:]
     private var suppressedHash: String?
+    private var suppressedAt: Date = .distantPast
     private var lastAppliedAtMs: Int64 = 0
 
     init(selfDeviceId: String) {
@@ -60,22 +61,32 @@ struct LoopGuard {
     }
 
     /// Call immediately after writing inbound content to the clipboard.
-    mutating func recordApplied(contentHash: String, sentAtUnixMs: Int64) {
+    mutating func recordApplied(contentHash: String, sentAtUnixMs: Int64, now: Date = Date()) {
         suppressedHash = contentHash
+        suppressedAt = now
         lastAppliedAtMs = sentAtUnixMs
     }
 
     /// Whether a local clipboard change is a genuine user copy worth broadcasting.
     ///
-    /// The suppression is one-shot: it swallows the echo of what we just injected, then
-    /// clears, so a user deliberately re-copying that same text still syncs.
-    mutating func shouldEmit(contentHash: String) -> Bool {
-        if contentHash == suppressedHash {
-            suppressedHash = nil
+    /// Suppression covers a short window rather than a single call. Writing the clipboard
+    /// can raise several change notifications rather than one — pronounced on Android,
+    /// where a one-shot guard turned a single inbound clip into four local copies, each
+    /// bounced back to the peer. The rule is mirrored here so the two clients agree.
+    ///
+    /// The window is what a user loses: re-copying byte-identical content within
+    /// `suppressWindow` does not sync. That costs nothing — the peer already holds exactly
+    /// those bytes, so the event would be a no-op even if it went.
+    mutating func shouldEmit(contentHash: String, now: Date = Date()) -> Bool {
+        if contentHash == suppressedHash, now.timeIntervalSince(suppressedAt) < Self.suppressWindow {
             return false
         }
         return true
     }
+
+    /// Long enough to cover the burst of change notifications one write produces, short
+    /// enough that it cannot swallow a deliberate re-copy the user would notice.
+    static let suppressWindow: TimeInterval = 3
 
     /// Content identity for suppression — hashed so images cost the same as text.
     static func hash(_ data: Data) -> String {

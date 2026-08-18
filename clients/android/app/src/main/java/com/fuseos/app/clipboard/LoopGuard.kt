@@ -14,13 +14,9 @@ import java.security.MessageDigest
  *  3. an event already applied is ignored, identified by (source device, seq);
  *  4. conflicts resolve last-write-wins.
  *
- * Sequence numbers are monotonic per source device *within one run of that device's app*.
- * They restart at zero when the peer's process does — constant on Android, where the OS
- * freezes and kills apps freely. So the highest-seq check alone would reject everything
- * from a restarted peer, permanently, until this side restarted too. The peer's own send
- * timestamp breaks that tie: it always moves forward across a restart, and comparing it
- * only against previous events *from the same source* keeps it on one clock, immune to
- * skew between devices.
+ * Sequence numbers are monotonic per source device *within one session*: they restart at
+ * zero whenever that device's process does, which on Android is constant. So the highest
+ * seq is tracked per (source, session), and a new session id resets it.
  *
  * Not thread-safe; callers serialise access (one clipboard, one owner).
  */
@@ -31,6 +27,7 @@ class LoopGuard(private val selfDeviceId: String) {
 
     private val bySource = mutableMapOf<String, SourceState>()
     private var suppressedHash: String? = null
+    private var suppressedAtMs = 0L
     private var lastAppliedAtMs = 0L
 
     /**
@@ -68,26 +65,39 @@ class LoopGuard(private val selfDeviceId: String) {
     }
 
     /** Call immediately after writing inbound content to the clipboard. */
-    fun recordApplied(contentHash: String, sentAtUnixMs: Long) {
+    fun recordApplied(contentHash: String, sentAtUnixMs: Long, nowMs: Long = System.currentTimeMillis()) {
         suppressedHash = contentHash
+        suppressedAtMs = nowMs
         lastAppliedAtMs = sentAtUnixMs
     }
 
     /**
      * Whether a local clipboard change is a genuine user copy worth broadcasting.
      *
-     * The suppression is one-shot: it swallows the echo of what we just injected, then
-     * clears, so a user deliberately re-copying that same text still syncs.
+     * Suppression covers a short window rather than a single call. Writing the clipboard
+     * raises *several* change notifications on Android, not one, so a one-shot guard
+     * swallowed the first echo and re-broadcast the rest — one inbound clip came back as
+     * four local copies, each bounced to the peer again.
+     *
+     * The window is what a user loses: re-copying byte-identical content within
+     * [SUPPRESS_WINDOW_MS] does not sync. That costs nothing — the peer already holds
+     * exactly those bytes, so the event would be a no-op even if it went.
      */
-    fun shouldEmit(contentHash: String): Boolean {
-        if (contentHash == suppressedHash) {
-            suppressedHash = null
+    fun shouldEmit(contentHash: String, nowMs: Long = System.currentTimeMillis()): Boolean {
+        if (contentHash == suppressedHash && nowMs - suppressedAtMs < SUPPRESS_WINDOW_MS) {
             return false
         }
         return true
     }
 
     companion object {
+        /**
+         * How long an injected clip stays suppressed. Long enough to cover the burst of
+         * change notifications one `setPrimaryClip` produces, short enough that it cannot
+         * swallow a deliberate re-copy the user would notice.
+         */
+        const val SUPPRESS_WINDOW_MS = 3_000L
+
         /** Content identity for suppression — hashed so images cost the same as text. */
         fun hash(bytes: ByteArray): String =
             MessageDigest.getInstance("SHA-256")

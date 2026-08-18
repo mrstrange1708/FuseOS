@@ -137,17 +137,19 @@ final class ClipboardSyncTests: XCTestCase {
         XCTAssertEqual(sent, 0)
     }
 
-    /// Re-copying the same text deliberately must still sync: the echo suppression is
-    /// one-shot, and a user who copies the same string twice means it.
-    func testReCopyingTheSameTextAfterAnInjectionStillSyncs() {
+    /// The echo of an injection must be swallowed however many change notifications the
+    /// system raises for it — one write is not one notification, and each escaped echo
+    /// was previously bounced straight back to the peer.
+    func testRepeatedEchoesOfOneInjectionAreAllSwallowed() {
         sync.apply(inbound(text: "shared", from: "peer", seq: 1, at: 100))
-        sync.checkForLocalChange() // swallows the injection's echo
 
         let sent = envelopesSent {
-            copyText("shared") // the user copies it again
+            copyText("shared") // the same bytes arriving again, as an echo would
+            sync.checkForLocalChange()
+            copyText("shared")
             sync.checkForLocalChange()
         }
-        XCTAssertEqual(sent, 1)
+        XCTAssertEqual(sent, 0)
     }
 
     func testAnImageIsPreferredOverItsTextRepresentation() {

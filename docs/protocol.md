@@ -19,6 +19,12 @@ This is the **data plane**: the actual clipboard and file bytes moving **directl
 > **No forward secrecy.** The ECDH is static-static, so an attacker holding a device's private key can decrypt recorded sessions. The upgrade is ephemeral keys plus signatures (Noise IK); it was skipped because it costs a full handshake protocol to defend against someone who already has the device.
 
 
+### Echo suppression is a window, not a single shot
+
+Writing the clipboard raises *several* change notifications, not one — pronounced on Android. Suppressing only the first echo meant one inbound clip was recorded four more times locally and each of those was broadcast back to the peer. So `recordApplied` starts a 3-second window during which byte-identical local changes are not emitted.
+
+What that costs: re-copying identical content within 3 seconds does not sync. Nothing is lost — the peer already holds exactly those bytes, so the event would be a no-op even if it went.
+
 ### Session ids and `seq`
 
 `seq` is monotonic per source device **within one session**, not forever: it restarts at zero whenever that device's process does. On Android that is constant — the OS freezes and kills apps freely, and OEM battery managers (ColorOS/HANS on Realme and Oppo) are more aggressive still.

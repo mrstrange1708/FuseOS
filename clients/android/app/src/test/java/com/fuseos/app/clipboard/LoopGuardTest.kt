@@ -62,14 +62,42 @@ class LoopGuardTest {
         assertFalse(guard.shouldEmit(LoopGuard.hash(text)))
     }
 
+    /**
+     * `setPrimaryClip` raises several change notifications, not one, so suppression has to
+     * cover a window. A one-shot guard swallowed the first echo and re-emitted the rest —
+     * observed on a real phone as one inbound clip becoming four local copies, each
+     * bounced back to the Mac.
+     */
     @Test
-    fun `suppression is one-shot so a deliberate re-copy still syncs`() {
+    fun `suppression covers the whole burst of echoes`() {
         val guard = guard()
         val text = "shared text"
-        guard.recordApplied(LoopGuard.hash(text), sentAtUnixMs = 100)
+        guard.recordApplied(LoopGuard.hash(text), sentAtUnixMs = 100, nowMs = 1_000)
 
-        assertFalse(guard.shouldEmit(LoopGuard.hash(text))) // the injection's own echo
-        assertTrue(guard.shouldEmit(LoopGuard.hash(text))) // the user copying it again
+        for (delay in listOf(0L, 50L, 400L, 2_900L)) {
+            assertFalse(
+                "echo at +${delay}ms must not be re-emitted",
+                guard.shouldEmit(LoopGuard.hash(text), nowMs = 1_000 + delay),
+            )
+        }
+    }
+
+    /**
+     * Past the window a deliberate re-copy syncs again — the suppression is a burst
+     * filter, not a permanent block on that content.
+     */
+    @Test
+    fun `a deliberate re-copy after the window still syncs`() {
+        val guard = guard()
+        val text = "shared text"
+        guard.recordApplied(LoopGuard.hash(text), sentAtUnixMs = 100, nowMs = 1_000)
+        assertFalse(guard.shouldEmit(LoopGuard.hash(text), nowMs = 1_000))
+        assertTrue(
+            guard.shouldEmit(
+                LoopGuard.hash(text),
+                nowMs = 1_000 + LoopGuard.SUPPRESS_WINDOW_MS + 1,
+            ),
+        )
     }
 
     @Test

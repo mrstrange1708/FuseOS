@@ -63,12 +63,37 @@ final class LoopGuardTests: XCTestCase {
         XCTAssertFalse(g.shouldEmit(contentHash: LoopGuard.hash(text)))
     }
 
-    func testSuppressionIsOneShotSoADeliberateReCopyStillSyncs() {
+    /// One write raises several change notifications, not one, so suppression has to
+    /// cover a window. A one-shot guard swallowed the first echo and re-emitted the rest —
+    /// observed on a real phone as one inbound clip becoming four local copies.
+    func testSuppressionCoversTheWholeBurstOfEchoes() {
         var g = guardFor()
         let text = "shared text"
-        g.recordApplied(contentHash: LoopGuard.hash(text), sentAtUnixMs: 100)
-        XCTAssertFalse(g.shouldEmit(contentHash: LoopGuard.hash(text))) // the injection echo
-        XCTAssertTrue(g.shouldEmit(contentHash: LoopGuard.hash(text))) // the user re-copying
+        let applied = Date()
+        g.recordApplied(contentHash: LoopGuard.hash(text), sentAtUnixMs: 100, now: applied)
+
+        for delay in [0.0, 0.05, 0.4, 2.9] {
+            XCTAssertFalse(
+                g.shouldEmit(contentHash: LoopGuard.hash(text), now: applied.addingTimeInterval(delay)),
+                "echo at +\(delay)s must not be re-emitted",
+            )
+        }
+    }
+
+    /// Past the window a deliberate re-copy syncs again — the suppression is a burst
+    /// filter, not a permanent block on that content.
+    func testADeliberateReCopyAfterTheWindowStillSyncs() {
+        var g = guardFor()
+        let text = "shared text"
+        let applied = Date()
+        g.recordApplied(contentHash: LoopGuard.hash(text), sentAtUnixMs: 100, now: applied)
+        XCTAssertFalse(g.shouldEmit(contentHash: LoopGuard.hash(text), now: applied))
+        XCTAssertTrue(
+            g.shouldEmit(
+                contentHash: LoopGuard.hash(text),
+                now: applied.addingTimeInterval(LoopGuard.suppressWindow + 0.1),
+            ),
+        )
     }
 
     func testEmitsUnrelatedLocalCopies() {
