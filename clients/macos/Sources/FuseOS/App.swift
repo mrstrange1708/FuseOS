@@ -24,8 +24,8 @@ struct FuseOSApp: App {
             Group {
                 if session.token == nil {
                     AuthView()
-                } else if session.deviceType == nil {
-                    DeviceTypeView()
+                } else if session.deviceName == nil {
+                    DeviceNameView()
                 } else if hasCompletedConnect {
                     ShellView(viewModel: dashboard)
                 } else {

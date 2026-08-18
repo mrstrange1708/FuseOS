@@ -27,7 +27,7 @@ class SessionStore(private val context: Context) {
     private object Keys {
         val TOKEN = stringPreferencesKey("token")
         val EMAIL = stringPreferencesKey("email")
-        val DEVICE_TYPE = stringPreferencesKey("device_type")
+        val DEVICE_NAME = stringPreferencesKey("device_name")
         val DEVICE_ID = stringPreferencesKey("device_id")
         val CONNECT_DONE = booleanPreferencesKey("connect_done")
 
@@ -43,7 +43,12 @@ class SessionStore(private val context: Context) {
 
     val tokenFlow: Flow<String?> = context.authDataStore.data.map { it[Keys.TOKEN] }
     val emailFlow: Flow<String?> = context.authDataStore.data.map { it[Keys.EMAIL] }
-    val deviceTypeFlow: Flow<String?> = context.authDataStore.data.map { it[Keys.DEVICE_TYPE] }
+    /**
+     * What the user called this phone. Null until they have been through naming, which is
+     * also what routes them there. Stored locally because `POST /devices` upserts the name
+     * on every launch — sending the detected name each time would overwrite their choice.
+     */
+    val deviceNameFlow: Flow<String?> = context.authDataStore.data.map { it[Keys.DEVICE_NAME] }
     val deviceIdFlow: Flow<String?> = context.authDataStore.data.map { it[Keys.DEVICE_ID] }
 
     /** Whether the user has been through the connect screen once. */
@@ -60,9 +65,11 @@ class SessionStore(private val context: Context) {
         }
     }
 
-    suspend fun saveDeviceType(type: String) {
-        context.authDataStore.edit { it[Keys.DEVICE_TYPE] = type }
+    suspend fun saveDeviceName(name: String) {
+        context.authDataStore.edit { it[Keys.DEVICE_NAME] = name }
     }
+
+    suspend fun currentDeviceName(): String? = deviceNameFlow.first()
 
     suspend fun saveDeviceId(id: String) {
         context.authDataStore.edit { it[Keys.DEVICE_ID] = id }
@@ -102,7 +109,7 @@ class SessionStore(private val context: Context) {
         context.authDataStore.edit {
             it.remove(Keys.TOKEN)
             it.remove(Keys.EMAIL)
-            it.remove(Keys.DEVICE_TYPE)
+            it.remove(Keys.DEVICE_NAME)
             it.remove(Keys.DEVICE_ID)
             it.remove(Keys.CONNECT_DONE)
         }

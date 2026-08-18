@@ -46,6 +46,7 @@ fun FuseShell() {
     val state by viewModel.state.collectAsState()
     val history by viewModel.history.collectAsState()
     val email by ServiceLocator.session.emailFlow.collectAsState(initial = null)
+    val deviceName by ServiceLocator.session.deviceNameFlow.collectAsState(initial = null)
     val context = LocalContext.current
 
     var tab by remember { mutableStateOf(FuseTab.Home) }
@@ -57,6 +58,10 @@ fun FuseShell() {
     }
 
     val linked = state.connected.isNotEmpty()
+    // With one paired device this is always the right name; with several, the connected
+    // one is the only device a clip can have come from.
+    val peerName = state.peers.firstOrNull { it.id in state.connected }?.name
+        ?: state.peers.firstOrNull()?.name
 
     Box(
         Modifier
@@ -81,6 +86,7 @@ fun FuseShell() {
                         peerBattery = { id -> state.presence[id]?.battery },
                         onCopy = viewModel::copyToClipboard,
                         onSeeAll = { tab = FuseTab.History },
+                        peerName = peerName,
                     )
 
                     FuseTab.Screen -> ComingSoonScreen(
@@ -95,12 +101,16 @@ fun FuseShell() {
 
                     FuseTab.History -> HistoryScreen(
                         entries = history,
+                        peerName = peerName,
                         onCopy = viewModel::copyToClipboard,
                     )
 
                     FuseTab.Profile -> ProfileScreen(
                         email = email,
                         state = state,
+                        deviceName = deviceName,
+                        selfBattery = viewModel.selfBattery(),
+                        onRename = viewModel::renameThisDevice,
                         peerBattery = { id -> state.presence[id]?.battery },
                         onPairDevice = { showPairing = true },
                         onBatterySettings = {

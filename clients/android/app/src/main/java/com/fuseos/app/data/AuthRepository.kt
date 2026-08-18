@@ -7,10 +7,10 @@ class AuthRepository(
 ) {
     val tokenFlow = session.tokenFlow
     val emailFlow = session.emailFlow
-    val deviceTypeFlow = session.deviceTypeFlow
+    val deviceNameFlow = session.deviceNameFlow
     val connectDoneFlow = session.connectDoneFlow
 
-    suspend fun setDeviceType(type: String) = session.saveDeviceType(type)
+    suspend fun setDeviceName(name: String) = session.saveDeviceName(name)
 
     suspend fun signIn(email: String, password: String) {
         val result = api.signIn(SignInRequest(email, password))

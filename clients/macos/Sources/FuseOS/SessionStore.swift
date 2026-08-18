@@ -1,8 +1,8 @@
 import Foundation
 import FuseOSCore
 
-/// Persists the signed-in session (token + email), the chosen device type, and
-/// this install's stable device identity (key + server device id).
+/// Persists the signed-in session (token + email), the name the user gave this device,
+/// and this install's stable device identity (key + server device id).
 ///
 /// Dev note: for production, the token belongs in the Keychain, not UserDefaults.
 @MainActor
@@ -11,19 +11,23 @@ final class SessionStore: ObservableObject {
 
     @Published private(set) var token: String?
     @Published private(set) var email: String?
-    @Published private(set) var deviceType: String?
+    /// What the user called this Mac. Nil until they have been through naming, which is
+    /// also what routes them there. Stored locally because `POST /devices` upserts the
+    /// name on every launch — sending the detected name each time would overwrite
+    /// whatever they chose.
+    @Published private(set) var deviceName: String?
     @Published private(set) var deviceId: String?
 
     private let defaults = UserDefaults.standard
     private let tokenKey = "fuse.token"
     private let emailKey = "fuse.email"
-    private let deviceTypeKey = "fuse.deviceType"
+    private let deviceNameKey = "fuse.deviceName"
     private let deviceIdKey = "fuse.deviceId"
 
     private init() {
         token = defaults.string(forKey: tokenKey)
         email = defaults.string(forKey: emailKey)
-        deviceType = defaults.string(forKey: deviceTypeKey)
+        deviceName = defaults.string(forKey: deviceNameKey)
         deviceId = defaults.string(forKey: deviceIdKey)
     }
 
@@ -40,9 +44,15 @@ final class SessionStore: ObservableObject {
         defaults.set(email, forKey: emailKey)
     }
 
-    func setDeviceType(_ type: String) {
-        deviceType = type
-        defaults.set(type, forKey: deviceTypeKey)
+    func setDeviceName(_ name: String) {
+        deviceName = name
+        defaults.set(name, forKey: deviceNameKey)
+    }
+
+    /// What this Mac is called by default — the name the user already gave it in System
+    /// Settings, which is the one they will recognise.
+    static func detectedDeviceName() -> String {
+        Host.current().localizedName ?? "Mac"
     }
 
     func setDeviceId(_ id: String) {
@@ -55,11 +65,11 @@ final class SessionStore: ObservableObject {
     func clear() {
         token = nil
         email = nil
-        deviceType = nil
+        deviceName = nil
         deviceId = nil
         defaults.removeObject(forKey: tokenKey)
         defaults.removeObject(forKey: emailKey)
-        defaults.removeObject(forKey: deviceTypeKey)
+        defaults.removeObject(forKey: deviceNameKey)
         defaults.removeObject(forKey: deviceIdKey)
     }
 }

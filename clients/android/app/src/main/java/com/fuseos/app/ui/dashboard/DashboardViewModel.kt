@@ -122,6 +122,21 @@ class DashboardViewModel(
 
     fun selfBattery(): Int? = repo.batteryPercent()
 
+    /**
+     * Renames this device and pushes it straight to the server.
+     *
+     * Registration is an upsert keyed on the public key, so re-registering is the rename.
+     * Doing it now rather than at the next launch means the Mac's list updates while the
+     * user is still looking at the change.
+     */
+    fun renameThisDevice(name: String) {
+        viewModelScope.launch {
+            session.saveDeviceName(name)
+            runCatching { repo.registerThisDevice() }
+            refresh()
+        }
+    }
+
     fun presenceFor(device: DeviceItem): PeerPresence =
         _state.value.presence[device.id]
             ?: PeerPresence(device.online, device.battery, publicKey = null, lanAddress = null)

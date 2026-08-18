@@ -74,3 +74,35 @@ func deviceGlyph(platform: String, online: Bool) -> some View {
             .foregroundStyle(online ? FuseColor.accent : FuseColor.muted)
     }
 }
+
+
+/// This Mac, in the same shape as a peer row.
+///
+/// Home used to list only peers, which left the machine you are standing at missing from
+/// its own dashboard — the one device whose name you need to recognise when the phone
+/// shows it back to you.
+struct SelfDeviceRow: View {
+    let name: String?
+
+    var body: some View {
+        HStack(spacing: 14) {
+            deviceGlyph(platform: "macos", online: true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(name ?? SessionStore.detectedDeviceName())
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(FuseColor.ink)
+                Text("This device · online")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(FuseColor.muted)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .background(FuseColor.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16).stroke(FuseColor.outline.opacity(0.6), lineWidth: 1),
+        )
+    }
+}

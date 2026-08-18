@@ -36,8 +36,8 @@ struct ConnectView: View {
 
             VStack(spacing: 0) {
                 DeviceChip(
-                    name: viewModel.selfDevice?.name ?? "This Mac",
-                    platform: session.deviceType ?? "macos",
+                    name: viewModel.selfDevice?.name ?? session.deviceName ?? "This Mac",
+                    platform: "macos",
                     caption: "This device",
                     lit: true,
                 )

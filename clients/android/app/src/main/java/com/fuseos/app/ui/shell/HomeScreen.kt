@@ -51,6 +51,7 @@ fun HomeScreen(
     peerBattery: (String) -> Int?,
     onCopy: (ClipEntry) -> Unit,
     onSeeAll: () -> Unit,
+    peerName: String?,
     modifier: Modifier = Modifier,
 ) {
     val connect = state.connect
@@ -113,7 +114,7 @@ fun HomeScreen(
             // Three is enough to prove sync is alive without turning home into the
             // history tab; the rest is one tap away.
             history.take(3).forEach { entry ->
-                RecentRow(entry, onCopy)
+                RecentRow(entry, peerName, onCopy)
                 Spacer(Modifier.height(8.dp))
             }
         }
@@ -173,7 +174,7 @@ private fun LinkBanner(stage: ConnectStage, peerName: String?) {
 }
 
 @Composable
-private fun RecentRow(entry: ClipEntry, onCopy: (ClipEntry) -> Unit) {
+private fun RecentRow(entry: ClipEntry, peerName: String?, onCopy: (ClipEntry) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -184,7 +185,7 @@ private fun RecentRow(entry: ClipEntry, onCopy: (ClipEntry) -> Unit) {
             .padding(14.dp),
     ) {
         Text(
-            if (entry.fromSelf) "Copied here" else "From your Mac",
+            if (entry.fromSelf) "Copied here" else "From ${peerName ?: "your Mac"}",
             style = MaterialTheme.typography.labelSmall,
             fontFamily = FontFamily.Monospace,
             color = MaterialTheme.colorScheme.primary,

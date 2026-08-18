@@ -127,7 +127,9 @@ private struct HomePane: View {
                     // Five is enough to prove sync is alive without turning home into
                     // the history pane; the rest is one click away.
                     ForEach(viewModel.history.prefix(5)) { entry in
-                        ClipRow(entry: entry) { viewModel.copyToClipboard(entry) }
+                        ClipRow(entry: entry, peerName: viewModel.peerName) {
+                            viewModel.copyToClipboard(entry)
+                        }
                     }
                 }
             }
@@ -149,6 +151,7 @@ private struct HomePane: View {
 
     private var deviceList: some View {
         VStack(spacing: 10) {
+            SelfDeviceRow(name: viewModel.selfDevice?.name)
             ForEach(viewModel.peers) { peer in
                 DeviceRow(
                     device: peer,
@@ -189,7 +192,9 @@ private struct HistoryPane: View {
                 ScrollView {
                     VStack(spacing: 10) {
                         ForEach(shown) { entry in
-                            ClipRow(entry: entry) { viewModel.copyToClipboard(entry) }
+                            ClipRow(entry: entry, peerName: viewModel.peerName) {
+                                viewModel.copyToClipboard(entry)
+                            }
                         }
                     }
                 }
@@ -209,21 +214,7 @@ private struct DevicesPane: View {
         VStack(alignment: .leading, spacing: 16) {
             PaneTitle("Devices", subtitle: "Everything signed in to this account.")
 
-            HStack(spacing: 14) {
-                deviceGlyph(platform: "macos", online: true)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(viewModel.selfDevice?.name ?? "This Mac")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(FuseColor.ink)
-                    Text("This device")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(FuseColor.muted)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(16)
-            .background(FuseColor.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            SelfDeviceRow(name: viewModel.selfDevice?.name)
 
             ForEach(viewModel.peers) { peer in
                 DeviceRow(
@@ -248,9 +239,34 @@ private struct AccountPane: View {
     @ObservedObject var viewModel: DashboardViewModel
     let onPair: () -> Void
 
+    @State private var draftName = ""
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             PaneTitle("Account", subtitle: session.email ?? "Signed in")
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("This Mac's name")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(FuseColor.ink)
+                HStack {
+                    FuseTextField(title: "Device name", text: $draftName)
+                    Button("Save") {
+                        let trimmed = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty else { return }
+                        session.setDeviceName(trimmed)
+                        // Push it now rather than at the next launch, so the phone's list
+                        // updates while the user is still looking at the change.
+                        Task { await viewModel.refresh(reregister: true) }
+                    }
+                }
+                Text("Your phone shows this name.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(FuseColor.muted)
+            }
+            .onAppear { draftName = session.deviceName ?? SessionStore.detectedDeviceName() }
+
+            Divider().padding(.vertical, 2)
 
             HStack(spacing: 12) {
                 Text("\(viewModel.peers.count + 1) devices")
@@ -335,13 +351,16 @@ private struct PaneTitle: View {
 /// One clipboard entry. Shared by the home pane, the history pane and the menu bar.
 struct ClipRow: View {
     let entry: ClipEntry
+    /// Named rather than "your phone": the user chose that name, so this is where it earns
+    /// its keep. Nil only before any device is paired.
+    var peerName: String?
     let onCopy: () -> Void
 
     var body: some View {
         Button(action: onCopy) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text(entry.fromSelf ? "Copied here" : "From your phone")
+                    Text(entry.fromSelf ? "Copied here" : "From \(peerName ?? "your phone")")
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundStyle(FuseColor.accent)
                     Spacer()

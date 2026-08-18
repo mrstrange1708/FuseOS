@@ -13,25 +13,25 @@ import com.fuseos.app.ui.auth.LoginScreen
 import com.fuseos.app.ui.auth.SignUpScreen
 import com.fuseos.app.ui.connect.ConnectScreen
 import com.fuseos.app.ui.shell.FuseShell
-import com.fuseos.app.ui.device.DeviceTypeScreen
+import com.fuseos.app.ui.device.DeviceNameScreen
 
 /** Which top-level destination the persisted session resolves to. */
-private enum class RootDestination { Auth, DeviceType, Connect, Home }
+private enum class RootDestination { Auth, DeviceName, Connect, Home }
 
 /** Top-level router: signed out → auth; signed in without a device type → the
- *  device picker; then the connect space until it has been passed once; otherwise home. */
+ *  naming step; then the connect space until it has been passed once; otherwise home. */
 @Composable
 fun AppRoot() {
     val repository = ServiceLocator.authRepository
     val token by repository.tokenFlow.collectAsState(initial = null)
-    val deviceType by repository.deviceTypeFlow.collectAsState(initial = null)
+    val deviceName by repository.deviceNameFlow.collectAsState(initial = null)
     // Onboarding runs once. After the first Continue, launches go straight to the
     // dashboard — which shows the same connection status, so nothing is hidden by skipping.
     val connectDone by repository.connectDoneFlow.collectAsState(initial = true)
 
     val destination = when {
         token == null -> RootDestination.Auth
-        deviceType == null -> RootDestination.DeviceType
+        deviceName == null -> RootDestination.DeviceName
         !connectDone -> RootDestination.Connect
         else -> RootDestination.Home
     }
@@ -39,7 +39,7 @@ fun AppRoot() {
     Crossfade(targetState = destination, animationSpec = tween(220), label = "auth-root") { screen ->
         when (screen) {
             RootDestination.Auth -> AuthFlow()
-            RootDestination.DeviceType -> DeviceTypeScreen()
+            RootDestination.DeviceName -> DeviceNameScreen()
             RootDestination.Connect -> ConnectScreen()
             RootDestination.Home -> FuseShell()
         }

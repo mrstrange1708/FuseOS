@@ -19,6 +19,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,6 +30,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fuseos.app.ui.dashboard.DashboardViewModel
+import com.fuseos.app.ui.components.FuseTextField
 import com.fuseos.app.ui.dashboard.DeviceCard
 
 /**
@@ -40,6 +45,9 @@ fun ProfileScreen(
     email: String?,
     state: DashboardViewModel.UiState,
     peerBattery: (String) -> Int?,
+    deviceName: String?,
+    selfBattery: Int?,
+    onRename: (String) -> Unit,
     onPairDevice: () -> Unit,
     onBatterySettings: () -> Unit,
     onSignOut: () -> Unit,
@@ -82,6 +90,18 @@ fun ProfileScreen(
             }
         }
 
+        Spacer(Modifier.height(24.dp))
+        // Renaming has to be reachable, or the name is a one-time decision made before
+        // you have seen how it reads on the other device.
+        var draft by remember(deviceName) { mutableStateOf(deviceName.orEmpty()) }
+        Text("This phone's name", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+        FuseTextField(value = draft, onValueChange = { draft = it }, label = "Device name")
+        Spacer(Modifier.height(8.dp))
+        SettingRow("Save name", "Your Mac shows this name.") {
+            draft.trim().takeIf { it.isNotEmpty() }?.let(onRename)
+        }
+
         Spacer(Modifier.height(26.dp))
         Text("Your devices", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(10.dp))
@@ -91,7 +111,7 @@ fun ProfileScreen(
             subtitle = "This device",
             platform = "android",
             online = true,
-            battery = null,
+            battery = selfBattery,
         )
         state.peers.forEach { device ->
             Spacer(Modifier.height(10.dp))

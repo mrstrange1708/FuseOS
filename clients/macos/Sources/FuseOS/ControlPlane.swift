@@ -63,7 +63,7 @@ struct ControlPlane {
     @MainActor
     static func registerThisDevice(battery: Int?) async throws -> String {
         let body = DeviceRegisterRequest(
-            name: deviceName(),
+            name: SessionStore.shared.deviceName ?? SessionStore.detectedDeviceName(),
             platform: "macos",
             publicKey: try SessionStore.shared.deviceKey,
             battery: battery,
@@ -123,7 +123,4 @@ struct ControlPlane {
         throw AuthError(message: "Something went wrong (\(http.statusCode)). Is the FuseOS server running?")
     }
 
-    private static func deviceName() -> String {
-        Host.current().localizedName ?? "Mac"
-    }
 }

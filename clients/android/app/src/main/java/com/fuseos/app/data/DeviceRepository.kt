@@ -14,7 +14,7 @@ class DeviceRepository(
     suspend fun registerThisDevice(): String {
         val response = api.registerDevice(
             DeviceRegisterRequest(
-                name = deviceInfo.deviceName(),
+                name = session.currentDeviceName() ?: deviceInfo.deviceName(),
                 platform = "android",
                 publicKey = session.deviceKey(),
                 battery = deviceInfo.batteryPercent(),

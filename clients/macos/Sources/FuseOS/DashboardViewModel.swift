@@ -50,8 +50,7 @@ final class DashboardViewModel: ObservableObject {
             // Named after whichever peer is actually reachable — with one paired device
             // that is always the right name, and with several the connected one is the
             // only one the clip can have come from or gone to.
-            let peer = self.peers.first { self.connected.contains($0.id) }
-            self.island.present(entry, peerName: peer?.name)
+            self.island.present(entry, peerName: self.peerName)
         }
         Task { await bootstrap() }
     }
@@ -110,9 +109,14 @@ final class DashboardViewModel: ObservableObject {
         }
     }
 
-    func refresh() async {
+    /// Reloads the device list. `reregister` re-posts this device first, which is how a
+    /// rename reaches the server — registration is an upsert keyed on the public key.
+    func refresh(reregister: Bool = false) async {
         isLoading = true
         do {
+            if reregister {
+                _ = try? await ControlPlane.registerThisDevice(battery: Battery.currentPercent())
+            }
             let all = try await ControlPlane.listDevices(selfId: try await ensureStarted())
             selfDevice = all.first { $0.isSelf }
             peers = all.filter { !$0.isSelf }
@@ -140,6 +144,12 @@ final class DashboardViewModel: ObservableObject {
         return PeerPresence(
             online: device.online, battery: device.battery, publicKey: nil, lanAddress: nil,
         )
+    }
+
+    /// The paired device a clip most likely came from: the connected one, else the only
+    /// one there is. Used wherever the UI would otherwise say "your phone".
+    var peerName: String? {
+        (peers.first { connected.contains($0.id) } ?? peers.first)?.name
     }
 
     /// True when there is a live encrypted LAN channel to this device.

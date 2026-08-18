@@ -52,6 +52,7 @@ import java.util.Locale
 @Composable
 fun HistoryScreen(
     entries: List<ClipEntry>,
+    peerName: String?,
     onCopy: (ClipEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -85,7 +86,7 @@ fun HistoryScreen(
                 contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 110.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(shown, key = { it.id }) { entry -> HistoryCard(entry, onCopy) }
+                items(shown, key = { it.id }) { entry -> HistoryCard(entry, peerName, onCopy) }
             }
         }
     }
@@ -138,7 +139,7 @@ private fun EmptyHistory(hasAny: Boolean, window: HistoryWindow) {
 }
 
 @Composable
-private fun HistoryCard(entry: ClipEntry, onCopy: (ClipEntry) -> Unit) {
+private fun HistoryCard(entry: ClipEntry, peerName: String?, onCopy: (ClipEntry) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -150,7 +151,7 @@ private fun HistoryCard(entry: ClipEntry, onCopy: (ClipEntry) -> Unit) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (entry.fromSelf) "Copied here" else "From your Mac",
+                if (entry.fromSelf) "Copied here" else "From ${peerName ?: "your Mac"}",
                 style = MaterialTheme.typography.labelSmall,
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.primary,
