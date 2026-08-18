@@ -42,4 +42,8 @@ which assumes the server runs on this Mac. Cleartext to the LAN is allowed via
 "Connect a device" generates a code and shows it as a **QR** (CoreImage, no dependency) above the same code in eight boxes — the phone scans the QR, or you read the code off it. "Enter a code" is the same eight boxes as an input: lowercase auto-uppercases and it pairs on the last character. The QR keeps a white backing in dark mode so it still scans.
 
 ## What works
-Sign up → lands on the home screen; sign in with the same credentials; validation (email format, 8-char password) and server error messages surface inline; sign out clears the session. Device pairing / connection is the next slice.
+Sign up → lands on the dashboard; sign in with the same credentials; validation (email format, 8-char password) and server error messages surface inline; sign out clears the session.
+
+The dashboard shows this device, every paired device with live presence, battery and whether there is a direct LAN channel (`connected · direct`), and the **clipboard history** — the last 50 items copied here or received from a peer, newest first, each tagged with where it came from. Click one to put it back on the clipboard. The history is in memory only: clipboard content is never written to disk, and never leaves the LAN.
+
+Peers connect on their own — there is no "connect" button beyond pairing. `LanTransport` dials whatever `/signal` reports as online.

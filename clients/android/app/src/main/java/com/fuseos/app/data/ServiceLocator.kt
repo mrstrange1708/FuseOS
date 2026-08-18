@@ -33,6 +33,8 @@ object ServiceLocator {
         private set
     lateinit var session: SessionStore
         private set
+    lateinit var connectionManager: ConnectionManager
+        private set
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -54,7 +56,7 @@ object ServiceLocator {
             } catch (e: IOException) {
                 throw AuthException(
                     "Can't reach the FuseOS server at ${Config.BASE_URL}. Check that it's " +
-                        "running and that this phone is on the same Wi-Fi as your Mac.",
+                        "running, and that the USB cable is still connected.",
                 )
             }
         }
@@ -78,6 +80,9 @@ object ServiceLocator {
             // The listener binds an ephemeral port, so this is null until it is up and
             // changes across restarts — hence a provider rather than a fixed value.
             lanAddressProvider = { transport.lanAddress() },
+        )
+        connectionManager = ConnectionManager(
+            deviceRepository, signalClient, sessionStore, transport, clipboardSync,
         )
     }
 }

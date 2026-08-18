@@ -1,6 +1,23 @@
 import AppKit
 import Foundation
 
+/// One entry in the visible clipboard history. `imageData` is nil for text and the raw
+/// encoded image otherwise — the same bytes that crossed the wire, so re-copying an old
+/// item needs no re-encode. Mirrors `ClipEntry` on Android.
+public struct ClipEntry: Identifiable, Equatable {
+    public let id: Int
+    public let text: String?
+    public let imageData: Data?
+    public let mime: String?
+    /// True when this device copied it, false when it arrived from a peer.
+    public let fromSelf: Bool
+    public let at: Date
+
+    public var isImage: Bool { imageData != nil }
+
+    public static func == (a: ClipEntry, b: ClipEntry) -> Bool { a.id == b.id }
+}
+
 /// Mirrors the clipboard to paired devices over the LAN data plane.
 ///
 /// **`NSPasteboard` has no change notification.** There is no observer, no delegate, no
@@ -21,6 +38,15 @@ public final class ClipboardSync {
     private var guard_: LoopGuard?
     private var watcher: Task<Void, Never>?
     private var lastChangeCount: Int
+
+    /// Newest first. In memory only — clipboard content is never written to disk here.
+    public private(set) var history: [ClipEntry] = []
+
+    /// Fires whenever `history` changes, so the dashboard can republish it. A callback
+    /// rather than `@Published` keeps this type free of Combine, matching `LanTransport`.
+    public var onHistoryChanged: (([ClipEntry]) -> Void)?
+
+    private var nextId = 0
 
     /// The pasteboard is injectable so tests can drive a private one — exercising this
     /// against `NSPasteboard.general` would fight whoever is using the machine.
@@ -54,6 +80,56 @@ public final class ClipboardSync {
         watcher = nil
         transport.onEnvelope = nil
         guard_ = nil
+        // Sign-out must not leave the last user's copied content on screen.
+        history = []
+        onHistoryChanged?(history)
+    }
+
+    /// Adds to the visible history, newest first, and evicts to keep it bounded.
+    ///
+    /// Two caps, because entries are wildly uneven: `maxEntries` keeps the list readable,
+    /// and `maxHistoryBytes` keeps 50 screenshots from pinning 150 MB of memory.
+    private func record(text: String?, imageData: Data?, mime: String?, fromSelf: Bool) {
+        let entry = ClipEntry(
+            id: nextId, text: text, imageData: imageData, mime: mime,
+            fromSelf: fromSelf, at: Date(),
+        )
+        nextId += 1
+
+        var trimmed = Array(([entry] + history).prefix(Self.maxEntries))
+        var bytes = 0
+        trimmed = trimmed.prefix {
+            bytes += $0.imageData?.count ?? $0.text?.count ?? 0
+            return bytes <= Self.maxHistoryBytes
+        }
+        history = Array(trimmed)
+        onHistoryChanged?(history)
+    }
+
+    /// Put a history entry back on this device's clipboard — the point of a history.
+    public func copyToClipboard(_ entry: ClipEntry) {
+        // Goes through the same guard as an inbound apply, so re-copying an old item
+        // isn't mistaken for a fresh local copy and rebroadcast to the peer.
+        let hash: String
+        if let data = entry.imageData {
+            hash = LoopGuard.hash(data)
+        } else if let text = entry.text {
+            hash = LoopGuard.hash(text)
+        } else {
+            return
+        }
+        if var loopGuard = guard_ {
+            loopGuard.recordApplied(contentHash: hash, sentAtUnixMs: Int64(Date().timeIntervalSince1970 * 1000))
+            guard_ = loopGuard
+        }
+
+        pasteboard.clearContents()
+        if let data = entry.imageData {
+            pasteboard.setData(data, forType: Self.pasteboardType(for: entry.mime ?? "image/png"))
+        } else if let text = entry.text {
+            pasteboard.setString(text, forType: .string)
+        }
+        lastChangeCount = pasteboard.changeCount
     }
 
     /// A local copy — broadcast it unless it is the echo of something we just injected.
@@ -70,9 +146,11 @@ public final class ClipboardSync {
         // path), and syncing that instead of the picture would be the wrong choice.
         var body: (FuseEnvelope) -> FuseEnvelope
         var hash: String
+        var entry: (text: String?, image: Data?, mime: String?)
         if let (mime, data) = currentImage() {
             guard data.count <= Self.maxInlineImageBytes else { return }
             hash = LoopGuard.hash(data)
+            entry = (nil, data, mime)
             body = { envelope in
                 var copy = envelope
                 copy.clipImage = FuseClipImage.with {
@@ -83,6 +161,7 @@ public final class ClipboardSync {
             }
         } else if let text = pasteboard.string(forType: .string), !text.isEmpty {
             hash = LoopGuard.hash(text)
+            entry = (text, nil, nil)
             body = { envelope in
                 var copy = envelope
                 copy.clipText = FuseClipText.with { $0.text = text }
@@ -96,6 +175,7 @@ public final class ClipboardSync {
         guard_ = loopGuard // shouldEmit consumes the one-shot suppression
         guard allowed else { return }
 
+        record(text: entry.text, imageData: entry.image, mime: entry.mime, fromSelf: true)
         transport.broadcast(body(transport.newEnvelope()))
     }
 
@@ -104,11 +184,13 @@ public final class ClipboardSync {
         // images go through exactly the same loop-prevention path.
         let write: () -> Void
         let hash: String
+        let entry: (text: String?, image: Data?, mime: String?)
         switch envelope.body {
         case .clipText:
             let text = envelope.clipText.text
             guard !text.isEmpty else { return }
             hash = LoopGuard.hash(text)
+            entry = (text, nil, nil)
             write = { [pasteboard] in
                 pasteboard.clearContents()
                 pasteboard.setString(text, forType: .string)
@@ -117,6 +199,7 @@ public final class ClipboardSync {
             let image = envelope.clipImage
             guard !image.data.isEmpty else { return }
             hash = LoopGuard.hash(image.data)
+            entry = (nil, image.data, image.mime)
             write = { [pasteboard] in
                 pasteboard.clearContents()
                 pasteboard.setData(image.data, forType: Self.pasteboardType(for: image.mime))
@@ -138,6 +221,7 @@ public final class ClipboardSync {
         loopGuard.recordApplied(contentHash: hash, sentAtUnixMs: envelope.sentAtUnixMs)
         guard_ = loopGuard
 
+        record(text: entry.text, imageData: entry.image, mime: entry.mime, fromSelf: false)
         write()
         // Deliberately do NOT absorb the bumped changeCount here. Letting the next poll
         // see the change is what delivers the echo to `checkForLocalChange`, where the
@@ -170,4 +254,7 @@ public final class ClipboardSync {
     /// stream, and `LanChannel` already caps a frame at 4 MB. Anything larger is not
     /// synced today; it will be covered when file transfer brings chunk reassembly.
     private static let maxInlineImageBytes = 3 * 1024 * 1024
+
+    private static let maxEntries = 50
+    private static let maxHistoryBytes = 24 * 1024 * 1024
 }

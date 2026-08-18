@@ -99,6 +99,9 @@ fun QrScanner(modifier: Modifier = Modifier, onCode: (String) -> Unit) {
                 .build(),
         )
     }
+    // A QR that decodes but isn't ours looks identical to a camera that sees nothing at
+    // all, which makes "scanning doesn't work" impossible to tell from "wrong QR".
+    var foreignQr by remember { mutableStateOf(false) }
     val providerFuture = remember { ProcessCameraProvider.getInstance(context) }
     DisposableEffect(Unit) {
         onDispose {
@@ -131,6 +134,7 @@ fun QrScanner(modifier: Modifier = Modifier, onCode: (String) -> Unit) {
                     analysis.setAnalyzer(executor) { proxy ->
                         scan(scanner, proxy) { payload ->
                             val code = PairingCode.fromScan(payload)
+                            foreignQr = code == null
                             if (code != null && handled.compareAndSet(false, true)) onCode(code)
                         }
                     }
@@ -146,7 +150,11 @@ fun QrScanner(modifier: Modifier = Modifier, onCode: (String) -> Unit) {
             },
         )
         Text(
-            "Point at the QR code on your Mac",
+            if (foreignQr) {
+                "That QR isn’t a FuseOS pairing code — use the one on your Mac"
+            } else {
+                "Point at the QR code on your Mac"
+            },
             style = MaterialTheme.typography.labelSmall,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

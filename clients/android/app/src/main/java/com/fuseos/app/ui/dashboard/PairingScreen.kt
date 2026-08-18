@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -246,16 +245,17 @@ private fun EnterCode(
  */
 @Composable
 private fun CodeCells(code: String, activeIndex: Int?) {
+    // Boxes share the width rather than claiming a fixed 34.dp each: eight fixed cells
+    // plus the separator ran past the right edge of a 360.dp phone, clipping the last one.
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         repeat(PairingCode.LENGTH) { index ->
             if (index == 4) {
                 Text(
                     "-",
-                    modifier = Modifier.padding(horizontal = 5.dp),
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 20.sp,
@@ -265,8 +265,7 @@ private fun CodeCells(code: String, activeIndex: Int?) {
             val active = index == activeIndex
             Box(
                 modifier = Modifier
-                    .padding(horizontal = 3.dp)
-                    .width(34.dp)
+                    .weight(1f)
                     .height(48.dp)
                     .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
                     .border(

@@ -15,6 +15,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct FuseOSApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var session = SessionStore.shared
+    @StateObject private var dashboard = DashboardViewModel()
+    /// Onboarding runs once. After the first Continue, launches go straight to the
+    /// dashboard — which shows the same connection status, so nothing is hidden by skipping.
+    @AppStorage("hasCompletedConnect") private var hasCompletedConnect = false
 
     var body: some Scene {
         WindowGroup("FuseOS") {
@@ -23,8 +27,10 @@ struct FuseOSApp: App {
                     AuthView()
                 } else if session.deviceType == nil {
                     DeviceTypeView()
+                } else if hasCompletedConnect {
+                    DashboardView(viewModel: dashboard)
                 } else {
-                    DashboardView()
+                    ConnectView(viewModel: dashboard) { hasCompletedConnect = true }
                 }
             }
             .environmentObject(session)

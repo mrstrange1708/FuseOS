@@ -1,7 +1,10 @@
 package com.fuseos.app.ui.dashboard
 
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,19 +35,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.fuseos.app.clipboard.ClipEntry
 import com.fuseos.app.ui.components.ErrorBanner
 import com.fuseos.app.ui.components.FusePrimaryButton
 import com.fuseos.app.ui.components.FuseWordmark
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun DashboardScreen() {
     val viewModel: DashboardViewModel = viewModel(factory = DashboardViewModel.Factory)
     val state by viewModel.state.collectAsState()
+    val history by viewModel.history.collectAsState()
     var showPairing by remember { mutableStateOf(false) }
 
     if (showPairing) {
@@ -132,12 +143,131 @@ fun DashboardScreen() {
 
         Spacer(Modifier.height(22.dp))
         FusePrimaryButton(text = "Connect a device", onClick = { showPairing = true })
+
+        Spacer(Modifier.height(30.dp))
+        ClipboardHistory(
+            entries = history,
+            connected = state.connected.isNotEmpty(),
+            onCopy = { viewModel.copyToClipboard(it) },
+        )
         Spacer(Modifier.height(12.dp))
     }
 }
 
+/**
+ * Everything copied on this device or received from a peer, newest first.
+ *
+ * This is also the diagnostic for "sync isn't working": an item that appears here marked
+ * "Copied here" but never shows up on the Mac places the failure on the LAN channel, not
+ * on the clipboard capture.
+ */
 @Composable
-private fun DeviceCard(
+private fun ClipboardHistory(
+    entries: List<ClipEntry>,
+    connected: Boolean,
+    onCopy: (ClipEntry) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "Clipboard",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.weight(1f))
+        Text(
+            if (connected) "syncing" else "not connected",
+            fontFamily = FontFamily.Monospace,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (connected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+    }
+    Spacer(Modifier.height(12.dp))
+
+    if (entries.isEmpty()) {
+        Text(
+            "Nothing yet. Copy something here — with FuseOS on screen, since Android only " +
+                "lets the app in front read the clipboard — or copy on your Mac and it " +
+                "lands here.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        for (entry in entries) {
+            ClipCard(entry = entry, onCopy = { onCopy(entry) })
+        }
+    }
+}
+
+@Composable
+private fun ClipCard(entry: ClipEntry, onCopy: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
+            .clickable(onClick = onCopy)
+            .padding(14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (entry.fromSelf) "Copied here" else "From your Mac",
+                style = MaterialTheme.typography.labelSmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                clockTime(entry.atUnixMs),
+                style = MaterialTheme.typography.labelSmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+
+        val bytes = entry.imageBytes
+        if (bytes != null) {
+            // Decoded per entry and cached by it, so scrolling doesn't re-decode.
+            val bitmap = remember(entry.id) {
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+            }
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = "Copied image",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp)
+                        .clip(RoundedCornerShape(10.dp)),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                Text("Image", style = MaterialTheme.typography.bodyMedium)
+            }
+        } else {
+            Text(
+                entry.text.orEmpty(),
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+private fun clockTime(unixMs: Long): String =
+    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(unixMs))
+
+@Composable
+internal fun DeviceCard(
     name: String,
     subtitle: String,
     platform: String,
@@ -187,5 +317,5 @@ private fun DeviceCard(
     }
 }
 
-private fun glyph(platform: String): ImageVector =
+internal fun glyph(platform: String): ImageVector =
     if (platform == "android") Icons.Filled.Smartphone else Icons.Filled.Computer

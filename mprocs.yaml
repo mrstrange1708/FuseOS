@@ -16,18 +16,28 @@ procs:
       echo '✔ FuseOS.app launched — press r here to rebuild'
 
   android:
-    # The phone reaches the server over Wi-Fi, so it needs this Mac's LAN IP, not
-    # localhost. Baked into BuildConfig.SERVER_URL at install time, so a changed
-    # Wi-Fi address needs no code edit. `adb wait-for-device` parks the pane until
-    # the phone is plugged in with USB debugging on.
+    # `adb reverse` tunnels the phone's own :3000 to this Mac's :3000 over the USB
+    # cable, so the control plane needs no LAN IP at all. A Wi-Fi that isolates its
+    # clients (hotspots, campus and cafe networks) blocks phone -> Mac outright, and
+    # baking in a LAN IP also went stale the moment the Mac changed networks; the
+    # cable has neither problem. The LAN *data plane* (clipboard, files) is still
+    # peer-to-peer over Wi-Fi — both devices must share a network for that.
+    # `adb wait-for-device` parks the pane until the phone is plugged in with USB
+    # debugging on.
+    # ADB_MDNS=0: adb's openscreen mDNS discovery can't bind on macOS 26 and takes the
+    # whole server down with a misleading "could not install *smartsocket* listener:
+    # Address already in use" — so `adb` silently does nothing at all. We only ever talk
+    # to the phone over USB, so the wireless discovery it wants is no loss.
     shell: >
+      export ADB_MDNS=0 &&
       adb wait-for-device &&
+      adb reverse tcp:3000 tcp:3000 &&
       clients/android/gradlew -p clients/android installDebug
-      -PserverUrl="http://$(ipconfig getifaddr en0 || ipconfig getifaddr en1):3000" &&
+      -PserverUrl=http://127.0.0.1:3000 &&
       adb shell am start -n com.fuseos.app/.MainActivity &&
       echo '✔ FuseOS installed and launched — press r here to rebuild'
 
   logcat:
     # Phone-side logs. Off by default; press `s` to start it once the app is running.
-    shell: adb logcat --pid=$(adb shell pidof -s com.fuseos.app)
+    shell: export ADB_MDNS=0 && adb logcat --pid=$(adb shell pidof -s com.fuseos.app)
     autostart: false

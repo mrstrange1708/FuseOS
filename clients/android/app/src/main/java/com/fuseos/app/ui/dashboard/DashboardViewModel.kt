@@ -4,7 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.fuseos.app.clipboard.ClipEntry
 import com.fuseos.app.clipboard.ClipboardSync
+import com.fuseos.app.core.ConnectState
+import com.fuseos.app.core.ConnectStateEvaluator
+import com.fuseos.app.data.ConnectionManager
 import com.fuseos.app.data.DeviceItem
 import com.fuseos.app.data.DeviceRepository
 import com.fuseos.app.data.PeerPresence
@@ -14,11 +18,10 @@ import com.fuseos.app.data.SignalClient
 import com.fuseos.app.net.LanTransport
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 class DashboardViewModel(
     private val repo: DeviceRepository,
@@ -26,6 +29,7 @@ class DashboardViewModel(
     private val session: SessionStore,
     private val transport: LanTransport,
     private val clipboard: ClipboardSync,
+    private val connection: ConnectionManager,
 ) : ViewModel() {
 
     data class UiState(
@@ -36,66 +40,69 @@ class DashboardViewModel(
         val connected: Set<String> = emptySet(),
         val error: String? = null,
         val loading: Boolean = false,
-    )
+        /** This device's advertised `ip:port`, or null until the LAN listener is bound. */
+        val selfLanAddress: String? = null,
+    ) {
+        /** What the connect screen renders. Derived rather than stored so it cannot drift
+         *  out of step with the roster and presence it is computed from. */
+        val connect: ConnectState
+            get() = ConnectStateEvaluator.evaluate(
+                selfLanAddress = selfLanAddress,
+                peerIds = peers.map { it.id },
+                presence = presence,
+                connected = connected,
+            )
+    }
 
     private val _state = MutableStateFlow(UiState())
     val state = _state.asStateFlow()
 
-    /** Set once registration and the LAN stack have come up; null means "not yet, retry". */
-    private var startedDeviceId: String? = null
-    private val startLock = Mutex()
-
     /** Emits when a pairing completes (so an open pairing sheet can close). */
     val paired: SharedFlow<Unit> = signal.paired
 
+    /** Everything copied here or received from a peer, newest first. */
+    val history: StateFlow<List<ClipEntry>> = clipboard.history
+
+    /** Tapping a history entry puts it back on this device's clipboard. */
+    fun copyToClipboard(entry: ClipEntry) = clipboard.copyToClipboard(entry)
+
     init {
         viewModelScope.launch { bootstrap() }
-        viewModelScope.launch { signal.presence.collect { p -> _state.update { it.copy(presence = p) } } }
-        viewModelScope.launch { transport.connectedPeers.collect { c -> _state.update { it.copy(connected = c) } } }
+        // lanAddress is re-read on every presence/channel change: it is null until the
+        // listener binds, and it changes outright when the device switches network.
+        viewModelScope.launch {
+            signal.presence.collect { p ->
+                _state.update { it.copy(presence = p, selfLanAddress = transport.lanAddress()) }
+            }
+        }
+        viewModelScope.launch {
+            transport.connectedPeers.collect { c ->
+                _state.update { it.copy(connected = c, selfLanAddress = transport.lanAddress()) }
+            }
+        }
         viewModelScope.launch { signal.paired.collect { refresh() } }
     }
 
     private suspend fun bootstrap() {
         try {
-            ensureStarted()
+            connection.ensureStarted()
             refresh()
         } catch (e: Exception) {
             _state.update { it.copy(error = e.message ?: "Unable to load your devices.") }
         }
     }
 
-    /**
-     * Registers this device and brings the LAN + signal stack up, returning our device id.
-     *
-     * Every action that needs the id goes through here rather than reading the stored one,
-     * because this runs at launch — when the server may be unreachable. Doing it once and
-     * giving up left the app reporting "this device isn't registered" for the rest of its
-     * life, with a force-quit as the only way out. A failed attempt sets nothing, so the
-     * next action retries the whole thing.
-     */
-    private suspend fun ensureStarted(): String = startLock.withLock {
-        startedDeviceId?.let { return@withLock it }
-        // Idempotent server-side, and it refreshes this device's battery and lastSeen.
-        val deviceId = repo.registerThisDevice()
-        // Bring the listener up before saying hello, so the very first hello can
-        // already carry a lanAddress for peers to dial.
-        transport.start(deviceId, signal.presence)
-        clipboard.start(deviceId)
-        session.currentToken()?.let { token -> signal.start(token, deviceId) }
-        startedDeviceId = deviceId
-        deviceId
-    }
-
     suspend fun refresh() {
         _state.update { it.copy(loading = true) }
         try {
-            val all = repo.listDevices(ensureStarted())
+            val all = repo.listDevices(connection.ensureStarted())
             _state.update {
                 it.copy(
                     selfDevice = all.firstOrNull { d -> d.isSelf },
                     peers = all.filter { d -> !d.isSelf },
                     error = null,
                     loading = false,
+                    selfLanAddress = transport.lanAddress(),
                 )
             }
         } catch (e: Exception) {
@@ -103,10 +110,10 @@ class DashboardViewModel(
         }
     }
 
-    suspend fun initiatePairing(): String = repo.initiatePairing(ensureStarted()).code
+    suspend fun initiatePairing(): String = repo.initiatePairing(connection.ensureStarted()).code
 
     suspend fun claimPairing(code: String) {
-        repo.claimPairing(ensureStarted(), code)
+        repo.claimPairing(connection.ensureStarted(), code)
         refresh()
     }
 
@@ -116,11 +123,17 @@ class DashboardViewModel(
         _state.value.presence[device.id]
             ?: PeerPresence(device.online, device.battery, publicKey = null, lanAddress = null)
 
+    /** Records that the connect screen has been passed, so launches go straight to home. */
+    fun markConnectDone() {
+        viewModelScope.launch { session.markConnectDone() }
+    }
+
     fun signOut() {
-        signal.stop()
-        clipboard.stop()
-        transport.stop()
-        viewModelScope.launch { session.clear() }
+        // MainActivity stops the foreground service when the token clears.
+        viewModelScope.launch {
+            connection.stop()
+            session.clear()
+        }
     }
 
     companion object {
@@ -132,6 +145,7 @@ class DashboardViewModel(
                     ServiceLocator.session,
                     ServiceLocator.lanTransport,
                     ServiceLocator.clipboardSync,
+                    ServiceLocator.connectionManager,
                 )
             }
         }

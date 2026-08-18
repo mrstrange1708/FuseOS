@@ -7,6 +7,15 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
+    <!-- Holds the process open so the LAN listener and /signal socket survive the app
+         being backgrounded. Without it Android freezes us and the Mac sees this phone
+         drop offline. dataSync is the honest type: we are syncing user data on demand. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- API 33+ requires this for the ongoing service notification to be visible. The
+         service still runs if it is refused; the user just cannot see that it is. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:name=".FuseApp"
         android:allowBackup="true"
@@ -23,6 +32,29 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".service.FuseConnectionService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- The Share sheet is not a convenience on Android: clipboard reads are refused
+             to any app that is not on screen, so this is the *only* way content leaves
+             this device in the background. See docs/protocol.md. -->
+        <activity
+            android:name=".share.ShareActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="@string/app_name"
+            android:noHistory="true"
+            android:theme="@style/Theme.FuseOS.Transparent">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
 

@@ -6,4 +6,14 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowBackground">@android:color/white</item>
     </style>
+
+    <!-- ShareActivity has no UI of its own: it does its work and finishes, so it must not
+         flash a window over whatever the user was actually looking at. -->
+    <style name="Theme.FuseOS.Transparent" parent="Theme.FuseOS">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

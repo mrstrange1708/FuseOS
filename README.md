@@ -48,11 +48,12 @@ pnpm start            # every service in one mprocs screen
 | --- | --- |
 | `server` | Control plane on `:3000`, hot-reloading. |
 | `mac` | Builds `FuseOS.app` and launches it. |
-| `android` | Waits for a USB phone, then installs and launches the app with this Mac's current LAN IP baked in — so the phone finds the server without editing any file. |
+| `android` | Waits for a USB phone, then tunnels the server over the cable (`adb reverse`) and installs and launches the app — no LAN IP to configure or keep current. |
 | `logcat` | Phone-side logs. Off by default; press `s` to start it. |
 
-Keys: `j`/`k` switch pane, `s` start/stop, `r` restart, `q` quit everything. The phone
-must be on the same Wi-Fi as the Mac.
+Keys: `j`/`k` switch pane, `s` start/stop, `r` restart, `q` quit everything. The cable
+carries the control plane; clipboard and files are peer-to-peer, so both devices still
+need the same Wi-Fi for those.
 
 Prereqs: Node 22 + PNPM, `brew install mprocs`, `server/.env` (copy
 `server/.env.example`), Xcode toolchain plus `brew install protobuf swift-protobuf` for

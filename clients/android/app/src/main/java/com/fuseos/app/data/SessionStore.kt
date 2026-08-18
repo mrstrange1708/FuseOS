@@ -1,6 +1,7 @@
 package com.fuseos.app.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -28,6 +29,7 @@ class SessionStore(private val context: Context) {
         val EMAIL = stringPreferencesKey("email")
         val DEVICE_TYPE = stringPreferencesKey("device_type")
         val DEVICE_ID = stringPreferencesKey("device_id")
+        val CONNECT_DONE = booleanPreferencesKey("connect_done")
 
         // Deliberately not the old "device_key": that held a random stand-in in a
         // different format, and a fresh name lets stale installs re-register cleanly
@@ -43,6 +45,13 @@ class SessionStore(private val context: Context) {
     val emailFlow: Flow<String?> = context.authDataStore.data.map { it[Keys.EMAIL] }
     val deviceTypeFlow: Flow<String?> = context.authDataStore.data.map { it[Keys.DEVICE_TYPE] }
     val deviceIdFlow: Flow<String?> = context.authDataStore.data.map { it[Keys.DEVICE_ID] }
+
+    /** Whether the user has been through the connect screen once. */
+    val connectDoneFlow: Flow<Boolean> = context.authDataStore.data.map { it[Keys.CONNECT_DONE] == true }
+
+    suspend fun markConnectDone() {
+        context.authDataStore.edit { it[Keys.CONNECT_DONE] = true }
+    }
 
     suspend fun save(token: String, email: String) {
         context.authDataStore.edit {
@@ -95,6 +104,7 @@ class SessionStore(private val context: Context) {
             it.remove(Keys.EMAIL)
             it.remove(Keys.DEVICE_TYPE)
             it.remove(Keys.DEVICE_ID)
+            it.remove(Keys.CONNECT_DONE)
         }
     }
 }

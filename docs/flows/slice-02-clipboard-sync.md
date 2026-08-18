@@ -15,6 +15,8 @@ This slice built the **data plane** that [slice-01](slice-01-device-login.md) st
 
 **Clipboard sync** (`ClipboardSync` + `LoopGuard`), text and images. All four loop-prevention rules live in `LoopGuard`, deliberately separated from the platform clipboard APIs so they can be tested without a device. Images ride inline in a single frame up to 3 MB rather than being chunked — faster on a LAN and far less code, and it covers the screenshot case that matters. Both sides normalise to PNG.
 
+**A visible history.** Sync was invisible: items went straight to the system clipboard with nothing on screen, so "it isn't working" and "it worked and you didn't notice" looked identical. `ClipboardSync` now keeps the last 50 items in a bounded in-memory ring (also capped at 24 MB, since 50 screenshots would otherwise pin 150 MB), each tagged as copied-here or received, and the dashboard renders them under the device list. Tapping one re-copies it, routed through `LoopGuard.recordApplied` so a re-copy isn't rebroadcast as a fresh local copy. Deliberately not persisted — clipboard content stays as ephemeral as the clipboard itself, and the no-payload-on-disk stance matches the no-payload-on-server one.
+
 ## What this slice discovered
 
 **Android cannot read the clipboard in the background.** Since API 29 only the focused app may read it. This is not a bug to route around — it makes clipboard sync asymmetric, and it means share-sheet send is the primary background path out of Android rather than a convenience feature. It should be built before file transfer. See [protocol.md](../protocol.md) §5.1.

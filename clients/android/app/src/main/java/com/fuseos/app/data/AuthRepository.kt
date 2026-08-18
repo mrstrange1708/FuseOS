@@ -8,6 +8,7 @@ class AuthRepository(
     val tokenFlow = session.tokenFlow
     val emailFlow = session.emailFlow
     val deviceTypeFlow = session.deviceTypeFlow
+    val connectDoneFlow = session.connectDoneFlow
 
     suspend fun setDeviceType(type: String) = session.saveDeviceType(type)
 

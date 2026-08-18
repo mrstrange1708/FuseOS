@@ -12,6 +12,8 @@ final class DashboardViewModel: ObservableObject {
     @Published var isLoading = false
     /// Bumped whenever a pairing completes, so an open pairing sheet can dismiss.
     @Published var pairedCount = 0
+    /// Everything copied here or received from a peer, newest first.
+    @Published var history: [ClipEntry] = []
 
     let signal = SignalClient()
     let transport = LanTransport()
@@ -37,6 +39,9 @@ final class DashboardViewModel: ObservableObject {
         }
         transport.onConnectedPeersChanged = { [weak self] peers in
             self?.connected = peers
+        }
+        clipboard.onHistoryChanged = { [weak self] entries in
+            self?.history = entries
         }
         Task { await bootstrap() }
     }
@@ -120,4 +125,18 @@ final class DashboardViewModel: ObservableObject {
 
     /// True when there is a live encrypted LAN channel to this device.
     func isConnected(_ device: DeviceItem) -> Bool { connected.contains(device.id) }
+
+    /// What the connect screen renders. Computed rather than stored so it re-derives from
+    /// whichever published property just changed, with no third copy of the state to sync.
+    var connectState: ConnectState {
+        ConnectStateEvaluator.evaluate(
+            selfLanAddress: transport.lanAddress(),
+            peerIds: peers.map(\.id),
+            presence: presence,
+            connected: connected,
+        )
+    }
+
+    /// Clicking a history entry puts it back on this Mac's clipboard.
+    func copyToClipboard(_ entry: ClipEntry) { clipboard.copyToClipboard(entry) }
 }

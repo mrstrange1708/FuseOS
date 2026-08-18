@@ -11,23 +11,28 @@ import com.fuseos.app.ui.auth.AuthMode
 import com.fuseos.app.ui.auth.AuthViewModel
 import com.fuseos.app.ui.auth.LoginScreen
 import com.fuseos.app.ui.auth.SignUpScreen
+import com.fuseos.app.ui.connect.ConnectScreen
 import com.fuseos.app.ui.dashboard.DashboardScreen
 import com.fuseos.app.ui.device.DeviceTypeScreen
 
 /** Which top-level destination the persisted session resolves to. */
-private enum class RootDestination { Auth, DeviceType, Home }
+private enum class RootDestination { Auth, DeviceType, Connect, Home }
 
 /** Top-level router: signed out → auth; signed in without a device type → the
- *  device picker; otherwise home. */
+ *  device picker; then the connect space until it has been passed once; otherwise home. */
 @Composable
 fun AppRoot() {
     val repository = ServiceLocator.authRepository
     val token by repository.tokenFlow.collectAsState(initial = null)
     val deviceType by repository.deviceTypeFlow.collectAsState(initial = null)
+    // Onboarding runs once. After the first Continue, launches go straight to the
+    // dashboard — which shows the same connection status, so nothing is hidden by skipping.
+    val connectDone by repository.connectDoneFlow.collectAsState(initial = true)
 
     val destination = when {
         token == null -> RootDestination.Auth
         deviceType == null -> RootDestination.DeviceType
+        !connectDone -> RootDestination.Connect
         else -> RootDestination.Home
     }
 
@@ -35,6 +40,7 @@ fun AppRoot() {
         when (screen) {
             RootDestination.Auth -> AuthFlow()
             RootDestination.DeviceType -> DeviceTypeScreen()
+            RootDestination.Connect -> ConnectScreen()
             RootDestination.Home -> DashboardScreen()
         }
     }

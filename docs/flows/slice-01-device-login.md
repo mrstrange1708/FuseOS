@@ -8,6 +8,7 @@
 ## Built so far
 - **Android app** (`clients/android`) — Kotlin + Compose login/sign-up flow → home. Builds a debug APK.
 - **macOS app** (`clients/macos`) — SwiftUI login/sign-up flow → home. Builds with `swift build`.
+- **The connect space** (`ConnectScreen.kt` · `ConnectView.swift`) — screens 3 and 4 below as one self-advancing screen. Its stage logic lives in `ConnectState.kt` / `ConnectState.swift`: pure, platform-free, and covered by mirrored test suites on both clients, so the two apps cannot drift on what "connected" means.
 - **Server auth** (`server/src/auth/dev-auth.ts`) — real `POST /auth/sign-up/email` + `/auth/sign-in/email` (scrypt-hashed), so login works end-to-end today. **Dev stand-in** for Better Auth + PostgreSQL, which replaces it next (in-memory store; users reset on restart).
 
 ## The black-and-white scope call
@@ -29,8 +30,21 @@ This is deliberately **not** the complete product. We build only the loop **"log
 
 1. **Sign in** — email + password, "Create account" fallback. → Better Auth.
 2. **Device Login — "What device are you logging in with today?"** *(the defining screen)* — the app detects this hardware (`Pixel 8 · Android`), the user confirms and names it (`Pragya's Pixel`), and continues **as this device**. New device → registered; known install → recognised on sight. "Not this device? Choose another" covers reinstalls / shared accounts.
-3. **Match** — lists the account's other devices with presence (`Pragya's MacBook · online · same Wi-Fi`); first-time connect enters the one-time pairing code shown on the peer. → trust established.
-4. **Connected** — the link is live: presence + heartbeat, end-to-end encrypted. Ends with a nod to what's next ("Clipboard sync — coming next slice").
+3. **Connect** *(screens 3 and 4, built as one)* — shows this device above its peer with the link between them, and advances itself through five stages as presence and the LAN channel change. Nothing here polls; it re-derives from the `/signal` presence stream.
+
+   | Stage | Shown when | Way out |
+   | --- | --- | --- |
+   | `NotPaired` | no paired peers | "Scan a code" → pairing |
+   | `PeerOffline` | paired, peer not running the app | waits |
+   | `DifferentNetwork` | both online, advertised `lanAddress`es on different /24s | waits; names both networks |
+   | `Connecting` | same /24, no channel yet | resolves itself |
+   | `Connected` | a live encrypted LAN channel exists | **Continue** → home |
+
+   Only `Connected` offers Continue: past this screen the app assumes a live channel, so letting someone through early only moves the confusion later. The channel is checked before presence — presence can be stale, a channel carrying bytes cannot.
+
+   `DifferentNetwork` compares the /24 of each side's advertised address. The netmask is an assumption (it is what every consumer router and phone hotspot uses, and a peer's address doesn't carry its mask), so it can only ever mislabel the *reason* on screen — `Connected` is still decided by a real channel.
+
+   Onboarding runs once: after the first Continue, launches go straight to home, which shows the same connection status.
 
 ## The handshake (maps to existing contracts)
 

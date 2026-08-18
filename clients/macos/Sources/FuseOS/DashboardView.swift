@@ -5,7 +5,7 @@ import FuseOSCore
 /// devices it's connected to, with live presence and battery.
 struct DashboardView: View {
     @EnvironmentObject var session: SessionStore
-    @StateObject private var viewModel = DashboardViewModel()
+    @ObservedObject var viewModel: DashboardViewModel
     @State private var showPairing = false
 
     var body: some View {
@@ -61,6 +61,9 @@ struct DashboardView: View {
 
                 Spacer().frame(height: 22)
                 PrimaryButton(title: "Connect a device") { showPairing = true }
+
+                Spacer().frame(height: 30)
+                clipboardHistory
             }
             .padding(32)
             .frame(maxWidth: 460)
@@ -99,6 +102,80 @@ struct DashboardView: View {
             .font(.system(size: 14))
             .foregroundStyle(FuseColor.muted)
             .padding(.vertical, 8)
+    }
+
+    /// Everything copied on this Mac or received from a peer, newest first.
+    ///
+    /// This is also the diagnostic for "sync isn't working": an item that appears here
+    /// marked "Copied here" but never reaches the phone places the failure on the LAN
+    /// channel, not on the clipboard capture.
+    private var clipboardHistory: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Clipboard")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(FuseColor.ink)
+                Spacer()
+                Text(viewModel.connected.isEmpty ? "not connected" : "syncing")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(viewModel.connected.isEmpty ? FuseColor.muted : FuseColor.accent)
+            }
+            Spacer().frame(height: 12)
+
+            if viewModel.history.isEmpty {
+                Text("Nothing yet. Copy something here, or copy on your phone with FuseOS "
+                     + "on screen, and it lands here.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(FuseColor.muted)
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(viewModel.history) { entry in
+                        ClipRow(entry: entry) { viewModel.copyToClipboard(entry) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// One clipboard item. Clicking it copies it back to this Mac's clipboard.
+struct ClipRow: View {
+    let entry: ClipEntry
+    let onCopy: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(entry.fromSelf ? "Copied here" : "From your phone")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(FuseColor.accent)
+                Spacer()
+                Text(entry.at, format: .dateTime.hour().minute())
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(FuseColor.muted)
+            }
+
+            if let data = entry.imageData, let image = NSImage(data: data) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(height: 140)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            } else {
+                Text(entry.text ?? "")
+                    .font(.system(size: 14))
+                    .foregroundStyle(FuseColor.ink)
+                    .lineLimit(4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(14)
+        .background(FuseColor.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(FuseColor.outline.opacity(0.6), lineWidth: 1))
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onCopy)
     }
 }
 
