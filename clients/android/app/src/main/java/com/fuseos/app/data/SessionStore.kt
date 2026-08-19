@@ -103,6 +103,22 @@ class SessionStore(private val context: Context) {
     /** This device's public key as base64 SPKI DER — the `publicKey` the API expects. */
     suspend fun deviceKey(): String = DeviceKey.encodePublic(deviceKeyPair().public)
 
+    /**
+     * Drops this device's identity so the next [deviceKeyPair] mints a fresh one.
+     *
+     * Only for the one case the server can't resolve for us: the key is already
+     * registered to a *different* account (`public_key_taken`), which happens on a phone
+     * that signed in with another account before. Rotating is safe — it only ever
+     * discards our own private half — and the stale row stays with its old owner.
+     */
+    suspend fun resetDeviceKey() = keyMutex.withLock {
+        context.authDataStore.edit {
+            it.remove(Keys.DEVICE_PRIVATE_KEY)
+            it.remove(Keys.DEVICE_PUBLIC_KEY)
+        }
+        Unit
+    }
+
     /** Signs out. Keeps the device keypair (the physical device identity) but drops the
      *  session and the per-account server device id. */
     suspend fun clear() {

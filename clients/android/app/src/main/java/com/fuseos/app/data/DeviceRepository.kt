@@ -10,8 +10,22 @@ class DeviceRepository(
 ) {
     val deviceIdFlow = session.deviceIdFlow
 
-    /** Registers (idempotently) this device and stores its stable server id. */
-    suspend fun registerThisDevice(): String {
+    /**
+     * Registers (idempotently) this device and stores its stable server id.
+     *
+     * A `public_key_taken` means this phone's keypair is still registered to an account
+     * someone signed in with earlier. The server must not hand the key over (that's the
+     * guard in `POST /devices`), so the fix is ours: mint a new identity and retry once.
+     */
+    suspend fun registerThisDevice(): String = try {
+        register()
+    } catch (e: AuthException) {
+        if (e.code != "public_key_taken") throw e
+        session.resetDeviceKey()
+        register()
+    }
+
+    private suspend fun register(): String {
         val response = api.registerDevice(
             DeviceRegisterRequest(
                 name = session.currentDeviceName() ?: deviceInfo.deviceName(),

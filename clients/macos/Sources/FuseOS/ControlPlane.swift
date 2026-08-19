@@ -60,8 +60,22 @@ struct PairClaimResponse: Decodable {
 /// device registry, and pairing only — never clipboard/file payloads.
 struct ControlPlane {
     /// Registers (idempotently) this device and returns its stable server id.
+    ///
+    /// A `public_key_taken` means this Mac's keypair is still registered to an account
+    /// someone signed in with earlier. The server must not hand the key over (that's the
+    /// guard in `POST /devices`), so the fix is ours: mint a new identity and retry once.
     @MainActor
     static func registerThisDevice(battery: Int?) async throws -> String {
+        do {
+            return try await register(battery: battery)
+        } catch let error as AuthError where error.code == "public_key_taken" {
+            try DeviceKey.reset()
+            return try await register(battery: battery)
+        }
+    }
+
+    @MainActor
+    private static func register(battery: Int?) async throws -> String {
         let body = DeviceRegisterRequest(
             name: SessionStore.shared.deviceName ?? SessionStore.detectedDeviceName(),
             platform: "macos",
@@ -118,7 +132,7 @@ struct ControlPlane {
             return try JSONDecoder().decode(Response.self, from: data)
         }
         if let apiError = try? JSONDecoder().decode(APIError.self, from: data) {
-            throw AuthError(message: apiError.error.message)
+            throw AuthError(message: apiError.error.message, code: apiError.error.code)
         }
         throw AuthError(message: "Something went wrong (\(http.statusCode)). Is the FuseOS server running?")
     }

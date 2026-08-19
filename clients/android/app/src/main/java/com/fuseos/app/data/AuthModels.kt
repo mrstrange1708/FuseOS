@@ -21,4 +21,6 @@ data class ApiError(val error: ApiErrorBody)
 data class ApiErrorBody(val code: String, val message: String)
 
 /** Thrown when the server rejects an auth request; carries a user-facing message. */
-class AuthException(message: String) : Exception(message)
+/** @param code the API's machine-readable `error.code`, when the server sent one —
+ *  some failures are recoverable and the caller has to tell which. */
+class AuthException(message: String, val code: String? = null) : Exception(message)

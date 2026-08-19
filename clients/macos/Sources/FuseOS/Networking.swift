@@ -35,6 +35,9 @@ struct APIError: Decodable {
 
 struct AuthError: LocalizedError {
     let message: String
+    /// The API's machine-readable `error.code`, when the server sent one — some
+    /// failures are recoverable and the caller has to tell which.
+    var code: String? = nil
     var errorDescription: String? { message }
 }
 
@@ -66,7 +69,7 @@ struct AuthAPI {
             return try JSONDecoder().decode(AuthResponse.self, from: data)
         }
         if let apiError = try? JSONDecoder().decode(APIError.self, from: data) {
-            throw AuthError(message: apiError.error.message)
+            throw AuthError(message: apiError.error.message, code: apiError.error.code)
         }
         throw AuthError(message: "Something went wrong (\(http.statusCode)). Is the FuseOS server running?")
     }

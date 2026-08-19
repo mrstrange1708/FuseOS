@@ -42,6 +42,19 @@ public enum DeviceKey {
         try privateKey().publicKey.derRepresentation.base64EncodedString()
     }
 
+    /// Drops this device's identity so the next `privateKey()` mints a fresh one.
+    ///
+    /// Only for the one case the server can't resolve for us: the key is already
+    /// registered to a *different* account (`public_key_taken`), which happens on a
+    /// machine that signed in with another account before. Rotating is safe — it only
+    /// ever discards our own private half — and the stale row stays with its old owner.
+    public static func reset() throws {
+        let status = SecItemDelete(baseQuery as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw Failure.keychain(status)
+        }
+    }
+
     /// Parses a peer's public key as delivered by the control plane.
     static func decodePublic(base64: String) throws -> P256.KeyAgreement.PublicKey {
         guard let der = Data(base64Encoded: base64) else { throw Failure.malformedPeerKey }

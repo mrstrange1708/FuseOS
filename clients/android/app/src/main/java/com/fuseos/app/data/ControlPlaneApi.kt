@@ -50,11 +50,15 @@ class ControlPlaneApi(
 
     private suspend inline fun <reified R> decode(response: HttpResponse): R {
         if (response.status.isSuccess()) return response.body()
-        val message = try {
-            response.body<ApiError>().error.message
+        val body = try {
+            response.body<ApiError>().error
         } catch (e: Exception) {
-            "Something went wrong (${response.status.value}). Is the FuseOS server running?"
+            null
         }
-        throw AuthException(message)
+        throw AuthException(
+            body?.message
+                ?: "Something went wrong (${response.status.value}). Is the FuseOS server running?",
+            body?.code,
+        )
     }
 }
