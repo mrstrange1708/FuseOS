@@ -3,20 +3,20 @@ package com.fuseos.app.core
 import com.fuseos.app.data.PeerPresence
 
 /**
- * How far along the connection to a paired peer is.
+ * How far along the connection to the account's other device is.
  *
- * The stages are ordered: a device climbs from [NotPaired] up to [Connected], and the
+ * The stages are ordered: a device climbs from [Alone] up to [Connected], and the
  * connect screen shows whichever stage the best peer has reached. Ordering is what lets
- * several paired peers collapse into one screen state — the furthest-along peer wins,
+ * several peers collapse into one screen state — the furthest-along peer wins,
  * because that is the one the user is about to start using.
  *
  * Mirrors `ConnectState.swift` on macOS; the two must agree on what "connected" means.
  */
 enum class ConnectStage {
-    /** No paired peers at all — the user still has to scan a code. */
-    NotPaired,
+    /** This account has no other device yet — the user has to sign in on one. */
+    Alone,
 
-    /** Paired, but the peer isn't running the app right now. */
+    /** There is another device on the account, but it isn't running the app right now. */
     PeerOffline,
 
     /** Both online, but on different networks, so no LAN channel is possible. */
@@ -31,7 +31,7 @@ enum class ConnectStage {
 
 data class ConnectState(
     val stage: ConnectStage,
-    /** The peer this state describes, or null at [ConnectStage.NotPaired]. */
+    /** The peer this state describes, or null at [ConnectStage.Alone]. */
     val peerId: String? = null,
     /** Populated only at [ConnectStage.DifferentNetwork], so the UI can name both networks. */
     val selfSubnet: String? = null,
@@ -68,7 +68,7 @@ object ConnectStateEvaluator {
         presence: Map<String, PeerPresence>,
         connected: Set<String>,
     ): ConnectState {
-        var best = ConnectState(ConnectStage.NotPaired)
+        var best = ConnectState(ConnectStage.Alone)
         for (peerId in peerIds) {
             val candidate = evaluatePeer(
                 peerId = peerId,

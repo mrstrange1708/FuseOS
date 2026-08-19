@@ -17,7 +17,6 @@ import com.fuseos.app.data.SessionStore
 import com.fuseos.app.data.SignalClient
 import com.fuseos.app.net.LanTransport
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -57,9 +56,6 @@ class DashboardViewModel(
     private val _state = MutableStateFlow(UiState())
     val state = _state.asStateFlow()
 
-    /** Emits when a pairing completes (so an open pairing sheet can close). */
-    val paired: SharedFlow<Unit> = signal.paired
-
     /** Everything copied here or received from a peer, newest first. */
     val history: StateFlow<List<ClipEntry>> = clipboard.history
 
@@ -76,6 +72,14 @@ class DashboardViewModel(
         viewModelScope.launch {
             signal.presence.collect { p ->
                 _state.update { it.copy(presence = p, selfLanAddress = transport.lanAddress()) }
+                // A device that just signed in on this account arrives as presence before
+                // it exists in the REST roster — which holds the names the UI draws. This
+                // is how a second device shows up with no pairing step, so it has to
+                // self-heal.
+                val known = _state.value
+                if (p.keys.any { id -> id != known.selfDevice?.id && known.peers.none { it.id == id } }) {
+                    refresh()
+                }
             }
         }
         viewModelScope.launch {
@@ -83,7 +87,6 @@ class DashboardViewModel(
                 _state.update { it.copy(connected = c, selfLanAddress = transport.lanAddress()) }
             }
         }
-        viewModelScope.launch { signal.paired.collect { refresh() } }
     }
 
     private suspend fun bootstrap() {
@@ -111,13 +114,6 @@ class DashboardViewModel(
         } catch (e: Exception) {
             _state.update { it.copy(error = e.message, loading = false) }
         }
-    }
-
-    suspend fun initiatePairing(): String = repo.initiatePairing(connection.ensureStarted()).code
-
-    suspend fun claimPairing(code: String) {
-        repo.claimPairing(connection.ensureStarted(), code)
-        refresh()
     }
 
     fun selfBattery(): Int? = repo.batteryPercent()

@@ -49,7 +49,7 @@ object ServiceLocator {
         }
         // A phone that can't see the server fails with a raw "Connect timeout has expired
         // [url=…]" from the engine, which tells the user nothing actionable. One place
-        // covers every call — auth, devices, pairing — because they share this client.
+        // covers every call — auth and devices alike — because they share this client.
         httpClient.plugin(HttpSend).intercept { request ->
             try {
                 execute(request)

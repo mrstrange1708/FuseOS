@@ -2,7 +2,7 @@ package com.fuseos.app.data
 
 import kotlinx.serialization.Serializable
 
-// Wire models for the device registry + pairing (see docs/api.md).
+// Wire models for the device registry (see docs/api.md).
 
 @Serializable
 data class DeviceRegisterRequest(
@@ -28,18 +28,3 @@ data class DeviceItem(
 
 @Serializable
 data class DeviceListResponse(val devices: List<DeviceItem>)
-
-@Serializable
-data class PairInitiateRequest(val deviceId: String)
-
-@Serializable
-data class PairInitiateResponse(val code: String, val expiresAt: String)
-
-@Serializable
-data class PairClaimRequest(val deviceId: String, val code: String)
-
-@Serializable
-data class TrustedPeer(val deviceId: String, val name: String, val platform: String)
-
-@Serializable
-data class PairClaimResponse(val trustedWith: TrustedPeer)

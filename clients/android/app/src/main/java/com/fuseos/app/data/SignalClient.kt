@@ -24,7 +24,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 /**
- * What we know about a paired peer right now.
+ * What we know about a peer right now.
  *
  * [publicKey] and [lanAddress] are what make a direct connection possible: the address
  * says where to dial, the key says who must answer. Both arrive from the control plane,
@@ -90,8 +90,6 @@ class SignalClient(
     private val _presence = MutableStateFlow<Map<String, PeerPresence>>(emptyMap())
     val presence: StateFlow<Map<String, PeerPresence>> = _presence.asStateFlow()
 
-    private val _paired = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
-    val paired: SharedFlow<Unit> = _paired.asSharedFlow()
 
     private var job: Job? = null
 
@@ -171,7 +169,6 @@ class SignalClient(
             // Keep the key and address on the way down: the peer is unreachable now, but
             // the details are still valid when it comes back and save a round trip.
             "peer-offline" -> event.deviceId?.let { setPresence(it, false, null, null, null) }
-            "paired" -> _paired.tryEmit(Unit)
         }
     }
 

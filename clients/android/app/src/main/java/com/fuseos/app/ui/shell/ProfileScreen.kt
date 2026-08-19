@@ -48,7 +48,6 @@ fun ProfileScreen(
     deviceName: String?,
     selfBattery: Int?,
     onRename: (String) -> Unit,
-    onPairDevice: () -> Unit,
     onBatterySettings: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
@@ -125,7 +124,6 @@ fun ProfileScreen(
         }
 
         Spacer(Modifier.height(14.dp))
-        SettingRow("Pair another device", "Scan a code shown on the other device", onPairDevice)
         Spacer(Modifier.height(10.dp))
         SettingRow(
             "Background permission",

@@ -25,9 +25,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -40,26 +37,20 @@ import com.fuseos.app.ui.components.FusePrimaryButton
 import com.fuseos.app.ui.components.FuseWordmark
 import com.fuseos.app.ui.dashboard.DashboardViewModel
 import com.fuseos.app.ui.dashboard.DeviceCard
-import com.fuseos.app.ui.dashboard.PairingScreen
 
 /**
  * The connect space: this device, the device it's linking to, and the one thing to do next.
  *
  * It advances on its own as presence and the LAN channel change — there is nothing to
- * refresh and nothing to poll. Only [ConnectStage.Connected] offers Continue, so reaching
- * the rest of the app means a real encrypted channel exists, not merely that both devices
- * are online.
+ * refresh, nothing to poll, and nothing to press. Signing in on the Mac is the entire link
+ * step; the rest happens while the user watches. Only [ConnectStage.Connected] offers
+ * Continue, so reaching the rest of the app means a real encrypted channel exists, not
+ * merely that both devices are online.
  */
 @Composable
 fun ConnectScreen() {
     val viewModel: DashboardViewModel = viewModel(factory = DashboardViewModel.Factory)
     val state by viewModel.state.collectAsState()
-    var showPairing by remember { mutableStateOf(false) }
-
-    if (showPairing) {
-        PairingScreen(viewModel = viewModel, onClose = { showPairing = false })
-        return
-    }
 
     val connect = state.connect
     val peer = state.peers.firstOrNull { it.id == connect.peerId }
@@ -108,14 +99,12 @@ fun ConnectScreen() {
 
         Spacer(Modifier.height(20.dp))
         when (connect.stage) {
-            ConnectStage.NotPaired ->
-                FusePrimaryButton(text = "Scan a code", onClick = { showPairing = true })
-
             ConnectStage.Connected ->
                 FusePrimaryButton(text = "Continue", onClick = viewModel::markConnectDone)
 
             // Deliberately no Continue here: past this screen the app assumes a live
             // channel, so letting someone through early only moves the confusion later.
+            // Nothing to press either — every one of these stages clears itself.
             else -> Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(10.dp))
@@ -125,8 +114,6 @@ fun ConnectScreen() {
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = { showPairing = true }) { Text("Pair another device") }
             }
         }
 
@@ -165,7 +152,7 @@ private fun LinkBeam(stage: ConnectStage) {
 }
 
 private fun headline(stage: ConnectStage): String = when (stage) {
-    ConnectStage.NotPaired -> "Connect your Mac"
+    ConnectStage.Alone -> "Sign in on your Mac"
     ConnectStage.PeerOffline -> "Open FuseOS on your Mac"
     ConnectStage.DifferentNetwork -> "Same WiFi, please"
     ConnectStage.Connecting -> "Connecting…"
@@ -178,11 +165,12 @@ private fun detail(
     selfSubnet: String?,
     peerSubnet: String?,
 ): String = when (stage) {
-    ConnectStage.NotPaired ->
-        "Scan a code once and these two devices stay linked. Nothing you copy ever leaves your network."
+    ConnectStage.Alone ->
+        "Install FuseOS on your Mac and sign in with this same account. There is no code to " +
+            "scan — the two link themselves. Nothing you copy ever leaves your network."
 
     ConnectStage.PeerOffline ->
-        "$peerName is paired but isn't running FuseOS right now."
+        "$peerName is on this account but isn't running FuseOS right now."
 
     ConnectStage.DifferentNetwork ->
         "This phone is on ${selfSubnet?.let { "$it.x" } ?: "another network"} and $peerName is on " +
@@ -196,7 +184,7 @@ private fun detail(
 }
 
 private fun peerCaption(stage: ConnectStage): String = when (stage) {
-    ConnectStage.NotPaired -> "Not paired yet"
+    ConnectStage.Alone -> "not signed in yet"
     ConnectStage.PeerOffline -> "offline"
     ConnectStage.DifferentNetwork -> "different network"
     ConnectStage.Connecting -> "connecting…"

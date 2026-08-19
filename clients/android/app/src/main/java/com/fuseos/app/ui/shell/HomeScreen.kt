@@ -131,7 +131,7 @@ private fun LinkBanner(stage: ConnectStage, peerName: String?) {
         ConnectStage.Connecting -> "Connecting…"
         ConnectStage.DifferentNetwork -> "Different networks — join the same WiFi"
         ConnectStage.PeerOffline -> "${peerName ?: "Your Mac"} is offline"
-        ConnectStage.NotPaired -> "No device paired yet"
+        ConnectStage.Alone -> "No other device on this account yet"
     }
     Row(
         modifier = Modifier

@@ -12,7 +12,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 
-/** Authenticated control-plane client for the device registry + pairing. */
+/** Authenticated control-plane client for the device registry. */
 class ControlPlaneApi(
     private val client: HttpClient,
     private val baseUrl: String,
@@ -23,12 +23,6 @@ class ControlPlaneApi(
 
     suspend fun listDevices(selfId: String?): DeviceListResponse =
         get("/devices" + if (selfId != null) "?self=$selfId" else "")
-
-    suspend fun initiatePairing(request: PairInitiateRequest): PairInitiateResponse =
-        post("/pairing/initiate", request)
-
-    suspend fun claimPairing(request: PairClaimRequest): PairClaimResponse =
-        post("/pairing/claim", request)
 
     private suspend inline fun <reified B, reified R> post(path: String, body: B): R {
         val token = tokenProvider()

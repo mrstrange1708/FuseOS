@@ -28,15 +28,15 @@ class ConnectStateTest {
     )
 
     @Test
-    fun `no paired devices is not paired`() {
+    fun `no other devices on the account is alone`() {
         assertEquals(
-            ConnectStage.NotPaired,
+            ConnectStage.Alone,
             evaluate("192.168.1.5:9000", emptyMap()).stage,
         )
     }
 
     @Test
-    fun `paired but offline peer`() {
+    fun `peer on the account but offline`() {
         val state = evaluate("192.168.1.5:9000", mapOf("b" to presence(false, null)))
         assertEquals(ConnectStage.PeerOffline, state.stage)
         assertEquals("b", state.peerId)
@@ -85,7 +85,7 @@ class ConnectStateTest {
     }
 
     /**
-     * With several paired devices the screen follows the furthest-along one, so one
+     * With several devices the screen follows the furthest-along one, so one
      * offline laptop cannot mask a phone that is ready to use.
      */
     @Test
