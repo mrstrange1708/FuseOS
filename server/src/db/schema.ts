@@ -1,15 +1,5 @@
 import { sql } from 'drizzle-orm';
-import {
-  check,
-  index,
-  integer,
-  pgTable,
-  text,
-  timestamp,
-  unique,
-  uniqueIndex,
-  uuid,
-} from 'drizzle-orm/pg-core';
+import { check, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 /**
  * DEV-ONLY credentials store for the `dev-auth` stand-in (see auth/dev-auth.ts).
@@ -17,8 +7,8 @@ import {
  * The real identity schema is owned by Better Auth (tables `user`, `account`,
  * `session`, …) — see docs/schema.md. These `dev_auth_*` tables exist only so the
  * dev login persists across server restarts while Better Auth is not yet wired,
- * and are meant to be dropped when it lands. The device/pairing/trust tables below
- * follow docs/schema.md but reference `dev_auth_users` for the same reason; their
+ * and are meant to be dropped when it lands. The `devices` table below
+ * follows docs/schema.md but references `dev_auth_users` for the same reason; its
  * FK target moves to the Better Auth user id later. Integrity is enforced in the
  * schema itself (NOT NULL, UNIQUE, CHECK) per the "never let bad data in" rule.
  */
@@ -71,52 +61,11 @@ export const devices = pgTable(
   ],
 );
 
-/** Short-lived, one-time pairing codes. `device_id` is the initiator (device A). */
-export const pairingCodes = pgTable(
-  'pairing_codes',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => devAuthUsers.id, { onDelete: 'cascade' }),
-    deviceId: uuid('device_id')
-      .notNull()
-      .references(() => devices.id, { onDelete: 'cascade' }),
-    code: text('code').notNull(),
-    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-    usedAt: timestamp('used_at', { withTimezone: true }),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    check('pairing_codes_code_len', sql`length(${table.code}) between 6 and 12`),
-    check('pairing_codes_expiry', sql`${table.expiresAt} > ${table.createdAt}`),
-    index('pairing_codes_user_id_idx').on(table.userId),
-    // An unused code is globally unique; used codes may collide/prune.
-    uniqueIndex('pairing_codes_active_code_uq')
-      .on(table.code)
-      .where(sql`${table.usedAt} is null`),
-  ],
-);
-
-/** A trusted, bidirectional relationship between two of a user's devices. */
-export const deviceTrust = pgTable(
-  'device_trust',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    deviceA: uuid('device_a')
-      .notNull()
-      .references(() => devices.id, { onDelete: 'cascade' }),
-    deviceB: uuid('device_b')
-      .notNull()
-      .references(() => devices.id, { onDelete: 'cascade' }),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    check('device_trust_distinct', sql`${table.deviceA} <> ${table.deviceB}`),
-    check('device_trust_ordered', sql`${table.deviceA} < ${table.deviceB}`),
-    unique('device_trust_pair_uq').on(table.deviceA, table.deviceB),
-  ],
-);
+/**
+ * There is no pairing/trust table: two devices are trusted because they are on the same
+ * account (see devices/trust.ts). `pairing_codes` and `device_trust` were dropped in
+ * migration 0002 along with the code-entry flow they existed for.
+ */
 
 export type DevAuthUser = typeof devAuthUsers.$inferSelect;
 export type Device = typeof devices.$inferSelect;

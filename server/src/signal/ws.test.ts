@@ -6,7 +6,6 @@ import { WebSocket } from 'ws';
 import {
   deleteUsers,
   listening,
-  pair,
   registerDevice,
   signUp,
   type TestDevice,
@@ -114,10 +113,11 @@ describe.skipIf(!process.env.DATABASE_URL)('/signal websocket', () => {
   /** Connects and completes the `hello` handshake, returning the client + hello-ok. */
   async function helloAs(
     device: TestDevice,
-    extra: { lanAddress?: string; battery?: number } = {},
+    extra: { lanAddress?: string; battery?: number; token?: string } = {},
   ): Promise<{ client: SignalClient; helloOk: Msg }> {
+    const { token = owner.token, ...rest } = extra;
     const client = await connect();
-    client.send({ type: 'hello', token: owner.token, deviceId: device.id, ...extra });
+    client.send({ type: 'hello', token, deviceId: device.id, ...rest });
     return { client, helloOk: await client.waitFor('hello-ok') };
   }
 
@@ -128,7 +128,6 @@ describe.skipIf(!process.env.DATABASE_URL)('/signal websocket', () => {
     owner = await signUp(app);
     mac = await registerDevice(app, owner.token, 'Mac mini', 'macos', 88);
     phone = await registerDevice(app, owner.token, 'Pixel 8', 'android', 47);
-    await pair(app, owner.token, mac.id, phone.id);
     stranger = await signUp(app);
     strangerDevice = await registerDevice(app, stranger.token, 'Not yours', 'macos');
   }, 60_000);
@@ -209,9 +208,8 @@ describe.skipIf(!process.env.DATABASE_URL)('/signal websocket', () => {
     });
   });
 
-  it('does not leak an untrusted device into hello-ok peers', async () => {
-    const loner = await registerDevice(app, owner.token, 'Unpaired', 'android');
-    await helloAs(loner);
+  it('does not leak another account’s device into hello-ok peers', async () => {
+    await helloAs(strangerDevice, { token: stranger.token });
     const { helloOk } = await helloAs(mac);
     expect(helloOk.peers).toEqual([]);
   });
@@ -356,30 +354,20 @@ describe.skipIf(!process.env.DATABASE_URL)('/signal websocket', () => {
     expect(health.status).toBe(200);
   });
 
-  it('notifies a connected initiator when its pairing code is claimed', async () => {
-    const initiator = await helloAs(mac);
+  it('links a brand-new device with no pairing step at all', async () => {
+    // The whole "connect a device" flow: sign in on the second device, and the first
+    // one hears about it the moment it says hello. No code is shown, typed or scanned.
+    const existing = await helloAs(mac);
     const newcomer = await registerDevice(app, owner.token, 'Fresh laptop', 'macos');
+    await helloAs(newcomer, { lanAddress: '192.168.1.30:47100' });
 
-    const code = await app.inject({
-      method: 'POST',
-      url: '/pairing/initiate',
-      headers: { authorization: `Bearer ${owner.token}` },
-      payload: { deviceId: mac.id },
-    });
-    const claim = await app.inject({
-      method: 'POST',
-      url: '/pairing/claim',
-      headers: { authorization: `Bearer ${owner.token}` },
-      payload: { deviceId: newcomer.id, code: code.json<{ code: string }>().code },
-    });
-    expect(claim.statusCode).toBe(200);
-
-    const paired = await initiator.client.waitFor('paired');
-    expect(paired).toMatchObject({
+    const event = await existing.client.waitFor('peer-online');
+    expect(event).toMatchObject({
       deviceId: newcomer.id,
       name: 'Fresh laptop',
       platform: 'macos',
       publicKey: newcomer.publicKey,
+      lanAddress: '192.168.1.30:47100',
     });
   });
 

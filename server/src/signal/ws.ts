@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { userIdForToken } from '../auth/session.js';
 import { getDb } from '../db/client.js';
 import { devices, type Device } from '../db/schema.js';
-import { trustedPeerIds } from '../pairing/trust.js';
+import { trustedPeerIds } from '../devices/trust.js';
 import { presence } from './presence.js';
 
 const AUTH_TIMEOUT_MS = 5_000;

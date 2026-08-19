@@ -1,11 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import {
   auth,
   deleteUsers,
-  pair,
   registerDevice,
   signUp,
   unique,
@@ -84,13 +82,12 @@ describe.skipIf(!process.env.DATABASE_URL)('device registry', () => {
     expect(matches).toHaveLength(1);
   });
 
-  it('flags trusted peers and the caller itself via ?self=', async () => {
+  it('flags every other device on the account as trusted via ?self=', async () => {
     const owner = await signUp(app);
     try {
       const mac = await registerDevice(app, owner.token, 'Mac mini', 'macos', 88);
       const phone = await registerDevice(app, owner.token, 'Pixel 8', 'android', 47);
       const spare = await registerDevice(app, owner.token, 'Old tablet', 'android');
-      await pair(app, owner.token, mac.id, phone.id);
 
       const res = await app.inject({
         method: 'GET',
@@ -106,7 +103,8 @@ describe.skipIf(!process.env.DATABASE_URL)('device registry', () => {
       );
       expect(byId.get(mac.id)).toMatchObject({ trusted: false, isSelf: true });
       expect(byId.get(phone.id)).toMatchObject({ trusted: true, isSelf: false });
-      expect(byId.get(spare.id)).toMatchObject({ trusted: false, isSelf: false });
+      // No pairing step ran: same account is the whole trust rule.
+      expect(byId.get(spare.id)).toMatchObject({ trusted: true, isSelf: false });
 
       // Without ?self= nothing is flagged.
       const plain = await app.inject({
@@ -154,8 +152,6 @@ describe.skipIf(!process.env.DATABASE_URL)('device registry', () => {
   it.each([
     ['POST', '/devices', { name: 'x', platform: 'macos', publicKey: 'k' }],
     ['GET', '/devices', undefined],
-    ['POST', '/pairing/initiate', { deviceId: randomUUID() }],
-    ['POST', '/pairing/claim', { deviceId: randomUUID(), code: 'ABCD-EFGH' }],
   ])('requires a bearer token: %s %s', async (method, url, payload) => {
     const anonymous = await app.inject({ method: method as 'GET' | 'POST', url, payload });
     expect(anonymous.statusCode).toBe(401);

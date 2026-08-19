@@ -15,6 +15,13 @@
       "when": 1783319146704,
       "tag": "0001_lying_deathstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787155346094,
+      "tag": "0002_overjoyed_expediter",
+      "breakpoints": true
     }
   ]
 }

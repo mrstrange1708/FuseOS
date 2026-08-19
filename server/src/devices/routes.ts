@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { authenticate } from '../auth/session.js';
 import { getDb } from '../db/client.js';
 import { devices } from '../db/schema.js';
-import { trustedPeerIds } from '../pairing/trust.js';
 import { presence } from '../signal/presence.js';
 
 const registerSchema = z.object({
@@ -15,7 +14,7 @@ const registerSchema = z.object({
 });
 
 const listQuerySchema = z.object({
-  // The caller's own device id, so we can flag which peers it is paired with.
+  // The caller's own device id, so we can flag which row is itself.
   self: z.string().uuid().optional(),
 });
 
@@ -90,9 +89,6 @@ export function registerDeviceRoutes(app: FastifyInstance): void {
       });
     }
     const rows = await getDb().select().from(devices).where(eq(devices.userId, userId));
-    const trusted = parsed.data.self
-      ? new Set(await trustedPeerIds(parsed.data.self))
-      : new Set<string>();
 
     const list = rows.map((device) => {
       const conn = presence.get(device.id);
@@ -104,7 +100,9 @@ export function registerDeviceRoutes(app: FastifyInstance): void {
         // Prefer the live value from an open socket, else the last persisted one.
         battery: conn?.battery ?? device.battery ?? null,
         lastSeen: device.lastSeen,
-        trusted: trusted.has(device.id),
+        // Every other device on the account is trusted (see devices/trust.ts) — but
+        // "other" needs a reference point, so without ?self= nothing is flagged.
+        trusted: parsed.data.self !== undefined && parsed.data.self !== device.id,
         isSelf: parsed.data.self === device.id,
       };
     });

@@ -9,7 +9,7 @@ import { devAuthUsers } from './db/schema.js';
  *
  * The suites run against the shared dev Postgres, so every account they create is
  * torn down again — deleting the `dev_auth_users` row cascades to its sessions,
- * devices, pairing codes and trust rows (see db/schema.ts).
+ * devices and everything keyed to them (see db/schema.ts).
  */
 
 /** Collision-proof suffix for emails / public keys across parallel runs. */
@@ -63,29 +63,6 @@ export async function registerDevice(
   });
   if (res.statusCode !== 201) throw new Error(`register failed: ${res.statusCode} ${res.body}`);
   return { id: res.json<{ id: string }>().id, publicKey };
-}
-
-/** Runs the real pairing flow so the two devices end up in `device_trust`. */
-export async function pair(
-  app: FastifyInstance,
-  token: string,
-  initiatorId: string,
-  claimerId: string,
-): Promise<void> {
-  const initiate = await app.inject({
-    method: 'POST',
-    url: '/pairing/initiate',
-    headers: auth(token),
-    payload: { deviceId: initiatorId },
-  });
-  if (initiate.statusCode !== 201) throw new Error(`initiate failed: ${initiate.body}`);
-  const claim = await app.inject({
-    method: 'POST',
-    url: '/pairing/claim',
-    headers: auth(token),
-    payload: { deviceId: claimerId, code: initiate.json<{ code: string }>().code },
-  });
-  if (claim.statusCode !== 200) throw new Error(`claim failed: ${claim.body}`);
 }
 
 /** Deletes the accounts a test created; everything else cascades. */
