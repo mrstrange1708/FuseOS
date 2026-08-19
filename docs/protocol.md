@@ -116,7 +116,9 @@ Two facts about the host platforms shape what clipboard sync can actually promis
 
 This is why **Share-sheet send is not a convenience feature on Android — it is the primary background path out of the device**. It is built: `ShareActivity` takes an `ACTION_SEND` of text or an image, brings the connection up if the process was dead, and pushes it to the account's other devices.
 
-A **foreground service** (`FuseConnectionService`) holds the process open so the LAN listener and the `/signal` socket survive backgrounding. It is what makes *receiving* work with the app closed; it does nothing for capture, because no service type lifts the clipboard-read restriction.
+A **foreground service** (`FuseConnectionService`) holds the process open so the LAN listener and the `/signal` socket survive backgrounding. It is what makes *receiving* work with the app closed; it does nothing for capture, because no service type lifts the clipboard-read restriction. `BootReceiver` starts it again after a reboot (`BOOT_COMPLETED` is an exemption from the background FGS-start rules), so a restart does not leave the phone unreachable until someone opens the app.
+
+On macOS the equivalent is a **login item** (`LaunchAtLogin`, via `SMAppService`), enabled the first time the user reaches the signed-in app and a toggle in Account thereafter. Both sides exist for the same reason: the first copy after a restart is exactly when the link has to already be up.
 
 **`NSPasteboard` has no change notification.** No observer, no delegate, no notification: the only way to detect a copy on macOS is to poll `changeCount`. `ClipboardSync` does so every 300 ms. This is the one sanctioned exception to the project's "never poll" rule (`CLAUDE.md`), which is about network round trips — this is a local integer read with no I/O behind it.
 

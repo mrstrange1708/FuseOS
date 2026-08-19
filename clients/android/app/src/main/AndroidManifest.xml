@@ -11,6 +11,9 @@
     <!-- Holds the process open so the LAN listener and /signal socket survive the app
          being backgrounded. Without it Android freezes us and the Mac sees this phone
          drop offline. dataSync is the honest type: we are syncing user data on demand. -->
+    <!-- Reconnect after a reboot without waiting for someone to open the app. The first
+         copy on the Mac after a restart is exactly when this has to already be up. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- API 33+ requires this for the ongoing service notification to be visible. The
@@ -37,6 +40,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".service.BootReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <service
             android:name=".service.FuseConnectionService"

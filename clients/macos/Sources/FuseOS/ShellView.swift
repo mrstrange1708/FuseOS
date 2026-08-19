@@ -68,7 +68,12 @@ struct ShellView: View {
             .background(FuseColor.bg)
         }
         .frame(minWidth: 720, minHeight: 520)
-        .onAppear { viewModel.start() }
+        .onAppear {
+            viewModel.start()
+            // Reaching the shell means the user is set up, which is the honest moment to
+            // start at login — not at first launch, when they have not decided to keep it.
+            LaunchAtLogin.enableOnFirstRun()
+        }
         .sheet(isPresented: $showPairing) {
             PairingView(viewModel: viewModel).environmentObject(session)
         }
@@ -245,6 +250,7 @@ private struct AccountPane: View {
     let onLinkManually: () -> Void
 
     @State private var draftName = ""
+    @State private var launchAtLogin = LaunchAtLogin.isEnabled
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -282,6 +288,13 @@ private struct AccountPane: View {
             .foregroundStyle(FuseColor.muted)
 
             Divider().padding(.vertical, 4)
+
+            Toggle("Start FuseOS at login", isOn: Binding(
+                get: { launchAtLogin },
+                set: { launchAtLogin = LaunchAtLogin.setEnabled($0) ? $0 : LaunchAtLogin.isEnabled },
+            ))
+            .toggleStyle(.checkbox)
+            .font(.system(size: 12))
 
             Button("Link manually", action: onLinkManually)
             Button("Sign out") {
