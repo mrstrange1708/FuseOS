@@ -1,6 +1,6 @@
 import Foundation
 
-/// What we know about a paired peer right now.
+/// What we know about a peer right now.
 ///
 /// `publicKey` and `lanAddress` are what make a direct connection possible: the address
 /// says where to dial, the key says who must answer. Both arrive from the control plane,
@@ -43,11 +43,10 @@ private struct PeerCard: Decodable {
 /// socket reconnects with a short delay and never crashes the app.
 @MainActor
 public final class SignalClient {
-    /// Everything currently known about this device's paired peers.
+    /// Everything currently known about this account's other devices.
     public private(set) var presence: [String: PeerPresence] = [:]
 
     public var onPresenceChanged: (([String: PeerPresence]) -> Void)?
-    public var onPaired: (() -> Void)?
 
     /// Supplies this device's `ip:port` for peers to dial. The LAN listener binds an
     /// ephemeral port, so this is nil until it is up and changes across restarts — hence
@@ -167,8 +166,6 @@ public final class SignalClient {
             if let id = event.deviceId {
                 setPresence(id, online: false, battery: nil, publicKey: nil, lanAddress: nil)
             }
-        case "paired":
-            onPaired?()
         default:
             break
         }

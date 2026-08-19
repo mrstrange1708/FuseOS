@@ -81,11 +81,12 @@ final class SignalClientTests: XCTestCase {
         XCTAssertEqual(client.presence["p"]?.lanAddress, "10.0.0.1:1000")
     }
 
-    func testPairedFiresItsCallback() {
-        var fired = 0
-        client.onPaired = { fired += 1 }
-        client.handle(#"{"type":"paired","deviceId":"p","name":"x","platform":"android","publicKey":"K"}"#)
-        XCTAssertEqual(fired, 1)
+    /// A new device on the account arrives as plain `peer-online` — there is no separate
+    /// "paired" event any more, because there is no pairing step to announce.
+    func testANewDeviceArrivesAsPeerOnline() {
+        client.handle(#"{"type":"peer-online","deviceId":"new","publicKey":"K","lanAddress":"10.0.0.9:1000"}"#)
+        XCTAssertEqual(client.presence["new"]?.online, true)
+        XCTAssertEqual(client.presence["new"]?.publicKey, "K")
     }
 
     func testPresenceChangesNotifyTheObserver() {

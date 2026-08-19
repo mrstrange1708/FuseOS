@@ -32,7 +32,6 @@ struct ShellView: View {
     @ObservedObject var viewModel: DashboardViewModel
 
     @State private var section: FuseSection = .home
-    @State private var showPairing = false
 
     var body: some View {
         NavigationSplitView {
@@ -53,7 +52,7 @@ struct ShellView: View {
                 case .history:
                     HistoryPane(viewModel: viewModel)
                 case .devices:
-                    DevicesPane(viewModel: viewModel, onPair: { showPairing = true })
+                    DevicesPane(viewModel: viewModel)
                 case .screen:
                     ComingSoonPane(
                         title: "Screen sharing",
@@ -61,7 +60,7 @@ struct ShellView: View {
                         symbol: "rectangle.on.rectangle",
                     )
                 case .account:
-                    AccountPane(viewModel: viewModel, onPair: { showPairing = true })
+                    AccountPane(viewModel: viewModel)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -69,9 +68,6 @@ struct ShellView: View {
         }
         .frame(minWidth: 720, minHeight: 520)
         .onAppear { viewModel.start() }
-        .sheet(isPresented: $showPairing) {
-            PairingView(viewModel: viewModel).environmentObject(session)
-        }
     }
 
     /// The link state, always visible regardless of which pane is open — it is the thing
@@ -145,7 +141,7 @@ private struct HomePane: View {
         case .connecting: return "Connecting…"
         case .differentNetwork: return "Your devices are on different networks."
         case .peerOffline: return "Your other device is offline."
-        case .notPaired: return "No device paired yet."
+        case .alone: return "No other device on this account yet."
         }
     }
 
@@ -208,7 +204,6 @@ private struct HistoryPane: View {
 
 private struct DevicesPane: View {
     @ObservedObject var viewModel: DashboardViewModel
-    let onPair: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -224,8 +219,9 @@ private struct DevicesPane: View {
                 )
             }
 
-            PrimaryButton(title: "Pair another device", action: onPair)
-                .frame(maxWidth: 240)
+            Text("Any device signed in to this account links itself — there is nothing to pair.")
+                .font(.system(size: 11))
+                .foregroundStyle(FuseColor.muted)
             Spacer()
         }
         .padding(28)
@@ -237,7 +233,6 @@ private struct DevicesPane: View {
 private struct AccountPane: View {
     @EnvironmentObject var session: SessionStore
     @ObservedObject var viewModel: DashboardViewModel
-    let onPair: () -> Void
 
     @State private var draftName = ""
 
@@ -278,7 +273,6 @@ private struct AccountPane: View {
 
             Divider().padding(.vertical, 4)
 
-            Button("Pair another device", action: onPair)
             Button("Sign out") {
                 viewModel.signOut()
                 session.clear()
@@ -352,7 +346,7 @@ private struct PaneTitle: View {
 struct ClipRow: View {
     let entry: ClipEntry
     /// Named rather than "your phone": the user chose that name, so this is where it earns
-    /// its keep. Nil only before any device is paired.
+    /// its keep. Nil only before a second device joins the account.
     var peerName: String?
     let onCopy: () -> Void
 

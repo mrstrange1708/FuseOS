@@ -21,8 +21,8 @@ final class ConnectStateTests: XCTestCase {
         )
     }
 
-    func testNoPairedDevicesIsNotPaired() {
-        XCTAssertEqual(evaluate(selfLan: "192.168.1.5:9000", peers: [:]).stage, .notPaired)
+    func testNoOtherDevicesIsAlone() {
+        XCTAssertEqual(evaluate(selfLan: "192.168.1.5:9000", peers: [:]).stage, .alone)
     }
 
     func testPairedButOfflinePeer() {

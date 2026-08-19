@@ -1,15 +1,15 @@
 import Foundation
 
-/// How far along the connection to a paired peer is.
+/// How far along the connection to the account's other device is.
 ///
-/// The stages are ordered: a device climbs from `notPaired` up to `connected`, and the
+/// The stages are ordered: a device climbs from `alone` up to `connected`, and the
 /// connect screen shows whichever stage the best peer has reached. Ordering is what lets
-/// several paired peers collapse into one screen state — the furthest-along peer wins,
+/// several peers collapse into one screen state — the furthest-along peer wins,
 /// because that is the one the user is about to start using.
 public enum ConnectStage: Int, Comparable, Sendable {
-    /// No paired peers at all — the user still has to scan a code.
-    case notPaired = 0
-    /// Paired, but the peer isn't running the app right now.
+    /// This account has no other device yet — the user has to sign in on one.
+    case alone = 0
+    /// There is another device on the account, but it isn't running the app right now.
     case peerOffline = 1
     /// Both online, but on different networks, so no LAN channel is possible.
     case differentNetwork = 2
@@ -25,7 +25,7 @@ public enum ConnectStage: Int, Comparable, Sendable {
 
 public struct ConnectState: Equatable, Sendable {
     public let stage: ConnectStage
-    /// The peer this state describes, or nil at `notPaired`.
+    /// The peer this state describes, or nil at `alone`.
     public let peerId: String?
     /// Populated only at `differentNetwork`, so the UI can name both networks.
     public let selfSubnet: String?
@@ -68,7 +68,7 @@ public enum ConnectStateEvaluator {
         presence: [String: PeerPresence],
         connected: Set<String>,
     ) -> ConnectState {
-        var best = ConnectState(stage: .notPaired)
+        var best = ConnectState(stage: .alone)
         for peerId in peerIds {
             let candidate = evaluate(
                 peerId: peerId,

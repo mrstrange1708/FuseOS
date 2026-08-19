@@ -4,14 +4,14 @@ import FuseOSCore
 /// The connect space: this device, the device it's linking to, and the one thing to do next.
 ///
 /// It advances on its own as presence and the LAN channel change — there is nothing to
-/// refresh and nothing to poll. Only the last stage offers Continue, so reaching the rest
-/// of the app means a real encrypted channel exists, not merely that both devices are online.
+/// refresh, nothing to poll, and nothing to press. Signing in on the phone is the entire
+/// link step; the rest happens while the user watches. Only the last stage offers
+/// Continue, so reaching the rest of the app means a real encrypted channel exists, not
+/// merely that both devices are online.
 struct ConnectView: View {
     @EnvironmentObject var session: SessionStore
     @ObservedObject var viewModel: DashboardViewModel
     let onContinue: () -> Void
-
-    @State private var showPairing = false
 
     private var state: ConnectState { viewModel.connectState }
 
@@ -74,16 +74,13 @@ struct ConnectView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(FuseColor.bg)
         .onAppear { viewModel.start() }
-        .sheet(isPresented: $showPairing) {
-            PairingView(viewModel: viewModel).environmentObject(session)
-        }
     }
 
     // MARK: - Per-stage copy
 
     private var headline: String {
         switch state.stage {
-        case .notPaired: return "Connect your phone"
+        case .alone: return "Sign in on your phone"
         case .peerOffline: return "Open FuseOS on your phone"
         case .differentNetwork: return "Same WiFi, please"
         case .connecting: return "Connecting…"
@@ -93,10 +90,10 @@ struct ConnectView: View {
 
     private var detail: String {
         switch state.stage {
-        case .notPaired:
-            return "Scan a code once and these two devices stay linked. Nothing you copy ever leaves your network."
+        case .alone:
+            return "Install FuseOS on your phone and sign in with this same account. There is no code to scan — the two link themselves. Nothing you copy ever leaves your network."
         case .peerOffline:
-            return "\(peer?.name ?? "Your phone") is paired but isn't running FuseOS right now."
+            return "\(peer?.name ?? "Your phone") is on this account but isn't running FuseOS right now."
         case .differentNetwork:
             let mine = state.selfSubnet.map { "\($0).x" } ?? "another network"
             let theirs = state.peerSubnet.map { "\($0).x" } ?? "another network"
@@ -110,7 +107,7 @@ struct ConnectView: View {
 
     private var peerCaption: String {
         switch state.stage {
-        case .notPaired: return "Not paired yet"
+        case .alone: return "not signed in yet"
         case .peerOffline: return "offline"
         case .differentNetwork: return "different network"
         case .connecting: return "connecting…"
@@ -120,23 +117,18 @@ struct ConnectView: View {
 
     @ViewBuilder private var action: some View {
         switch state.stage {
-        case .notPaired:
-            PrimaryButton(title: "Scan a code") { showPairing = true }
         case .connected:
             PrimaryButton(title: "Continue", action: onContinue)
-        case .peerOffline, .differentNetwork, .connecting:
+        case .alone, .peerOffline, .differentNetwork, .connecting:
             // Deliberately no Continue here: past this screen the app assumes a live
             // channel, so letting someone through early only moves the confusion later.
+            // Nothing to press either — every one of these stages clears itself.
             HStack(spacing: 10) {
                 ProgressView().controlSize(.small)
                 Text("Waiting…")
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(FuseColor.muted)
                 Spacer()
-                Button("Pair another device") { showPairing = true }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12))
-                    .foregroundStyle(FuseColor.accent)
             }
         }
     }

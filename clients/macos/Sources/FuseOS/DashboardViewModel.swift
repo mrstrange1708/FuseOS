@@ -10,8 +10,6 @@ final class DashboardViewModel: ObservableObject {
     @Published var connected: Set<String> = []
     @Published var errorMessage: String?
     @Published var isLoading = false
-    /// Bumped whenever a pairing completes, so an open pairing sheet can dismiss.
-    @Published var pairedCount = 0
     /// Everything copied here or received from a peer, newest first.
     @Published var history: [ClipEntry] = []
 
@@ -33,11 +31,14 @@ final class DashboardViewModel: ObservableObject {
             self.presence = presence
             // The transport dials from the same roster the dashboard displays.
             self.transport.updatePeers(presence)
-        }
-        signal.onPaired = { [weak self] in
-            guard let self else { return }
-            self.pairedCount += 1
-            Task { await self.refresh() }
+            // A device that just signed in on this account arrives as presence before it
+            // exists in the REST roster — which holds the names the UI draws. This is how
+            // a second device shows up with no pairing step, so it has to self-heal.
+            if presence.keys.contains(where: { id in
+                id != self.selfDevice?.id && !self.peers.contains { $0.id == id }
+            }) {
+                Task { await self.refresh() }
+            }
         }
         transport.onConnectedPeersChanged = { [weak self] peers in
             self?.connected = peers
@@ -47,7 +48,7 @@ final class DashboardViewModel: ObservableObject {
         }
         clipboard.onClipEvent = { [weak self] entry in
             guard let self else { return }
-            // Named after whichever peer is actually reachable — with one paired device
+            // Named after whichever peer is actually reachable — with one other device
             // that is always the right name, and with several the connected one is the
             // only one the clip can have come from or gone to.
             self.island.present(entry, peerName: self.peerName)
@@ -127,17 +128,6 @@ final class DashboardViewModel: ObservableObject {
         isLoading = false
     }
 
-    /// Both pairing calls resolve the device id through `ensureStarted`, so opening the
-    /// pairing sheet after a failed launch registers then rather than refusing.
-    func initiatePairing() async throws -> String {
-        try await ControlPlane.initiatePairing(deviceId: ensureStarted()).code
-    }
-
-    func claimPairing(code: String) async throws {
-        _ = try await ControlPlane.claimPairing(deviceId: ensureStarted(), code: code)
-        await refresh()
-    }
-
     /// Live presence merged over the last REST snapshot for display.
     func onlineState(for device: DeviceItem) -> PeerPresence {
         if let live = presence[device.id] { return live }
@@ -146,7 +136,7 @@ final class DashboardViewModel: ObservableObject {
         )
     }
 
-    /// The paired device a clip most likely came from: the connected one, else the only
+    /// The device a clip most likely came from: the connected one, else the only
     /// one there is. Used wherever the UI would otherwise say "your phone".
     var peerName: String? {
         (peers.first { connected.contains($0.id) } ?? peers.first)?.name
