@@ -23,7 +23,7 @@ This slice built the **data plane** that [slice-01](slice-01-device-login.md) st
 
 **macOS has to poll.** `NSPasteboard` exposes no change notification of any kind, so detecting a copy means watching `changeCount` on a 300 ms timer. It is the one sanctioned exception to the never-poll rule.
 
-**mDNS turned out to be unnecessary for now.** `/signal` already relayed `lanAddress`; adding `publicKey` to the same peer card was a one-line server change and removed the entire discovery problem from this slice. Bonjour/NSD is deferred to when pairing must work without internet.
+**mDNS turned out to be unnecessary for now.** `/signal` already relayed `lanAddress`; adding `publicKey` to the same peer card was a one-line server change and removed the entire discovery problem from this slice. Bonjour/NSD is deferred to when linking must work without internet.
 
 ## Verification
 

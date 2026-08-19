@@ -15,7 +15,7 @@ Modern work spans a phone and a laptop, but an Android phone and a Mac live in s
 - **Clipboard sync** — copy text or an image on one device, it's on the clipboard of the other.
 - **File transfer** — send files both ways, Mac ⇄ phone.
 - **Share-sheet send** — "Send to my Mac / my phone" from the native share menu.
-- **Secure pairing** — link 2–3 of your own devices under one account.
+- **Automatic linking** — sign in on both devices and they find each other. No codes to scan.
 
 **Deferred to later phases:** screen mirroring, remote control, and phone-call / SMS relay.
 
@@ -23,11 +23,11 @@ Modern work spans a phone and a laptop, but an Android phone and a Mac live in s
 
 FuseOS is **hybrid** by design:
 
-- A small cloud **control plane** (`server/` + PostgreSQL) handles login, the device registry, pairing, and real-time **signaling** — helping your devices find each other.
+- A small cloud **control plane** (`server/` + PostgreSQL) handles login, the device registry, and real-time **signaling** — helping your devices find each other.
 - The actual **clipboard and file data travels directly device-to-device over your local network** — it never passes through the server. That keeps it fast and private.
 
 ```
- Android ──┐        control plane (auth, pairing, signaling)        ┌── macOS
+ Android ──┐        control plane (auth, devices, signaling)        ┌── macOS
            ├──────────────────►  server + PostgreSQL  ◄─────────────┤
            │                                                        │
            └───────────  direct LAN data plane (clipboard/files)  ──┘

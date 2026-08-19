@@ -2,7 +2,7 @@
 
 **Server:** Node 22 + TypeScript + Fastify · **Auth:** Better Auth (JWT) · **Real-time:** `ws` at `/signal` · **Jobs:** Inngest
 
-This is the **control plane only**: identity, device registry, pairing, presence, and LAN signaling. **No clipboard or file payloads pass through these endpoints** — that traffic is device-to-device (see [protocol.md](protocol.md)).
+This is the **control plane only**: identity, device registry, presence, and LAN signaling. **No clipboard or file payloads pass through these endpoints** — that traffic is device-to-device (see [protocol.md](protocol.md)).
 
 Conventions:
 - All bodies are JSON; all input is **Zod-validated** at the boundary before any DB access.
@@ -41,7 +41,7 @@ Better Auth mounts its own routes (email/password sign-up, sign-in, session, ref
 ```
 Validation: `platform ∈ {android, macos}`, `name` length 1–100, `publicKey` non-empty and unique. Bound to the caller's user. **Idempotent by `publicKey`** — a client may call this on every launch and always gets back its stable device id.
 
-**`GET /devices`** — lists the caller's devices for the dashboard. Optional `?self=<deviceId>` flags which peers the caller is paired with.
+**`GET /devices`** — lists the caller's devices for the dashboard. Optional `?self=<deviceId>` marks which row is the caller; every other row on the account comes back `trusted: true` (see [Trust](#trust) below). Without `?self=` nothing is flagged — "other" has no reference point.
 ```jsonc
 // response 200
 { "devices": [
@@ -51,34 +51,25 @@ Validation: `platform ∈ {android, macos}`, `name` length 1–100, `publicKey` 
 ```
 `online` and `battery` reflect live `/signal` presence (falling back to the last persisted value).
 
-## Pairing
+## Trust
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| POST | `/pairing/initiate` | Issue a short-lived pairing code (device A) |
-| POST | `/pairing/claim` | Redeem a code, establish trust (device B) |
+**There is no pairing endpoint.** Two devices are trusted because they are on the same
+account: both proved who they are at sign-in, and FuseOS links one user's own devices by
+design (see the v1 scope in CLAUDE.md), so a pairing code asked the user to prove a second
+time what the login already established. Installing the app on the second device and
+signing in is the entire link step.
 
-**`POST /pairing/initiate`**
-```jsonc
-// request  { "deviceId": "uuid-of-A" }
-// response 201
-{ "code": "A7X2-9QKM", "expiresAt": "2026-07-05T12:34:56Z" }
-```
-The code is **8 uppercase alphanumerics shown grouped `XXXX-XXXX`** (alphabet omits the ambiguous `I O 0 1`), valid for 5 minutes. Creates a `pairing_codes` row scoped to the user and to the initiating `device_id`; an Inngest job expires it. The claim side normalizes leniently (case- and dash-insensitive).
+Concretely, `trustedPeerIds(deviceId)` (`server/src/devices/trust.ts`) is "every other
+device with the same `user_id`". Nothing is persisted at link time, so there is no
+`device_trust` or `pairing_codes` table and no code to expire.
 
-The initiating device may also render the code as a **QR** carrying `fuseos://pair?code=XXXX-XXXX` — the same code by another route, so there is no extra endpoint and no extra trust. macOS shows one (CoreImage) and Android scans it (CameraX + ML Kit); the scanner accepts only that URI or a bare complete code, so an unrelated QR can never become a claim. The parsing rules live in `PairingCode` on both clients (`core/PairingCode.kt`, `FuseOSCore/PairingCode.swift`) with mirrored test vectors.
-
-**`POST /pairing/claim`**
-```jsonc
-// request  { "deviceId": "uuid-of-B", "code": "A7X2-9QKM" }
-// response 200
-{ "trustedWith": { "deviceId": "uuid-of-A", "name": "Mac mini", "platform": "macos", "publicKey": "base64…" } }
-```
-In a single transaction: validate the code (exists, same user, not expired, not used), write `device_trust` (canonically ordered), mark the code `used_at`. Returns A to B; A is notified over `/signal` with a `paired` event. Errors: `code_invalid`, `code_expired`, `same_device`.
+The consequence for the client is that a new device needs no user action beyond signing
+in: it registers, opens `/signal`, and the account's other devices receive `peer-online`
+with everything needed to dial it.
 
 ## WebSocket — `/signal`
 
-Authenticated by a **first `hello` frame carrying the bearer token** (dev stand-in; a JWT via `Sec-WebSocket-Protocol` under Better Auth). Carries **presence, pairing notifications, and LAN-address signaling only — never payloads.** A socket that doesn't authenticate within 5s is closed.
+Authenticated by a **first `hello` frame carrying the bearer token** (dev stand-in; a JWT via `Sec-WebSocket-Protocol` under Better Auth). Carries **presence and LAN-address signaling only — never payloads.** A socket that doesn't authenticate within 5s is closed.
 
 Client → server:
 ```jsonc
@@ -91,11 +82,10 @@ Server → client:
 { "type": "peer-online",  "deviceId": "uuid", "name": "…", "platform": "…", "publicKey": "base64…", "lanAddress": "…", "battery": 88 }
 { "type": "peer-update",  "deviceId": "uuid", "battery": 42, "lanAddress": "192.168.1.20:47100" }
 { "type": "peer-offline", "deviceId": "uuid" }
-{ "type": "paired",       "deviceId": "uuid", "name": "…", "platform": "…", "publicKey": "base64…" }
 ```
 
 Semantics:
-- On `hello`, the server authenticates the token, marks the device online, updates `last_seen`/`battery`, replies with `hello-ok` (its trusted, online peers), and relays `peer-online` to those peers. This is the introduction that lets the two devices open a **direct** LAN connection.
+- On `hello`, the server authenticates the token, marks the device online, updates `last_seen`/`battery`, replies with `hello-ok` (its trusted, online peers), and relays `peer-online` to those peers. This is the introduction that lets the two devices open a **direct** LAN connection — and, for a device signing in for the first time, it is also the whole linking step.
 - `battery` is operational presence metadata (never a user payload); `peer-update` propagates changes to trusted peers for the dashboard.
 - A peer card carries `publicKey` and `lanAddress` together because both are needed to open the LAN channel: the address says where to dial, the key says who must answer. `peer-update` fires when either `battery` or `lanAddress` changes — an address change matters because a peer that moved is unreachable until its peers hear about it.
 - Heartbeats keep the socket alive; a missed threshold marks the device offline. An Inngest presence-timeout sweep self-heals stale state if a socket dies uncleanly.
@@ -105,9 +95,7 @@ Semantics:
 
 | Function | Trigger | Does |
 | --- | --- | --- |
-| `pairing/expire-code` | scheduled at code creation | Marks/prunes the code after `expires_at` |
 | `presence/sweep-timeouts` | cron | Marks devices offline whose heartbeat lapsed |
-| `pairing/notify` | pairing completed | Durable delivery of the `paired` event |
 | `auth/send-verification` | user created | Sends email verification |
 
 ## Observability

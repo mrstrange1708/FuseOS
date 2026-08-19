@@ -1,6 +1,6 @@
 # Slice 01 — Device Login & Connect
 
-**Status:** Complete. Login, sign-up, device registration, pairing by code, presence, and the direct encrypted LAN connection are all built on Android + macOS. Clipboard text sync followed in [slice-02](slice-02-clipboard-sync.md).
+**Status:** Complete. Login, sign-up, device registration, presence, and the direct encrypted LAN connection are all built on Android + macOS. Linking by pairing code was built and then removed — same-account devices now trust each other outright (see [api.md](../api.md#trust)). Clipboard text sync followed in [slice-02](slice-02-clipboard-sync.md).
 **Goal:** the smallest thing we can actually run and test — log in, know which device you're on, and open a live connection between an Android phone and a Mac on the same Wi-Fi.
 
 > Visual mock: the "Device Login" design review (published artifact). This doc is the spec behind it.
@@ -18,7 +18,7 @@ This is deliberately **not** the complete product. We build only the loop **"log
 **In this slice**
 - Account sign-up & sign-in (email + password) via Better Auth → JWT.
 - **Device Login:** identify and name *this* device; register it (name, platform, public key) or recognise a known install.
-- Match/pair with the account's other device via a short one-time code; record trust.
+- Link with the account's other device. Originally a short one-time code; now nothing at all — same account is the trust rule.
 - Live presence + a direct encrypted connection over the same Wi-Fi.
 
 **Not yet — on purpose**
@@ -29,18 +29,18 @@ This is deliberately **not** the complete product. We build only the loop **"log
 ## Screens (both apps: Android Compose · macOS SwiftUI)
 
 1. **Sign in** — email + password, "Create account" fallback. → Better Auth.
-2. **Device Login — "What device are you logging in with today?"** *(the defining screen)* — the app detects this hardware (`Pixel 8 · Android`), the user confirms and names it (`Pragya's Pixel`), and continues **as this device**. New device → registered; known install → recognised on sight. "Not this device? Choose another" covers reinstalls / shared accounts.
+2. **Name this device** *(the defining screen)* — the app knows what hardware it is running on, so it does not ask; it asks only for the name the *other* device will show (`Pragya's Pixel`, defaulted from the system name). New device → registered; known install → recognised on sight by its keypair. "Not you? Sign out" covers reinstalls / shared accounts.
 3. **Connect** *(screens 3 and 4, built as one)* — shows this device above its peer with the link between them, and advances itself through five stages as presence and the LAN channel change. Nothing here polls; it re-derives from the `/signal` presence stream.
 
    | Stage | Shown when | Way out |
    | --- | --- | --- |
-   | `NotPaired` | no paired peers | "Scan a code" → pairing |
-   | `PeerOffline` | paired, peer not running the app | waits |
+   | `Alone` | the account has no other device yet | waits; asks the user to sign in on the other device |
+   | `PeerOffline` | another device on the account, not running the app | waits |
    | `DifferentNetwork` | both online, advertised `lanAddress`es on different /24s | waits; names both networks |
    | `Connecting` | same /24, no channel yet | resolves itself |
    | `Connected` | a live encrypted LAN channel exists | **Continue** → home |
 
-   Only `Connected` offers Continue: past this screen the app assumes a live channel, so letting someone through early only moves the confusion later. The channel is checked before presence — presence can be stale, a channel carrying bytes cannot.
+   No stage offers a button except `Connected`, which offers Continue: past this screen the app assumes a live channel, so letting someone through early only moves the confusion later. The channel is checked before presence — presence can be stale, a channel carrying bytes cannot.
 
    `DifferentNetwork` compares the /24 of each side's advertised address. The netmask is an assumption (it is what every consumer router and phone hotspot uses, and a peer's address doesn't carry its mask), so it can only ever mislabel the *reason* on screen — `Connected` is still decided by a real channel.
 
@@ -52,21 +52,20 @@ This is deliberately **not** the complete product. We build only the loop **"log
 | --- | --- | --- |
 | 1. Authenticate | Verify email+password, issue JWT (authorises REST **and** the `/signal` socket) | [api.md](../api.md) · Better Auth |
 | 2. Identify device | Register (name, `platform`, `public_key`) or recognise this install | `POST /devices`, `GET /devices` · `devices` table ([schema.md](../schema.md)) |
-| 3. Match & trust | One-time code exchanges public keys, records trust | `POST /pairing/initiate` + `POST /pairing/claim` · `pairing_codes`, `device_trust` |
+| 3. Trust | Nothing to do — same account is the trust rule; the registry supplies each peer's public key | `GET /devices` · `trustedPeerIds` ([api.md](../api.md#trust)) |
 | 4. Go live | Both join `/signal`, swap LAN addresses, open a direct encrypted link | WebSocket `/signal` → LAN data plane ([protocol.md](../protocol.md)) |
 
 Nothing here puts payloads on the server — this slice only exercises the control plane plus establishing the LAN link; no clipboard/file bytes flow yet.
 
 ## "Device Login" — the concept
 
-Unlike a normal app login, FuseOS logins are **device-aware**: signing into the account is step one, but the app must also answer *"which of your devices is this?"* before it can connect anything. That second question — asked as **"What device are you logging in with today?"** — is what registers/selects the device identity for the session and makes the rest of the product (peer devices, pairing, sync) possible. It's the moment the app stops being "an account" and becomes "one of your devices."
+Unlike a normal app login, FuseOS logins are **device-aware**: signing into the account is step one, but the session also has to *be* a device before it can connect anything. What the app asks for is a **name**, not an identity — the identity is the keypair, minted on first launch and recognised on sight thereafter, and the platform is something the app already knows about itself. The name is the only part that needs a human, because it is what the other device shows in every list. That registration is the moment the app stops being "an account" and becomes "one of your devices" — and, since trust follows the account, it is also the moment the two devices are linked.
 
 ## What "test the part" means here
 
 A slice is done when, on two real devices on one Wi-Fi:
 1. Both sign in to the same account.
-2. Each completes Device Login and appears in the other's device list.
-3. First-time pairing via code succeeds; trust persists.
-4. A direct encrypted connection opens and presence/heartbeat stays green across a brief network blip (auto-reconnect).
+2. Each names itself and appears in the other's device list — with no pairing step in between.
+3. A direct encrypted connection opens and presence/heartbeat stays green across a brief network blip (auto-reconnect).
 
 No payload sync is tested in this slice — that's the next one.

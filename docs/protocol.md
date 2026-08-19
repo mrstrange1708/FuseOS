@@ -8,7 +8,7 @@ This is the **data plane**: the actual clipboard and file bytes moving **directl
 
 ## 1. Discovery & connection
 
-1. **Discovery:** `/signal` relays each peer's current `lanAddress` and `publicKey` on the peer card — the address says where to dial, the key says who must answer. That is everything needed to open the channel, so **mDNS (`_fuseos._tcp`) is not implemented yet**; it is the fallback for when pairing has to work without internet, and it is deliberately deferred.
+1. **Discovery:** `/signal` relays each peer's current `lanAddress` and `publicKey` on the peer card — the address says where to dial, the key says who must answer. That is everything needed to open the channel, so **mDNS (`_fuseos._tcp`) is not implemented yet**; it is the fallback for when linking has to work without internet, and it is deliberately deferred.
 2. **Who dials:** every device listens on an ephemeral TCP port, but only the device with the **lexicographically lower device id** dials. Without that tie-break both ends dial at once and every pair ends up with two half-used connections.
 3. **Connect & authenticate:** the dialer opens a plain TCP connection and both sides exchange a handshake frame — `[2-byte BE id length][device id UTF-8][32-byte nonce]` — in the clear. The device id is there because the listening side sees only an IP address and needs to know whose key to look up. Each side then requires the peer's **static P-256 public key** to be one the control plane vouched for ([schema.md](schema.md) `device_trust`); an unknown key closes the socket before anything is decrypted.
 4. **Channel keys:** ECDH over the two static keys, salted with both nonces, expanded by HKDF-SHA256 into **one key per direction** (`fuseos:lan:v1:low-to-high` and `…:high-to-low`, ordered by device id so both ends agree without extra negotiation). Every frame after the handshake is `[4-byte BE length][AES-GCM ciphertext || 16-byte tag]` over a serialised `Envelope`, with the frame counter as the GCM nonce.
@@ -114,7 +114,7 @@ Two facts about the host platforms shape what clipboard sync can actually promis
 | Android → macOS (auto-capture) | Only while FuseOS is on screen. |
 | Android → macOS (background) | Via the Share sheet only. |
 
-This is why **Share-sheet send is not a convenience feature on Android — it is the primary background path out of the device**. It is built: `ShareActivity` takes an `ACTION_SEND` of text or an image, brings the connection up if the process was dead, and pushes it to the paired devices.
+This is why **Share-sheet send is not a convenience feature on Android — it is the primary background path out of the device**. It is built: `ShareActivity` takes an `ACTION_SEND` of text or an image, brings the connection up if the process was dead, and pushes it to the account's other devices.
 
 A **foreground service** (`FuseConnectionService`) holds the process open so the LAN listener and the `/signal` socket survive backgrounding. It is what makes *receiving* work with the app closed; it does nothing for capture, because no service type lifts the clipboard-read restriction.
 

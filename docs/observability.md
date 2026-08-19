@@ -27,8 +27,8 @@ Configuration (see `server/.env.example`): `SENTRY_DSN`, `POSTHOG_API_KEY`, `POS
 
 ## Client integration (later)
 
-The Android (PostHog Android + Sentry Android) and macOS (PostHog + Sentry Cocoa) apps will adopt the same rule: capture UX/reliability metadata only — pairing success, sync latency, connection drops, error reports — **never** the synced content. Wire these when the client apps are built.
+The Android (PostHog Android + Sentry Android) and macOS (PostHog + Sentry Cocoa) apps will adopt the same rule: capture UX/reliability metadata only — link success, sync latency, connection drops, error reports — **never** the synced content. Wire these when the client apps are built.
 
 ## Suggested events (metadata only)
 
-`server_started`, `device_registered`, `pairing_initiated`, `pairing_completed`, `pairing_failed`, `peer_connected`, `peer_disconnected`, `clip_synced` (with `sizeBytes`, `kind=text|image`, `latencyMs` — **not** the content), `file_transfer_completed` (`sizeBytes`, `mime`, `durationMs`).
+`server_started`, `device_registered`, `peer_connected`, `peer_disconnected`, `clip_synced` (with `sizeBytes`, `kind=text|image`, `latencyMs` — **not** the content), `file_transfer_completed` (`sizeBytes`, `mime`, `durationMs`).

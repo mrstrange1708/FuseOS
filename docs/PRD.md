@@ -2,7 +2,7 @@
 
 **Version:** v1.0
 **Status:** Approved for build
-**Scope:** Authentication, device pairing, clipboard sync, file transfer, share-sheet send
+**Scope:** Authentication, device linking, clipboard sync, file transfer, share-sheet send
 
 ---
 
@@ -20,7 +20,7 @@ The result is constant friction: to move a link, a snippet, a screenshot, or a s
 
 ### Goals (v1)
 - One account, same login on both the Android and macOS apps.
-- Pair 2–3 of a user's own devices securely.
+- Link 2–3 of a user's own devices securely.
 - Real-time **clipboard sync** of text and images.
 - **File transfer** both directions.
 - **Share-sheet** integration: "Send to my Mac / my phone."
@@ -54,11 +54,11 @@ These are deferred deliberately to keep v1 focused, shippable, and honest about 
 ## 6. Core user journeys (v1)
 
 1. **Sign up / sign in** — the user creates a FuseOS account (email + password) and signs in on each device. Each device registers itself under the account.
-2. **Pair devices** — on device A the user starts pairing and gets a short-lived code; on device B they enter the code. The devices exchange keys and establish trust. Trusted devices reconnect automatically thereafter.
+2. **Link devices** — the user signs in with the same account on the second device. That is the whole step: the devices exchange keys through the control plane and connect. There is no code to read off one screen and type into the other, because the login already proved they belong to the same person. They reconnect automatically thereafter.
 3. **Clipboard sync** — the user copies text or an image on the phone; within a moment it is on the Mac's clipboard (and vice versa). Only user-initiated copies propagate; received content is not re-broadcast.
 
    **This is not symmetric, and the asymmetry is imposed by Android, not by our design.** Mac → phone always works. Phone → Mac auto-capture only works while FuseOS is on screen, because Android forbids background apps from reading the clipboard (API 29+). Sending from the phone in the background is done through the Share sheet. See [protocol.md](protocol.md) §5.1 — this materially changes what the product can promise, and it is why share-sheet send matters more on Android than the ordering below suggests.
-4. **File transfer** — the user picks a file and sends it to the paired device; it arrives and is saved / offered to save.
+4. **File transfer** — the user picks a file and sends it to the other device; it arrives and is saved / offered to save.
 5. **Share-sheet send** — from any app's native share sheet, the user picks "Send to my Mac / my phone" and the content lands on the other device.
 
 ## 7. Requirements
@@ -66,7 +66,7 @@ These are deferred deliberately to keep v1 focused, shippable, and honest about 
 ### Functional
 - Account creation, login, session refresh, and logout.
 - Device registration, listing, and revocation.
-- Pairing via short-lived, one-time, user-scoped code; device public-key exchange; persisted trust.
+- Linking by account membership; device public-key exchange through the control plane; a public key belongs to exactly one account.
 - Real-time presence: each device knows which of the user's other devices are online.
 - Clipboard capture (text + image) and injection on both platforms, user-initiated only.
 - Chunked file transfer with integrity verification and progress.
@@ -76,13 +76,13 @@ These are deferred deliberately to keep v1 focused, shippable, and honest about 
 ### Non-functional
 - **Latency first.** Clipboard sync must feel instantaneous on a healthy LAN. The control plane is never on the payload path.
 - **Privacy.** Clipboard/file payloads travel directly between devices, encrypted, and are never stored on the server or in the database.
-- **Integrity.** Account/device/pairing state is authoritative in PostgreSQL and protected by schema constraints.
-- **Reliability.** Durable background work (pairing notifications, code expiry, presence timeouts) must not be silently lost.
+- **Integrity.** Account and device state is authoritative in PostgreSQL and protected by schema constraints.
+- **Reliability.** Durable background work (presence timeouts, email verification) must not be silently lost.
 - **Graceful failure.** Disconnects trigger automatic reconnection; sync pauses cleanly and resumes; no indefinite queuing of clipboard events.
 
 ## 8. Architecture overview
 
-FuseOS separates a cloud **control plane** from a LAN **data plane**. The control plane does identity, pairing, and signaling; the data plane carries the actual clipboard and file payloads **directly between devices over the local network**. Payloads never transit the server or the database.
+FuseOS separates a cloud **control plane** from a LAN **data plane**. The control plane does identity, the device registry, and signaling; the data plane carries the actual clipboard and file payloads **directly between devices over the local network**. Payloads never transit the server or the database.
 
 ```mermaid
 flowchart TB
@@ -94,29 +94,29 @@ flowchart TB
 
     subgraph Cloud["Cloud Control Plane"]
         S["server/<br/>Node 22 + TS + Fastify<br/>REST + /signal WebSocket"]
-        DB[("PostgreSQL<br/>users · devices · pairing/trust")]
+        DB[("PostgreSQL<br/>users · devices")]
         IJ["Inngest<br/>durable jobs"]
         S --- DB
         S --- IJ
     end
 
-    A -->|"CONTROL PLANE<br/>auth · pairing · presence · signaling"| S
-    M -->|"CONTROL PLANE<br/>auth · pairing · presence · signaling"| S
+    A -->|"CONTROL PLANE<br/>auth · devices · presence · signaling"| S
+    M -->|"CONTROL PLANE<br/>auth · devices · presence · signaling"| S
 
     classDef data stroke-width:2px;
 ```
 
-**Read the diagram as two independent paths.** The vertical arrows to `server` are the control plane: login, device registry, pairing, presence, and LAN-address signaling. The horizontal arrow between the apps is the data plane: the real clipboard and file bytes, moving directly device-to-device. The server helps the two devices *find* each other; it never carries what they *send* each other.
+**Read the diagram as two independent paths.** The vertical arrows to `server` are the control plane: login, device registry, presence, and LAN-address signaling. The horizontal arrow between the apps is the data plane: the real clipboard and file bytes, moving directly device-to-device. The server helps the two devices *find* each other; it never carries what they *send* each other.
 
 Full detail: [HLD](HLD.md) · [LLD](LLD.md) · [schema](schema.md) · [API](api.md) · [protocol](protocol.md).
 
 ## 9. Success metrics
 
 - **p95 clipboard-sync latency < 300 ms** on a healthy shared LAN (copy on A → available on B).
-- **Pairing success rate > 99%** for devices on the same network.
+- **Link success rate > 99%** — a second sign-in reaches a live channel, for devices on the same network.
 - **Reconnect after network blip < 3 s**, with no user action.
 - **Zero payload bytes** observed on the server / in the DB (privacy invariant, verified by design + audit).
-- Retention signal: users keep both apps installed and paired after week 1.
+- Retention signal: users keep both apps installed and signed in after week 1.
 
 ## 10. Roadmap (post-v1)
 

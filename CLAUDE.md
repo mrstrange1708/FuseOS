@@ -12,7 +12,7 @@ Read `docs/` before writing code. `docs/PRD.md` (what & why), `docs/HLD.md` (arc
 
 FuseOS is **hybrid**: a cloud **control plane** and a LAN **data plane**, and they must stay separate.
 
-- **Control plane** = the Node/TypeScript `server/` + PostgreSQL. It handles auth, the device registry, pairing, and WebSocket **signaling** (presence + exchanging LAN addresses). This is the only thing that talks to the database.
+- **Control plane** = the Node/TypeScript `server/` + PostgreSQL. It handles auth, the device registry, and WebSocket **signaling** (presence + exchanging LAN addresses). This is the only thing that talks to the database.
 - **Data plane** = **direct device-to-device over the LAN** (same WiFi). Clipboard content and files travel here, encrypted, peer-to-peer. **This data never passes through `server/` and never touches the database.**
 
 The single most important invariant: **clipboard/file payloads never transit the server or the DB.** If a change would route payload data through the control plane, it is wrong — reconsider it.
@@ -22,10 +22,10 @@ The single most important invariant: **clipboard/file payloads never transit the
 These are the house rules. Hold the line on them in every change and every review.
 
 1. **Latency is the top priority.** Event-driven only — never poll. No unnecessary network hops. The server stays off the clipboard/file hot path (that's LAN-direct). When you touch a sync path, think about the round trip; treat a latency regression as a bug, not a tradeoff.
-2. **The database (PostgreSQL) is the source of truth** — but only for identity, device registry, and pairing/trust state. It is **never** a store for clipboard or file payloads (those are ephemeral and LAN-only).
+2. **The database (PostgreSQL) is the source of truth** — but only for identity and the device registry (trust is derived from it: same account = trusted). It is **never** a store for clipboard or file payloads (those are ephemeral and LAN-only).
 3. **Never let bad data into the DB.** Integrity is enforced in three layers, all required: (a) the schema itself — NOT NULL, FK, UNIQUE, CHECK, via Drizzle; (b) Zod validation at every external boundary before anything reaches a query; (c) transactions around any multi-row write. Don't rely on application logic alone for an invariant a constraint can guarantee.
 4. **Minimize schema migrations.** Design the schema deliberately up front. Prefer additive, backward-compatible changes. Avoid destructive migrations; a rename/drop needs a real reason.
-5. **Durable async work goes through Inngest.** Anything that must not be silently lost (pairing notifications, pairing-code expiry, presence-timeout sweeps, email verification) is an Inngest function, not fire-and-forget.
+5. **Durable async work goes through Inngest.** Anything that must not be silently lost (presence-timeout sweeps, email verification) is an Inngest function, not fire-and-forget.
 6. **Observability never sees user payloads.** PostHog (analytics) and Sentry (errors) receive only operational metadata — event names, platform, sizes, latency. Clipboard/file **contents never** reach analytics, error reports, or logs. The `capture()` guard in `server/src/observability/analytics.ts` enforces this and will throw on a payload-like property. See `docs/observability.md`.
 
 ## Repo layout & tooling
@@ -47,7 +47,7 @@ Clipboard sync is a broadcast, so it can loop. The rule (see `docs/protocol.md`)
 
 ## Scope discipline (v1)
 
-v1 is **foundation only**: auth, pairing, clipboard sync (text + images), file transfer, and Share-sheet send. **Screen mirroring, remote control, and call/SMS relay are explicitly out of scope for v1** — don't build toward them yet; they're a later phase and would change the transport design.
+v1 is **foundation only**: auth, device linking, clipboard sync (text + images), file transfer, and Share-sheet send. **Screen mirroring, remote control, and call/SMS relay are explicitly out of scope for v1** — don't build toward them yet; they're a later phase and would change the transport design.
 
 ## Commands
 

@@ -2,7 +2,7 @@
 
 **Version:** v2.0
 **Status:** Approved for build
-**Scope:** Authentication, device pairing, clipboard sync, file transfer
+**Scope:** Authentication, device linking, clipboard sync, file transfer
 
 > **Note on v1 docs:** the earlier HLD described a "local-first, backend optional" system while the earlier LLD described "the backend is always the coordinator." Those contradicted each other. This document supersedes both and defines the single agreed architecture: a **hybrid** system with a cloud control plane and a LAN data plane. See §2.
 
@@ -10,13 +10,13 @@
 
 ## 1. Purpose & scope
 
-FuseOS establishes a secure, low-latency bridge between **Android** and **macOS** devices under one user account. v1 delivers: secure authentication, trusted device pairing, real-time clipboard sync (text + images), and file transfer. Screen mirroring, remote control, and call/SMS relay are explicitly out of scope for v1.
+FuseOS establishes a secure, low-latency bridge between **Android** and **macOS** devices under one user account. v1 delivers: secure authentication, automatic device linking, real-time clipboard sync (text + images), and file transfer. Screen mirroring, remote control, and call/SMS relay are explicitly out of scope for v1.
 
 ## 2. Architecture: control plane vs. data plane
 
 FuseOS is **hybrid**. Two planes, kept strictly separate:
 
-- **Control plane (cloud).** The `server/` (Node 22 + TypeScript + Fastify) plus PostgreSQL. Responsible for identity, the device registry, pairing/trust, presence, and **signaling** (helping two devices discover each other's LAN address). This is the **only** component that touches the database.
+- **Control plane (cloud).** The `server/` (Node 22 + TypeScript + Fastify) plus PostgreSQL. Responsible for identity, the device registry, trust, presence, and **signaling** (helping two devices discover each other's LAN address). This is the **only** component that touches the database.
 - **Data plane (LAN).** A **direct, encrypted, device-to-device connection over the local network**. All clipboard content and file bytes travel here. **Payloads never pass through the server and are never stored in the database.**
 
 The server's job on the data path is limited to *introductions*: it tells device A how to reach device B on the LAN, then gets out of the way.
@@ -32,7 +32,7 @@ flowchart LR
 - Local-network-first for the data path; the server is never on the payload hot path.
 - Event-driven, persistent connections; no polling.
 - The database is the source of truth for identity/device/trust state — nothing else.
-- Explicit user consent for pairing; trust is revocable.
+- Trust follows the account and is revocable by signing a device out.
 
 ## 3. Components
 
@@ -50,13 +50,13 @@ flowchart LR
 
 ### 3.3 Server / control plane (Node 22 + TypeScript + Fastify)
 - **Auth** via Better Auth (email/password, sessions, JWT for REST + WebSocket).
-- **Device registry** and **pairing/trust** management in PostgreSQL (Drizzle ORM).
-- **WebSocket `/signal`**: presence + LAN-address signaling + pairing notifications.
-- **Inngest** for durable async work (pairing pushes, code expiry, presence-timeout sweeps, email verification).
+- **Device registry** in PostgreSQL (Drizzle ORM). Trust is derived from it, not stored separately.
+- **WebSocket `/signal`**: presence + LAN-address signaling.
+- **Inngest** for durable async work (presence-timeout sweeps, email verification).
 - Handles **no clipboard or file payloads**.
 
 ### 3.4 PostgreSQL
-- Source of truth for users, devices, pairing codes, and device trust relationships.
+- Source of truth for users and their devices. Trust needs no rows of its own — it is same-account membership.
 - Integrity enforced by schema constraints (see [schema.md](schema.md)).
 
 ## 4. Authentication & identity
@@ -64,13 +64,19 @@ flowchart LR
 - **User auth:** one FuseOS account; Better Auth issues a session and a JWT. The JWT authorizes both REST calls and the `/signal` WebSocket. Each device authenticates independently.
 - **Device identity:** on registration each device is assigned a unique device id and generates a device key pair. The public key is stored in the registry; the private key never leaves the device. Device identity is persistent and bound to the user account.
 
-## 5. Pairing & trust
+## 5. Trust
 
-1. User initiates pairing on device A → control plane issues a **short-lived, one-time, user-scoped code**.
-2. User enters the code on device B → control plane validates it.
-3. Devices exchange public keys (via the control plane) and record a **trusted relationship**.
-4. Trust is persisted (server registry + locally on each device). Trusted devices reconnect automatically.
-5. Trust is revocable at any time; revocation propagates and the data-plane connection is torn down.
+**Two devices are trusted because they are on the same account.** Both proved who they are
+at sign-in, and FuseOS links one user's own devices by design, so a separate pairing step
+would ask the user to prove a second time what the login already established.
+
+1. The user installs the app on the second device and signs in with the same account.
+2. It registers (device id + public key) and opens `/signal`.
+3. The control plane hands each side the other's peer card — public key and LAN address.
+4. The devices open the data-plane channel directly. No code, no scan, no confirmation.
+
+Trust is revoked by signing the device out (or deleting it from the registry): it stops
+appearing as a peer, and the data-plane connection is torn down.
 
 ## 6. Connectivity model
 
@@ -110,4 +116,4 @@ flowchart LR
 
 ## 12. Success criteria
 
-FuseOS v1 succeeds if devices pair reliably, connections stay stable, clipboard sync is fast and consistent, file transfer works both ways, and user trust is always explicit and revocable — with **zero payload data ever on the server**.
+FuseOS v1 succeeds if devices link reliably, connections stay stable, clipboard sync is fast and consistent, file transfer works both ways, and trust is always account-scoped and revocable — with **zero payload data ever on the server**.

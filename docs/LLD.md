@@ -14,7 +14,7 @@ This document describes *how* FuseOS is implemented. It points into the contract
 | Concern | Where | Notes |
 | --- | --- | --- |
 | Identity, sessions, JWT | `server/` (Better Auth) | source of truth in Postgres |
-| Device registry, pairing, trust | `server/` (Fastify + Drizzle) | Postgres, constraint-enforced |
+| Device registry (and the trust derived from it) | `server/` (Fastify + Drizzle) | Postgres, constraint-enforced |
 | Presence & LAN signaling | `server/` `/signal` WebSocket (`ws`) | no payloads |
 | Durable async jobs | `server/` (Inngest) | expiry, sweeps, notifications |
 | Clipboard/file transport | client ⇄ client (LAN) | protobuf over encrypted channel |
@@ -26,16 +26,16 @@ This document describes *how* FuseOS is implemented. It points into the contract
 UNREGISTERED
    │  register (JWT + device pubkey) → server
    ▼
-REGISTERED (not paired)
-   │  pairing complete (trust established)
+REGISTERED
+   │  (trusted with every other device on the account — nothing to do)
    ▼
-PAIRED / OFFLINE ──── connect to /signal ────► PAIRED / ONLINE
+OFFLINE ──── connect to /signal ────► ONLINE
    ▲                                               │
    │            LAN peer connection established     ▼
    └──────────── disconnect / network loss ──── SYNCING (data plane live)
 ```
 
-- **REGISTERED → PAIRED:** via the pairing flow (§4). A device may have multiple trusted peers (2–3 devices total per account in v1).
+- **REGISTERED:** registration is the whole of it — the device is trusted with every other device on the account from that moment (§4). 2–3 devices per account in v1.
 - **ONLINE:** connected to the control-plane `/signal` socket; presence is visible to the user's other devices.
 - **SYNCING:** a direct LAN data-plane channel to a trusted peer is open; clipboard/file events flow.
 - Transitions are event-driven; reconnection is automatic with backoff.
@@ -44,19 +44,27 @@ PAIRED / OFFLINE ──── connect to /signal ────► PAIRED / ONLINE
 
 - Every request/socket carries a Better Auth **JWT**; Fastify validates it before any handler runs.
 - Input is validated with **Zod** at the boundary; only validated, typed data reaches a Drizzle query.
-- Multi-row writes (e.g. pairing: create trust + mark code used) run in a **transaction**.
+- Multi-row writes run in a **transaction**.
 - Errors are typed and returned explicitly (fail loud on the control plane).
 
 Full endpoint list and payloads: [api.md](api.md).
 
-## 4. Pairing flow (detailed)
+## 4. Linking flow (detailed)
 
-1. **Initiate** (`POST /pairing/initiate`, device A): server generates a random short code, stores a `pairing_codes` row (`user_id`, `code`, `expires_at` ~ minutes, `used_at = null`), returns the code. An **Inngest** job is scheduled to expire it.
-2. **Claim** (`POST /pairing/claim`, device B): server validates the code (exists, same `user_id`, not expired, not used) inside a transaction, exchanges the two devices' public keys, writes a `device_trust` relationship, and marks the code `used_at = now()`.
-3. **Notify:** the server pushes a pairing-complete event to both devices over `/signal` (delivery made durable via Inngest).
-4. Both devices persist the peer's public key locally and may now establish the data-plane channel.
+There is no pairing step. `trustedPeerIds(deviceId)` (`server/src/devices/trust.ts`) means
+"every other device with the same `user_id`", so linking is a consequence of signing in:
 
-Codes are **short-lived, one-time, user-scoped** — a code can only ever pair two devices of the same account.
+1. **Register** (`POST /devices`): the new device sends its name, platform, and public key
+   and gets back its stable device id. Idempotent on the public key.
+2. **Connect** (`/signal` `hello`): the server replies `hello-ok` with the account's other
+   online devices — each card carrying its public key and LAN address — and relays
+   `peer-online` to them.
+3. Both sides now hold what they need and open the data-plane channel directly.
+
+A public key already registered to a **different** account is refused (`409
+public_key_taken`) rather than reassigned: public keys are not secret, so honouring the
+claim would let anyone who learns one take over that device. The client's move is to mint
+a fresh identity and retry, which is what both apps do.
 
 ## 5. Presence & signaling (`/signal`)
 
@@ -91,9 +99,9 @@ Once two trusted devices have a direct LAN channel (see [protocol.md](protocol.m
 ## 8. Constraints & invariants (must hold)
 
 - No clipboard/file payload ever reaches the server or the database.
-- The database is authoritative only for identity, devices, pairing codes, and trust.
+- The database is authoritative only for identity and the device registry.
 - Received events are never re-emitted (§6).
-- Pairing codes are one-time, time-limited, user-scoped.
+- A device's public key belongs to exactly one account and is never reassigned.
 - All external input is Zod-validated before touching Drizzle.
 - Schema changes are additive/backward-compatible where possible (see [schema.md](schema.md)).
 
