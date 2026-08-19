@@ -128,6 +128,18 @@ final class DashboardViewModel: ObservableObject {
         isLoading = false
     }
 
+    /// Manual linking, the safety net behind automatic linking. Both calls resolve the
+    /// device id through `ensureStarted`, so opening the sheet after a failed launch
+    /// registers then rather than refusing.
+    func initiatePairing() async throws -> String {
+        try await ControlPlane.initiatePairing(deviceId: ensureStarted()).code
+    }
+
+    func claimPairing(code: String) async throws {
+        _ = try await ControlPlane.claimPairing(deviceId: ensureStarted(), code: code)
+        await refresh()
+    }
+
     /// Live presence merged over the last REST snapshot for display.
     func onlineState(for device: DeviceItem) -> PeerPresence {
         if let live = presence[device.id] { return live }

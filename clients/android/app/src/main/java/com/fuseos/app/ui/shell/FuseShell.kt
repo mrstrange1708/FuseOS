@@ -32,6 +32,7 @@ import com.fuseos.app.data.ServiceLocator
 import com.fuseos.app.ui.components.ErrorBanner
 import com.fuseos.app.ui.components.FuseWordmark
 import com.fuseos.app.ui.dashboard.DashboardViewModel
+import com.fuseos.app.ui.dashboard.PairingScreen
 
 /**
  * The signed-in app: one view model, five slots, a floating glass bar over all of them.
@@ -49,6 +50,12 @@ fun FuseShell() {
     val context = LocalContext.current
 
     var tab by remember { mutableStateOf(FuseTab.Home) }
+    var showPairing by remember { mutableStateOf(false) }
+
+    if (showPairing) {
+        PairingScreen(viewModel = viewModel, onClose = { showPairing = false })
+        return
+    }
     val linked = state.connected.isNotEmpty()
     // With one other device this is always the right name; with several, the connected
     // one is the only device a clip can have come from.
@@ -103,6 +110,7 @@ fun FuseShell() {
                         deviceName = deviceName,
                         selfBattery = viewModel.selfBattery(),
                         onRename = viewModel::renameThisDevice,
+                        onLinkManually = { showPairing = true },
                         peerBattery = { id -> state.presence[id]?.battery },
                         onBatterySettings = {
                             // Opens the OS screen; there is no API to grant this for the

@@ -74,7 +74,9 @@ Indexes: `(user_id)` for registry listing.
   because they share a `user_id` — the sign-in already established that, so there is
   nothing to persist at link time and no code to issue or expire. `trustedPeerIds`
   (`server/src/devices/trust.ts`) is the whole of it. Both tables existed until migration
-  `0002`, which drops them.
+  `0002`, which drops them. The manual-link code that came back afterwards lives in memory
+  on the server — it is meaningless five minutes after it is issued, so it never earns a
+  row.
 - **No `clipboard_events` table. No `files` table.** Clipboard content and files are ephemeral and travel LAN-direct (see [protocol.md](protocol.md)). Storing them would violate the latency and privacy invariants and put user payloads in the DB.
 - No analytics/event log of payloads.
 

@@ -75,6 +75,11 @@ would ask the user to prove a second time what the login already established.
 3. The control plane hands each side the other's peer card — public key and LAN address.
 4. The devices open the data-plane channel directly. No code, no scan, no confirmation.
 
+If step 3 never happens — a dropped socket, stale presence — a **manual link code** is the
+fallback: one device shows a short code (or a QR), the other types or scans it, and the
+control plane forces the same peer-card exchange. It grants no trust it did not already
+have; it only makes the introduction happen now instead of eventually.
+
 Trust is revoked by signing the device out (or deleting it from the registry): it stops
 appearing as a peer, and the data-plane connection is torn down.
 

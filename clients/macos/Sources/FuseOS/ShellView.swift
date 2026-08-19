@@ -30,6 +30,7 @@ enum FuseSection: String, CaseIterable, Identifiable {
 struct ShellView: View {
     @EnvironmentObject var session: SessionStore
     @ObservedObject var viewModel: DashboardViewModel
+    @State private var showPairing = false
 
     @State private var section: FuseSection = .home
 
@@ -52,7 +53,7 @@ struct ShellView: View {
                 case .history:
                     HistoryPane(viewModel: viewModel)
                 case .devices:
-                    DevicesPane(viewModel: viewModel)
+                    DevicesPane(viewModel: viewModel, onLinkManually: { showPairing = true })
                 case .screen:
                     ComingSoonPane(
                         title: "Screen sharing",
@@ -60,7 +61,7 @@ struct ShellView: View {
                         symbol: "rectangle.on.rectangle",
                     )
                 case .account:
-                    AccountPane(viewModel: viewModel)
+                    AccountPane(viewModel: viewModel, onLinkManually: { showPairing = true })
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -68,6 +69,9 @@ struct ShellView: View {
         }
         .frame(minWidth: 720, minHeight: 520)
         .onAppear { viewModel.start() }
+        .sheet(isPresented: $showPairing) {
+            PairingView(viewModel: viewModel).environmentObject(session)
+        }
     }
 
     /// The link state, always visible regardless of which pane is open — it is the thing
@@ -204,6 +208,7 @@ private struct HistoryPane: View {
 
 private struct DevicesPane: View {
     @ObservedObject var viewModel: DashboardViewModel
+    let onLinkManually: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -219,9 +224,13 @@ private struct DevicesPane: View {
                 )
             }
 
-            Text("Any device signed in to this account links itself — there is nothing to pair.")
+            Text("Any device signed in to this account links itself.")
                 .font(.system(size: 11))
                 .foregroundStyle(FuseColor.muted)
+            Button("Link manually", action: onLinkManually)
+                .buttonStyle(.plain)
+                .font(.system(size: 12))
+                .foregroundStyle(FuseColor.accent)
             Spacer()
         }
         .padding(28)
@@ -233,6 +242,7 @@ private struct DevicesPane: View {
 private struct AccountPane: View {
     @EnvironmentObject var session: SessionStore
     @ObservedObject var viewModel: DashboardViewModel
+    let onLinkManually: () -> Void
 
     @State private var draftName = ""
 
@@ -273,6 +283,7 @@ private struct AccountPane: View {
 
             Divider().padding(.vertical, 4)
 
+            Button("Link manually", action: onLinkManually)
             Button("Sign out") {
                 viewModel.signOut()
                 session.clear()

@@ -22,7 +22,7 @@ The single most important invariant: **clipboard/file payloads never transit the
 These are the house rules. Hold the line on them in every change and every review.
 
 1. **Latency is the top priority.** Event-driven only — never poll. No unnecessary network hops. The server stays off the clipboard/file hot path (that's LAN-direct). When you touch a sync path, think about the round trip; treat a latency regression as a bug, not a tradeoff.
-2. **The database (PostgreSQL) is the source of truth** — but only for identity and the device registry (trust is derived from it: same account = trusted). It is **never** a store for clipboard or file payloads (those are ephemeral and LAN-only).
+2. **The database (PostgreSQL) is the source of truth** — but only for identity and the device registry (trust is derived from it: same account = trusted; the manual link code is an in-memory fallback, never a table). It is **never** a store for clipboard or file payloads (those are ephemeral and LAN-only).
 3. **Never let bad data into the DB.** Integrity is enforced in three layers, all required: (a) the schema itself — NOT NULL, FK, UNIQUE, CHECK, via Drizzle; (b) Zod validation at every external boundary before anything reaches a query; (c) transactions around any multi-row write. Don't rely on application logic alone for an invariant a constraint can guarantee.
 4. **Minimize schema migrations.** Design the schema deliberately up front. Prefer additive, backward-compatible changes. Avoid destructive migrations; a rename/drop needs a real reason.
 5. **Durable async work goes through Inngest.** Anything that must not be silently lost (presence-timeout sweeps, email verification) is an Inngest function, not fire-and-forget.

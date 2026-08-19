@@ -30,6 +30,30 @@ struct DeviceListResponse: Decodable {
     let devices: [DeviceItem]
 }
 
+struct PairInitiateRequest: Encodable {
+    let deviceId: String
+}
+
+struct PairInitiateResponse: Decodable {
+    let code: String
+    let expiresAt: String
+}
+
+struct PairClaimRequest: Encodable {
+    let deviceId: String
+    let code: String
+}
+
+struct TrustedPeer: Decodable {
+    let deviceId: String
+    let name: String
+    let platform: String
+}
+
+struct PairClaimResponse: Decodable {
+    let trustedWith: TrustedPeer
+}
+
 // MARK: - Authenticated control-plane client
 
 /// Talks to the FuseOS control plane with the caller's bearer token. Identity,
@@ -72,6 +96,17 @@ struct ControlPlane {
             path: path, method: "GET", body: Optional<DeviceRegisterRequest>.none,
         )
         return response.devices
+    }
+
+    // Manual linking — the safety net behind automatic linking. Claiming a code does not
+    // grant trust (same account already does); it forces the peer-card exchange that
+    // `/signal` normally delivers on its own. See docs/api.md.
+    static func initiatePairing(deviceId: String) async throws -> PairInitiateResponse {
+        try await send(path: "/pairing/initiate", method: "POST", body: PairInitiateRequest(deviceId: deviceId))
+    }
+
+    static func claimPairing(deviceId: String, code: String) async throws -> PairClaimResponse {
+        try await send(path: "/pairing/claim", method: "POST", body: PairClaimRequest(deviceId: deviceId, code: code))
     }
 
     // MARK: - Transport

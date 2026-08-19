@@ -2,7 +2,7 @@ package com.fuseos.app.data
 
 import com.fuseos.app.core.DeviceInfo
 
-/** Coordinates device registration and listing. The UI talks to this. */
+/** Coordinates device registration, listing, and manual linking. The UI talks to this. */
 class DeviceRepository(
     private val api: ControlPlaneApi,
     private val session: SessionStore,
@@ -40,6 +40,12 @@ class DeviceRepository(
 
     suspend fun listDevices(selfId: String?): List<DeviceItem> =
         api.listDevices(selfId).devices
+
+    suspend fun initiatePairing(deviceId: String): PairInitiateResponse =
+        api.initiatePairing(PairInitiateRequest(deviceId))
+
+    suspend fun claimPairing(deviceId: String, code: String): PairClaimResponse =
+        api.claimPairing(PairClaimRequest(deviceId, code))
 
     fun batteryPercent(): Int? = deviceInfo.batteryPercent()
 }

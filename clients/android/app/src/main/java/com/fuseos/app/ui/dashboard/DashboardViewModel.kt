@@ -116,6 +116,18 @@ class DashboardViewModel(
         }
     }
 
+    /**
+     * Manual linking, the safety net behind automatic linking. Both calls resolve the
+     * device id through [ConnectionManager.ensureStarted], so opening the screen after a
+     * failed launch registers then rather than refusing.
+     */
+    suspend fun initiatePairing(): String = repo.initiatePairing(connection.ensureStarted()).code
+
+    suspend fun claimPairing(code: String) {
+        repo.claimPairing(connection.ensureStarted(), code)
+        refresh()
+    }
+
     fun selfBattery(): Int? = repo.batteryPercent()
 
     /**

@@ -28,3 +28,22 @@ data class DeviceItem(
 
 @Serializable
 data class DeviceListResponse(val devices: List<DeviceItem>)
+
+// Manual linking — the safety net behind automatic linking. Claiming a code does not grant
+// trust (same account already does); it forces the peer-card exchange that `/signal`
+// normally delivers on its own. See docs/api.md.
+
+@Serializable
+data class PairInitiateRequest(val deviceId: String)
+
+@Serializable
+data class PairInitiateResponse(val code: String, val expiresAt: String)
+
+@Serializable
+data class PairClaimRequest(val deviceId: String, val code: String)
+
+@Serializable
+data class TrustedPeer(val deviceId: String, val name: String, val platform: String)
+
+@Serializable
+data class PairClaimResponse(val trustedWith: TrustedPeer)

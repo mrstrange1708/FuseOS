@@ -46,6 +46,7 @@ fun ProfileScreen(
     state: DashboardViewModel.UiState,
     peerBattery: (String) -> Int?,
     deviceName: String?,
+    onLinkManually: () -> Unit,
     selfBattery: Int?,
     onRename: (String) -> Unit,
     onBatterySettings: () -> Unit,
@@ -124,6 +125,12 @@ fun ProfileScreen(
         }
 
         Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(10.dp))
+        SettingRow(
+            "Link manually",
+            "Devices on this account link themselves. Use a code only if one didn't show up.",
+            onLinkManually,
+        )
         Spacer(Modifier.height(10.dp))
         SettingRow(
             "Background permission",

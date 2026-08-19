@@ -67,6 +67,47 @@ The consequence for the client is that a new device needs no user action beyond 
 in: it registers, opens `/signal`, and the account's other devices receive `peer-online`
 with everything needed to dial it.
 
+### Manual linking (the safety net)
+
+Automatic linking is the path; these two endpoints are the hand-crank for when it hasn't
+happened — a socket that dropped, presence gone stale, a device the other side simply
+hasn't heard about. **They do not grant trust** (same account already does). They force the
+peer-card exchange that `/signal` normally delivers on its own.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/pairing/initiate` | Issue a short-lived code (device A) |
+| POST | `/pairing/claim` | Redeem it; both ends get the other's peer card (device B) |
+
+**`POST /pairing/initiate`**
+```jsonc
+// request  { "deviceId": "uuid-of-A" }
+// response 201
+{ "code": "A7X2-9QKM", "expiresAt": "2026-08-19T12:34:56Z" }
+```
+**8 uppercase alphanumerics shown grouped `XXXX-XXXX`** (the alphabet omits the ambiguous
+`I O 0 1`), valid for 5 minutes, held in memory on the server rather than in a table — a
+code means nothing once claimed, so persisting it would buy only survival across a restart.
+
+The initiating device may also render the code as a **QR** carrying
+`fuseos://pair?code=XXXX-XXXX` — the same code by another route, so no extra endpoint and
+no extra trust. macOS shows one (CoreImage) and Android scans it (CameraX + ML Kit); the
+scanner accepts only that URI or a bare complete code, so an unrelated QR can never become
+a claim. Parsing rules live in `PairingCode` on both clients with mirrored test vectors.
+
+**`POST /pairing/claim`**
+```jsonc
+// request  { "deviceId": "uuid-of-B", "code": "A7X2-9QKM" }
+// response 200
+{ "trustedWith": { "deviceId": "uuid-of-A", "name": "Mac mini", "platform": "macos",
+                   "publicKey": "base64…", "lanAddress": "192.168.1.10:47100" } }
+```
+Validates the code (exists, **same account**, not spent), returns A's card to B, and pushes
+B's card to A over `/signal` as `peer-online`. The code is spent on claim, so a
+shoulder-surfed one cannot be replayed. Errors: `code_invalid`, `same_device`,
+`device_not_found`. A code issued on another account reads as `code_invalid` — whether one
+exists elsewhere is not the caller's business.
+
 ## WebSocket — `/signal`
 
 Authenticated by a **first `hello` frame carrying the bearer token** (dev stand-in; a JWT via `Sec-WebSocket-Protocol` under Better Auth). Carries **presence and LAN-address signaling only — never payloads.** A socket that doesn't authenticate within 5s is closed.

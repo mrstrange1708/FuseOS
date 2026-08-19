@@ -2,8 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Scanning the pairing QR shown on the Mac. Requested at the moment the scanner
-         opens, and the app is still fully usable by typing the code instead. -->
+    <!-- Scanning the link QR shown on the Mac. Only the manual fallback needs this:
+         devices normally link themselves, and the code can always be typed instead.
+         Requested at the moment the scanner opens, never at launch. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
     <!-- Holds the process open so the LAN listener and /signal socket survive the app
          being backgrounded. Without it Android freezes us and the Mac sees this phone

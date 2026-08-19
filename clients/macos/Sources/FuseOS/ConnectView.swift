@@ -13,6 +13,8 @@ struct ConnectView: View {
     @ObservedObject var viewModel: DashboardViewModel
     let onContinue: () -> Void
 
+    @State private var showPairing = false
+
     private var state: ConnectState { viewModel.connectState }
 
     /// The peer being connected to, or the only paired peer while it is still offline.
@@ -34,21 +36,12 @@ struct ConnectView: View {
 
             Spacer(minLength: 24)
 
-            VStack(spacing: 0) {
-                DeviceChip(
-                    name: viewModel.selfDevice?.name ?? session.deviceName ?? "This Mac",
-                    platform: "macos",
-                    caption: "This device",
-                    lit: true,
-                )
-                LinkBeam(stage: state.stage)
-                DeviceChip(
-                    name: peer?.name ?? "Your other device",
-                    platform: peer?.platform ?? "android",
-                    caption: peerCaption,
-                    lit: state.stage == .connected,
-                )
-            }
+            LinkDiagram(
+                stage: state.stage,
+                selfName: viewModel.selfDevice?.name ?? session.deviceName ?? "This Mac",
+                peerName: peer?.name ?? "Your phone",
+                peerCaption: peerCaption,
+            )
             .frame(maxWidth: .infinity)
 
             Spacer(minLength: 24)
@@ -74,6 +67,9 @@ struct ConnectView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(FuseColor.bg)
         .onAppear { viewModel.start() }
+        .sheet(isPresented: $showPairing) {
+            PairingView(viewModel: viewModel).environmentObject(session)
+        }
     }
 
     // MARK: - Per-stage copy
@@ -122,64 +118,212 @@ struct ConnectView: View {
         case .alone, .peerOffline, .differentNetwork, .connecting:
             // Deliberately no Continue here: past this screen the app assumes a live
             // channel, so letting someone through early only moves the confusion later.
-            // Nothing to press either — every one of these stages clears itself.
+            // Every stage clears itself, so the only offer is the manual fallback —
+            // understated, because reaching for it usually means waiting would have worked.
             HStack(spacing: 10) {
                 ProgressView().controlSize(.small)
                 Text("Waiting…")
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(FuseColor.muted)
                 Spacer()
+                Button("Link manually") { showPairing = true }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(FuseColor.accent)
             }
         }
     }
 }
 
-/// One device in the connect diagram.
-private struct DeviceChip: View {
-    let name: String
-    let platform: String
-    let caption: String
+/// The two devices, the link between them, and the mark that lights when it is live.
+///
+/// This is the whole status in one picture, so it is drawn rather than described: a phone
+/// and a laptop as recognisable silhouettes, a channel between them that carries a pulse
+/// while dialling and goes solid on connect, and the FuseOS mark riding the middle of it.
+private struct LinkDiagram: View {
+    let stage: ConnectStage
+    let selfName: String
+    let peerName: String
+    let peerCaption: String
+
+    private var isLive: Bool { stage == .connected }
+
+    var body: some View {
+        VStack(spacing: 14) {
+            HStack(spacing: 0) {
+                DeviceFigure(kind: .phone, lit: isLive)
+                    .frame(width: 52, height: 78)
+                LinkChannel(stage: stage)
+                    .frame(height: 78)
+                DeviceFigure(kind: .laptop, lit: true)
+                    .frame(width: 104, height: 78)
+            }
+
+            HStack(spacing: 0) {
+                Caption(title: peerName, detail: peerCaption, lit: isLive)
+                    .frame(maxWidth: .infinity)
+                Caption(title: selfName, detail: "this device", lit: true)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
+    private struct Caption: View {
+        let title: String
+        let detail: String
+        let lit: Bool
+
+        var body: some View {
+            VStack(spacing: 3) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(FuseColor.ink)
+                    .lineLimit(1)
+                Text(detail)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(lit ? FuseColor.accent : FuseColor.muted)
+                    .lineLimit(1)
+            }
+        }
+    }
+}
+
+/// A phone or a laptop, drawn rather than borrowed from SF Symbols so the two read as the
+/// same family and the screen can light up independently of the body.
+private struct DeviceFigure: View {
+    enum Kind { case phone, laptop }
+
+    let kind: Kind
     let lit: Bool
 
+    private var bodyStroke: Color { lit ? FuseColor.ink.opacity(0.75) : FuseColor.outline }
+    private var screenFill: Color { lit ? FuseColor.accent.opacity(0.16) : FuseColor.surfaceAlt }
+
     var body: some View {
-        HStack(spacing: 14) {
-            deviceGlyph(platform: platform, online: lit)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(name)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(FuseColor.ink)
-                Text(caption)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(lit ? FuseColor.accent : FuseColor.muted)
+        GeometryReader { geometry in
+            let w = geometry.size.width
+            let h = geometry.size.height
+            switch kind {
+            case .phone:
+                let bodyRect = CGRect(x: w * 0.12, y: h * 0.06, width: w * 0.76, height: h * 0.88)
+                ZStack {
+                    RoundedRectangle(cornerRadius: w * 0.16)
+                        .fill(screenFill)
+                        .frame(width: bodyRect.width, height: bodyRect.height)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: w * 0.16)
+                                .stroke(bodyStroke, lineWidth: 1.6),
+                        )
+                    // The speaker slot: the one detail that stops a rounded rectangle
+                    // from reading as a generic tile.
+                    Capsule()
+                        .fill(bodyStroke.opacity(0.7))
+                        .frame(width: bodyRect.width * 0.28, height: 2)
+                        .offset(y: -bodyRect.height * 0.38)
+                }
+                .frame(width: w, height: h)
+
+            case .laptop:
+                let lidW = w * 0.74
+                let lidH = h * 0.68
+                VStack(spacing: 0) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(screenFill)
+                        .frame(width: lidW, height: lidH)
+                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(bodyStroke, lineWidth: 1.6))
+                    // The base is wider than the lid and barely tall — that proportion is
+                    // the entire reason this reads as a laptop and not as a monitor.
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(bodyStroke.opacity(0.85))
+                        .frame(width: w, height: 4)
+                }
+                .frame(width: w, height: h, alignment: .center)
             }
-            Spacer(minLength: 0)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity)
-        .background(FuseColor.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(FuseColor.outline.opacity(0.6), lineWidth: 1))
     }
 }
 
-/// The line between the two devices — the whole status in one glance.
-private struct LinkBeam: View {
+/// The channel between the devices: a rail, a pulse that runs it while dialling, and the
+/// FuseOS mark sitting on top of it.
+private struct LinkChannel: View {
     let stage: ConnectStage
-    @State private var pulse = false
+
+    @State private var pulseAt: CGFloat = 0
+    @State private var shine = false
+
+    private var isLive: Bool { stage == .connected }
+    private var isDialling: Bool { stage == .connecting }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Rectangle()
-                .fill(stage == .connected ? FuseColor.accent : FuseColor.outline)
-                .frame(width: 2, height: 34)
-                .opacity(stage == .connecting && pulse ? 0.25 : 1)
-                .animation(
-                    stage == .connecting
-                        ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true)
-                        : .default,
-                    value: pulse,
+        GeometryReader { geometry in
+            let w = geometry.size.width
+            let midY = geometry.size.height / 2
+
+            ZStack {
+                // The rail. Dashed until a channel exists, solid once one does — a broken
+                // line for a broken link is the one piece of this that needs no caption.
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: midY))
+                    path.addLine(to: CGPoint(x: w, y: midY))
+                }
+                .stroke(
+                    isLive ? FuseColor.accent : FuseColor.outline,
+                    style: StrokeStyle(
+                        lineWidth: isLive ? 2 : 1.5,
+                        dash: isLive ? [] : [4, 5],
+                    ),
                 )
+
+                // The pulse: a comet that runs device-to-device while we dial. This is the
+                // preloader — it says "something is happening" without a spinner, and it
+                // travels in the direction the connection is being made.
+                if isDialling {
+                    LinearGradient(
+                        colors: [FuseColor.accent.opacity(0), FuseColor.accent, FuseColor.accent.opacity(0)],
+                        startPoint: .leading,
+                        endPoint: .trailing,
+                    )
+                    .frame(width: w * 0.4, height: 2)
+                    .position(x: pulseAt * w, y: midY)
+                }
+
+                // The mark rides the middle of the rail, and lights only when the channel
+                // is real — so the logo itself is the status.
+                ZStack {
+                    Circle()
+                        .fill(FuseColor.bg)
+                        .frame(width: 34, height: 34)
+                    Circle()
+                        .stroke(isLive ? FuseColor.accent : FuseColor.outline, lineWidth: isLive ? 1.5 : 1)
+                        .frame(width: 34, height: 34)
+                    FuseMark(height: 12)
+                        .opacity(isLive ? 1 : 0.45)
+                }
+                .shadow(color: FuseColor.accent.opacity(isLive && shine ? 0.55 : 0), radius: 14)
+                .scaleEffect(isLive && shine ? 1.06 : 1)
+                .position(x: w / 2, y: midY)
+            }
+            .onAppear { restart() }
+            .onChange(of: stage) { _ in restart() }
         }
-        .onAppear { pulse = true }
+    }
+
+    /// Animations are driven from the stage rather than left running, so a screen sitting
+    /// at `peerOffline` for an hour is not repainting a comet nobody is watching.
+    private func restart() {
+        pulseAt = 0
+        shine = false
+        if isDialling {
+            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: false)) {
+                pulseAt = 1
+            }
+        }
+        if isLive {
+            // One breath on arrival, then settle. A logo that pulses forever stops meaning
+            // "it just connected" and starts meaning nothing.
+            withAnimation(.easeOut(duration: 0.45)) { shine = true }
+            withAnimation(.easeInOut(duration: 1.1).delay(0.45)) { shine = false }
+        }
     }
 }
