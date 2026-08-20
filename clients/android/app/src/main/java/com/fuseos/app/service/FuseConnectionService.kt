@@ -39,6 +39,7 @@ class FuseConnectionService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var startJob: Job? = null
+    private var islandJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -54,15 +55,19 @@ class FuseConnectionService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (startJob?.isActive != true) {
-            // The island is the only feedback a user gets while FuseOS is off screen, so
-            // it is driven from here — the one component guaranteed to be alive whenever
-            // a clip can arrive.
-            scope.launch {
+        // The island is the only feedback a user gets while FuseOS is off screen, so it is
+        // driven from here — the one component guaranteed to be alive whenever a clip can
+        // arrive. Guarded separately from `startJob`, which finishes as soon as the
+        // connection is up: keying off that would start a second collector on the next
+        // onStartCommand, and every clip would show its island twice.
+        if (islandJob?.isActive != true) {
+            islandJob = scope.launch {
                 ServiceLocator.clipboardSync.events.collect { entry ->
                     ServiceLocator.clipIsland.clip(entry)
                 }
             }
+        }
+        if (startJob?.isActive != true) {
             startJob = scope.launch {
                 // Fail soft: the phone may be off-network at boot. The dashboard and the
                 // Share sheet both retry through the same ConnectionManager.

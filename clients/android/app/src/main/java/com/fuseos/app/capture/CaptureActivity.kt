@@ -89,7 +89,10 @@ class CaptureActivity : ComponentActivity() {
                 if (peers.isNullOrEmpty()) return@withContext "No device connected."
                 val clip = ServiceLocator.clipboardSync.capture()
                     ?: return@withContext "Your clipboard is empty."
-                if (ServiceLocator.clipboardSync.send(clip)) "Sent to your devices." else "Couldn't send that."
+                if (!ServiceLocator.clipboardSync.send(clip)) return@withContext "Couldn't send that."
+                // Naming the missing permission, because from here the send looks like it
+                // worked and the island looks broken — and the fix is two taps away.
+                "Sent. Turn on the island in FuseOS → Profile."
             }
             Toast.makeText(this@CaptureActivity, message, Toast.LENGTH_SHORT).show()
             finish()

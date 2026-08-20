@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -215,9 +216,22 @@ class ClipIsland(context: Context) {
         PixelFormat.TRANSLUCENT,
     ).apply {
         gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        // Clears the status bar / punch-hole camera on effectively every phone. The island
-        // belongs just under the notch, the way it does on the Mac.
-        y = TOP_MARGIN_PX
+        // FLAG_LAYOUT_NO_LIMITS measures y from the true top of the screen, so the status
+        // bar has to be stepped over explicitly. A fixed offset does not survive contact
+        // with real hardware: it hid the title behind the clock on a Realme, whose status
+        // bar is half again as tall as a Pixel's. Ask the platform instead.
+        y = statusBarHeight() + (TOP_GAP_DP * appContext.resources.displayMetrics.density).toInt()
+    }
+
+    /**
+     * Height of the status bar in pixels, including whatever the OEM does with a notch or
+     * punch-hole. Falls back to a sane guess on the phones that do not publish it.
+     */
+    private fun statusBarHeight(): Int {
+        val resources = appContext.resources
+        val id = resources.getIdentifier("status_bar_height", "dimen", "android")
+        if (id > 0) return resources.getDimensionPixelSize(id)
+        return (24 * resources.displayMetrics.density).toInt()
     }
 
     /** Where to send the user when [canDraw] is false. */
@@ -230,7 +244,9 @@ class ClipIsland(context: Context) {
         private const val PROMPT_VISIBLE_MS = 6_000L
         private const val STATUS_VISIBLE_MS = 2_400L
         private const val EXIT_MS = 260L
-        private const val TOP_MARGIN_PX = 36
+        /** Breathing room under the status bar — and under an OEM island, if the
+         *  phone has one of its own sitting in exactly this spot. */
+        private const val TOP_GAP_DP = 10f
     }
 }
 
@@ -295,7 +311,9 @@ private fun IslandSurface(content: IslandContent?) {
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
         Row(
             modifier = Modifier
-                .padding(top = drop)
+                // offset, not padding: the capsule starts *above* its slot and slides
+                // down into it, and padding rejects a negative value outright.
+                .offset(y = drop)
                 .width(width)
                 .height(HEIGHT)
                 .alpha(shellAlpha)
