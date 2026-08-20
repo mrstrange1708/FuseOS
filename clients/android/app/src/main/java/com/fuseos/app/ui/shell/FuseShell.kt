@@ -32,6 +32,7 @@ import com.fuseos.app.data.ServiceLocator
 import com.fuseos.app.ui.components.ErrorBanner
 import com.fuseos.app.ui.components.FuseWordmark
 import com.fuseos.app.ui.dashboard.DashboardViewModel
+import com.fuseos.app.service.ClipTile
 import com.fuseos.app.ui.island.ClipIsland
 import com.fuseos.app.ui.dashboard.PairingScreen
 
@@ -116,6 +117,7 @@ fun FuseShell() {
                         // this in Settings and comes back, so a snapshot taken on first
                         // draw would still read "off" when they return.
                         islandEnabled = ServiceLocator.clipIsland.canDraw(),
+                        onAddTile = tileAdder(context),
                         onEnableIsland = {
                             runCatching {
                                 context.startActivity(ClipIsland.overlaySettingsIntent(context))
@@ -157,5 +159,31 @@ fun FuseShell() {
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 12.dp),
         )
+    }
+}
+
+/**
+ * Offers to add the "Send clipboard" tile, or null where the platform cannot.
+ *
+ * Android will not place a tile on a user's behalf, and before API 33 it would not even
+ * ask — the user had to find the shade's edit screen unaided, which most people never do.
+ * `requestAddTileService` is the ask, and it is the difference between a tile that exists
+ * and a tile that is used.
+ */
+private fun tileAdder(context: android.content.Context): (() -> Unit)? {
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return null
+    return {
+        runCatching {
+            context.getSystemService(android.app.StatusBarManager::class.java)
+                ?.requestAddTileService(
+                    android.content.ComponentName(context, ClipTile::class.java),
+                    "Send clipboard",
+                    android.graphics.drawable.Icon.createWithResource(
+                        context, com.fuseos.app.R.drawable.ic_notification,
+                    ),
+                    {  it.run() },
+                    {},
+                )
+        }
     }
 }

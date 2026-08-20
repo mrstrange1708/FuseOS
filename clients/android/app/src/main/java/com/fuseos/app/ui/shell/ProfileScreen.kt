@@ -49,6 +49,7 @@ fun ProfileScreen(
     onLinkManually: () -> Unit,
     islandEnabled: Boolean,
     onEnableIsland: () -> Unit,
+    onAddTile: (() -> Unit)?,
     selfBattery: Int?,
     onRename: (String) -> Unit,
     onBatterySettings: () -> Unit,
@@ -144,6 +145,18 @@ fun ProfileScreen(
             },
             onEnableIsland,
         )
+        // Null below Android 13, where there is no API to offer this and the user has to
+        // edit the shade themselves. Showing a row that cannot do anything is worse than
+        // not showing one.
+        onAddTile?.let { addTile ->
+            Spacer(Modifier.height(10.dp))
+            SettingRow(
+                "Add the Quick Settings tile",
+                "Puts \"Send clipboard\" in your shade, so a copy is one pull and one tap " +
+                    "away from any app.",
+                addTile,
+            )
+        }
         Spacer(Modifier.height(10.dp))
         SettingRow(
             "Background permission",
