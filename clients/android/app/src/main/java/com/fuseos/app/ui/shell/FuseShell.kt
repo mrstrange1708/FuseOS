@@ -118,6 +118,8 @@ fun FuseShell() {
                         // draw would still read "off" when they return.
                         islandEnabled = ServiceLocator.clipIsland.canDraw(),
                         onAddTile = tileAdder(context),
+                        keyboardActive = isFuseKeyboard(context),
+                        onKeyboardSetup = { setUpKeyboard(context) },
                         onEnableIsland = {
                             runCatching {
                                 context.startActivity(ClipIsland.overlaySettingsIntent(context))
@@ -184,6 +186,35 @@ private fun tileAdder(context: android.content.Context): (() -> Unit)? {
                     {  it.run() },
                     {},
                 )
+        }
+    }
+}
+
+/** True when FuseOS is the selected input method — which is what lifts the clipboard block. */
+private fun isFuseKeyboard(context: android.content.Context): Boolean =
+    Settings.Secure.getString(
+        context.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD,
+    )?.startsWith(context.packageName) == true
+
+/**
+ * Walks the user to making FuseOS the keyboard — two steps, because Android splits them.
+ *
+ * A keyboard must first be *enabled* in Settings (an explicit warning screen no app may
+ * skip), and only then can it be *selected*. Sending someone straight to the picker before
+ * enabling shows a list FuseOS is not in, which reads as the feature being broken.
+ */
+private fun setUpKeyboard(context: android.content.Context) {
+    val manager = context.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+    val enabled = manager?.enabledInputMethodList.orEmpty().any {
+        it.packageName == context.packageName
+    }
+    runCatching {
+        if (enabled) {
+            manager?.showInputMethodPicker()
+        } else {
+            context.startActivity(
+                Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
         }
     }
 }

@@ -50,6 +50,8 @@ fun ProfileScreen(
     islandEnabled: Boolean,
     onEnableIsland: () -> Unit,
     onAddTile: (() -> Unit)?,
+    keyboardActive: Boolean,
+    onKeyboardSetup: () -> Unit,
     selfBattery: Int?,
     onRename: (String) -> Unit,
     onBatterySettings: () -> Unit,
@@ -145,6 +147,21 @@ fun ProfileScreen(
             },
             onEnableIsland,
         )
+        Spacer(Modifier.height(10.dp))
+        SettingRow(
+            if (keyboardActive) "Auto-capture · on" else "Turn on auto-capture",
+            if (keyboardActive) {
+                "FuseOS is your keyboard, so copying anywhere brings up the island by itself."
+            } else {
+                // Naming the real reason, because "install a keyboard to sync your
+                // clipboard" is otherwise a bizarre thing to be asked.
+                "Android only lets your keyboard read the clipboard in the background. " +
+                    "Make FuseOS your keyboard and a copy in any app pops the island on " +
+                    "its own — no tile, no tap to reach it."
+            },
+            onKeyboardSetup,
+        )
+
         // Null below Android 13, where there is no API to offer this and the user has to
         // edit the shade themselves. Showing a row that cannot do anything is worse than
         // not showing one.

@@ -248,30 +248,30 @@ class ClipboardSync(
     /** Sends a clip taken earlier by [capture]. Same path as a Share-sheet send. */
     fun send(clip: PendingClip): Boolean = share(clip.text, clip.imageBytes, clip.mime)
 
-    /** A local copy — broadcast it unless it is the echo of something we just injected. */
-    private fun onLocalChange(guard: LoopGuard) {
-        // Images first: an image on the clipboard is a content URI, and coercing that to
-        // text yields the URI string, which would sync a useless "content://…" instead.
-        val image = currentImage()
-        if (image != null) {
-            val (mime, bytes) = image
-            if (bytes.size > MAX_INLINE_IMAGE_BYTES) return // see the constant
-            if (!guard.shouldEmit(LoopGuard.hash(bytes))) return
-            record(text = null, imageBytes = bytes, mime = mime, fromSelf = true)
-            broadcast {
-                it.setClipImage(
-                    ClipImage.newBuilder()
-                        .setMime(mime)
-                        .setData(ByteString.copyFrom(bytes)),
-                )
-            }
-            return
-        }
+    /**
+     * Offered a local copy, decides what it does next.
+     *
+     * Set, and a copy is *proposed* — the island asks before anything leaves the device.
+     * Unset, and a copy is sent outright, which is the behaviour when there is nowhere to
+     * draw a prompt. Asking is the default because not everything a person copies is
+     * something they want on another machine, and a password manager's clipboard is the
+     * obvious case.
+     *
+     * ponytail: prompt-always. If the taps become the annoyance rather than the
+     * safeguard, sending outright is this callback left null.
+     */
+    var onLocalCopy: ((PendingClip) -> Unit)? = null
 
-        val text = currentText() ?: return
-        if (!guard.shouldEmit(LoopGuard.hash(text))) return
-        record(text = text, imageBytes = null, mime = null, fromSelf = true)
-        broadcast { it.setClipText(ClipText.newBuilder().setText(text)) }
+    /** A local copy — offer it unless it is the echo of something we just injected. */
+    private fun onLocalChange(guard: LoopGuard) {
+        val clip = capture() ?: return
+        // Images hash by bytes and text by string, exactly as the emit path always has;
+        // getting this wrong would either loop injected content back or silence a real copy.
+        val hash = clip.imageBytes?.let { LoopGuard.hash(it) } ?: LoopGuard.hash(clip.text.orEmpty())
+        if (!guard.shouldEmit(hash)) return
+
+        val offer = onLocalCopy
+        if (offer != null) offer(clip) else send(clip)
     }
 
     /** The listener fires on the main thread; socket writes must not. */

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Declares the FuseOS keyboard to the system. It exists so FuseOS can be the default
+     input method, which is the one exemption Android grants from the background
+     clipboard-read block. See docs/protocol.md §5.1. -->
+<input-method xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsActivity="com.fuseos.app.MainActivity">
+    <subtype
+        android:label="@string/app_name"
+        android:imeSubtypeMode="keyboard"
+        android:imeSubtypeLocale="en_US" />
+</input-method>

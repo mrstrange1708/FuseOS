@@ -86,7 +86,17 @@ object ServiceLocator {
             // changes across restarts — hence a provider rather than a fixed value.
             lanAddressProvider = { transport.lanAddress() },
         )
-        clipIsland = ClipIsland(appContext)
+        val island = ClipIsland(appContext)
+        clipIsland = island
+        // A copy asks before it travels. With no overlay permission there is nowhere to
+        // ask, so it travels — losing the prompt should not lose the sync.
+        clipboardSync.onLocalCopy = { clip ->
+            if (island.canDraw()) {
+                island.prompt(clip) { clipboardSync.send(it) }
+            } else {
+                clipboardSync.send(clip)
+            }
+        }
         connectionManager = ConnectionManager(
             deviceRepository, signalClient, sessionStore, transport, clipboardSync,
         )
