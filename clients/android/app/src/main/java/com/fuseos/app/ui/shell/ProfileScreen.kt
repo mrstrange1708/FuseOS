@@ -47,6 +47,8 @@ fun ProfileScreen(
     peerBattery: (String) -> Int?,
     deviceName: String?,
     onLinkManually: () -> Unit,
+    islandEnabled: Boolean,
+    onEnableIsland: () -> Unit,
     selfBattery: Int?,
     onRename: (String) -> Unit,
     onBatterySettings: () -> Unit,
@@ -130,6 +132,17 @@ fun ProfileScreen(
             "Link manually",
             "Devices on this account link themselves. Use a code only if one didn't show up.",
             onLinkManually,
+        )
+        Spacer(Modifier.height(10.dp))
+        SettingRow(
+            if (islandEnabled) "Island · on" else "Turn on the island",
+            if (islandEnabled) {
+                "Copies show up over whatever app you're in. Tap the island to send."
+            } else {
+                "Allow FuseOS to draw over other apps, so a copy can be sent without " +
+                    "leaving the app you're in."
+            },
+            onEnableIsland,
         )
         Spacer(Modifier.height(10.dp))
         SettingRow(

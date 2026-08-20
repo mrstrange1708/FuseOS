@@ -32,6 +32,7 @@ import com.fuseos.app.data.ServiceLocator
 import com.fuseos.app.ui.components.ErrorBanner
 import com.fuseos.app.ui.components.FuseWordmark
 import com.fuseos.app.ui.dashboard.DashboardViewModel
+import com.fuseos.app.ui.island.ClipIsland
 import com.fuseos.app.ui.dashboard.PairingScreen
 
 /**
@@ -111,6 +112,15 @@ fun FuseShell() {
                         selfBattery = viewModel.selfBattery(),
                         onRename = viewModel::renameThisDevice,
                         onLinkManually = { showPairing = true },
+                        // Read on every recomposition rather than cached: the user grants
+                        // this in Settings and comes back, so a snapshot taken on first
+                        // draw would still read "off" when they return.
+                        islandEnabled = ServiceLocator.clipIsland.canDraw(),
+                        onEnableIsland = {
+                            runCatching {
+                                context.startActivity(ClipIsland.overlaySettingsIntent(context))
+                            }
+                        },
                         peerBattery = { id -> state.presence[id]?.battery },
                         onBatterySettings = {
                             // Opens the OS screen; there is no API to grant this for the
