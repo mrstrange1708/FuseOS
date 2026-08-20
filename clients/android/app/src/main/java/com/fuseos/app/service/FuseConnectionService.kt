@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.fuseos.app.MainActivity
+import com.fuseos.app.capture.CaptureActivity
 import com.fuseos.app.R
 import com.fuseos.app.data.ServiceLocator
 import kotlinx.coroutines.CoroutineScope
@@ -54,6 +55,14 @@ class FuseConnectionService : Service() {
             return START_NOT_STICKY
         }
         if (startJob?.isActive != true) {
+            // The island is the only feedback a user gets while FuseOS is off screen, so
+            // it is driven from here — the one component guaranteed to be alive whenever
+            // a clip can arrive.
+            scope.launch {
+                ServiceLocator.clipboardSync.events.collect { entry ->
+                    ServiceLocator.clipIsland.clip(entry)
+                }
+            }
             startJob = scope.launch {
                 // Fail soft: the phone may be off-network at boot. The dashboard and the
                 // Share sheet both retry through the same ConnectionManager.
@@ -91,12 +100,23 @@ class FuseConnectionService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
+        // The second route out of the phone, next to the Quick Settings tile. The
+        // ongoing notification is already in the shade whenever we are connected, so an
+        // action on it costs the user nothing and is reachable from inside any app.
+        val send = PendingIntent.getActivity(
+            this,
+            1,
+            CaptureActivity.intent(this),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("FuseOS is connected")
             .setContentText("Your clipboard and files can reach this device.")
             .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
             .setContentIntent(open)
+            .addAction(R.drawable.ic_notification, "Send clipboard", send)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 

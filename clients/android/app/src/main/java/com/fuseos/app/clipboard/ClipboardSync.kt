@@ -12,8 +12,11 @@ import com.google.protobuf.ByteString
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -43,6 +46,20 @@ data class ClipEntry(
 }
 
 /**
+ * Clipboard content read but not yet sent — what the island offers the user before they
+ * tap it. Separate from [ClipEntry] because nothing has happened yet: no id, no history
+ * row, no wire event. Produced by [ClipboardSync.capture], consumed by [ClipboardSync.send].
+ */
+data class PendingClip(val text: String?, val imageBytes: ByteArray?, val mime: String?) {
+    override fun equals(other: Any?): Boolean =
+        other is PendingClip && other.text == text && other.mime == mime &&
+            other.imageBytes.contentEquals(imageBytes)
+
+    override fun hashCode(): Int =
+        (text?.hashCode() ?: 0) * 31 + (imageBytes?.contentHashCode() ?: 0)
+}
+
+/**
  * Mirrors the clipboard to paired devices over the LAN data plane.
  *
  * **Android only lets the focused app read the clipboard** (API 29+; API 31+ also shows a
@@ -68,6 +85,13 @@ class ClipboardSync(
     private var inboundJob: Job? = null
 
     private val _history = MutableStateFlow<List<ClipEntry>>(emptyList())
+
+    // Buffered and non-suspending: a clip must never block the clipboard listener or a
+    // socket read waiting on whoever is drawing the island.
+    private val _events = MutableSharedFlow<ClipEntry>(extraBufferCapacity = 8)
+
+    /** Every clip that moves, in either direction, as it happens. Drives the island. */
+    val events: SharedFlow<ClipEntry> = _events.asSharedFlow()
 
     /** Newest first. In memory only — clipboard content is never written to disk here. */
     val history: StateFlow<List<ClipEntry>> = _history.asStateFlow()
@@ -133,6 +157,7 @@ class ClipboardSync(
                 bytes <= MAX_HISTORY_BYTES
             }
         }
+        _events.tryEmit(entry)
         // Written on every change so an app the OS kills without warning — the norm on
         // Android — still has its history on the next launch.
         scope.launch(Dispatchers.IO) { store.save(_history.value) }
@@ -201,6 +226,27 @@ class ClipboardSync(
         }
         return share(text = currentText(), imageBytes = null, mime = null)
     }
+
+    /**
+     * Reads the clipboard without sending anything.
+     *
+     * The island's prompt needs the content in hand *before* the user decides, and the
+     * overlay window itself is unfocusable and so cannot read the clipboard. So the read
+     * happens in a focused activity, the bytes are carried here, and [send] finishes the
+     * job if the user taps. Returns null when there is nothing usable to offer.
+     */
+    fun capture(): PendingClip? {
+        val image = currentImage()
+        if (image != null) {
+            val (mime, bytes) = image
+            if (bytes.isEmpty() || bytes.size > MAX_INLINE_IMAGE_BYTES) return null
+            return PendingClip(text = null, imageBytes = bytes, mime = mime)
+        }
+        return currentText()?.let { PendingClip(text = it, imageBytes = null, mime = null) }
+    }
+
+    /** Sends a clip taken earlier by [capture]. Same path as a Share-sheet send. */
+    fun send(clip: PendingClip): Boolean = share(clip.text, clip.imageBytes, clip.mime)
 
     /** A local copy — broadcast it unless it is the echo of something we just injected. */
     private fun onLocalChange(guard: LoopGuard) {

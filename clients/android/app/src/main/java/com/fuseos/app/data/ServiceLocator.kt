@@ -5,6 +5,7 @@ import com.fuseos.app.core.Config
 import com.fuseos.app.clipboard.ClipboardSync
 import com.fuseos.app.core.DeviceInfo
 import com.fuseos.app.net.LanTransport
+import com.fuseos.app.ui.island.ClipIsland
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpSend
@@ -35,8 +36,12 @@ object ServiceLocator {
         private set
     lateinit var connectionManager: ConnectionManager
         private set
+    lateinit var clipIsland: ClipIsland
+        private set
 
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /** Outlives every screen and every service, so work that must not die with an
+     *  Activity — a send fired from the island after its activity finished — runs here. */
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     fun init(context: Context) {
         val appContext = context.applicationContext
@@ -81,6 +86,7 @@ object ServiceLocator {
             // changes across restarts — hence a provider rather than a fixed value.
             lanAddressProvider = { transport.lanAddress() },
         )
+        clipIsland = ClipIsland(appContext)
         connectionManager = ConnectionManager(
             deviceRepository, signalClient, sessionStore, transport, clipboardSync,
         )

@@ -112,9 +112,21 @@ Two facts about the host platforms shape what clipboard sync can actually promis
 | --- | --- |
 | macOS → Android (inject) | Always. Writing the clipboard is unrestricted. |
 | Android → macOS (auto-capture) | Only while FuseOS is on screen. |
-| Android → macOS (background) | Via the Share sheet only. |
+| Android → macOS (background) | Via the Share sheet, the Quick Settings tile, or the notification action. |
 
-This is why **Share-sheet send is not a convenience feature on Android — it is the primary background path out of the device**. It is built: `ShareActivity` takes an `ACTION_SEND` of text or an image, brings the connection up if the process was dead, and pushes it to the account's other devices.
+This is why **explicit send is not a convenience feature on Android — it is the primary background path out of the device**. Three entry points exist, all of them the same trick: something that briefly holds input focus does the clipboard read.
+
+| Entry point | Reaches | Cost to the user |
+| --- | --- | --- |
+| Share sheet (`ShareActivity`) | content an app chose to share | share → pick FuseOS |
+| Quick Settings tile (`ClipTile`) | whatever is on the clipboard | pull down → tap |
+| Notification action | whatever is on the clipboard | pull down → tap |
+
+The tile and the notification both launch `CaptureActivity`, an invisible activity whose only job is to be the focused window for a few frames — long enough for `getPrimaryClip()` to be permitted. It reads the clip, hands it to the island, and finishes.
+
+**The island** (`ui/island/ClipIsland.kt`) is a `TYPE_APPLICATION_OVERLAY` capsule that drops from under the status bar: logo on the left, one line of content, tap to send. It is the Android twin of the macOS `ClipIsland` and exists for the same reason — sync is invisible, so without a signal the user cannot tell "it worked" from "it is broken". It draws over other apps because the moment worth confirming is always a moment the user is in *another* app. The window is `FLAG_NOT_FOCUSABLE`, so it never steals focus and correspondingly cannot read the clipboard itself; that is `CaptureActivity`'s job. Without the "Display over other apps" permission the same sends still happen, reported by a toast.
+
+**The remaining tap is the platform restriction, not the design.** The one exemption that would remove it is the default IME: an input method is allowed to read the clipboard in the background, so with FuseOS set as the keyboard, `OnPrimaryClipChangedListener` starts firing and the island can be driven straight from it — no tile, no activity, no tap. That is the intended path to true auto-capture; `AccessibilityService` (Play policy risk) and Shizuku (needs re-pairing after every reboot) are the alternatives and both are worse. It is built: `ShareActivity` takes an `ACTION_SEND` of text or an image, brings the connection up if the process was dead, and pushes it to the account's other devices.
 
 A **foreground service** (`FuseConnectionService`) holds the process open so the LAN listener and the `/signal` socket survive backgrounding. It is what makes *receiving* work with the app closed; it does nothing for capture, because no service type lifts the clipboard-read restriction. `BootReceiver` starts it again after a reboot (`BOOT_COMPLETED` is an exemption from the background FGS-start rules), so a restart does not leave the phone unreachable until someone opens the app.
 

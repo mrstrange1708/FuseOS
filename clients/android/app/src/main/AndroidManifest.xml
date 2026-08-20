@@ -20,6 +20,11 @@
          service still runs if it is refused; the user just cannot see that it is. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- The island. It has to draw over whatever app the user is actually in, because
+         that is the only moment a clipboard confirmation is worth anything. Requested
+         from the app, never at launch, and the app degrades to a toast if refused. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <application
         android:name=".FuseApp"
         android:allowBackup="true"
@@ -72,6 +77,29 @@
                 <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
+
+        <!-- Holds input focus for a few frames so the clipboard can legally be read,
+             then hands the content to the island and finishes. See CaptureActivity. -->
+        <activity
+            android:name=".capture.CaptureActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.FuseOS.Transparent" />
+
+        <!-- One pull and one tap from inside any app: the shortest path off the phone
+             that Android's clipboard restriction leaves open. -->
+        <service
+            android:name=".service.ClipTile"
+            android:exported="true"
+            android:icon="@drawable/ic_notification"
+            android:label="Send clipboard"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
 
         <!-- An image can only reach the clipboard as a content URI, so received images
              are staged in the cache and handed out from here. -->
