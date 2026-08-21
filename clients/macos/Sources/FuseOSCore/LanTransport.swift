@@ -18,8 +18,14 @@ import Network
 /// half-used connections.
 @MainActor
 public final class LanTransport {
-    /// Envelopes received from any peer. Heartbeats are consumed here, not republished.
+    /// Clipboard envelopes received from any peer. Heartbeats are consumed here, not
+    /// republished.
     var onEnvelope: ((FuseEnvelope) -> Void)?
+
+    /// File envelopes — meta, chunk, ack. A separate hook rather than one firehose because
+    /// `ClipboardSync` and `FileTransfer` want disjoint halves of the protocol, and routing
+    /// once here beats each of them filtering out the other's messages.
+    var onFileEnvelope: ((FuseEnvelope) -> Void)?
 
     /// Peers with a live direct channel right now — what the UI's "connected" chip reads.
     public private(set) var connectedPeers: Set<String> = []
@@ -122,6 +128,21 @@ public final class LanTransport {
         }
     }
 
+    /// Ordered, back-pressured send to every connected peer.
+    ///
+    /// Unlike `broadcast` this waits for each write to reach the socket, which is what
+    /// keeps a file's chunks from queueing the entire file in memory ahead of the network.
+    /// Fail soft: a dead channel is dropped, not thrown.
+    func send(_ envelope: FuseEnvelope) async {
+        for (peerId, channel) in channels {
+            do {
+                try await channel.send(envelope)
+            } catch {
+                drop(peerId, channel: channel)
+            }
+        }
+    }
+
     /// Fail-soft broadcast to every connected peer; a dead channel is dropped, not thrown.
     func broadcast(_ envelope: FuseEnvelope) {
         for (peerId, channel) in channels {
@@ -209,7 +230,12 @@ public final class LanTransport {
         while !Task.isCancelled {
             do {
                 let envelope = try await channel.receive()
-                if envelope.body != .heartbeat(FuseHeartbeat()) {
+                switch envelope.body {
+                case .some(.heartbeat), .none:
+                    break // liveness only; nothing above the transport cares
+                case .some(.fileMeta), .some(.fileChunk), .some(.ack):
+                    onFileEnvelope?(envelope)
+                case .some(.clipText), .some(.clipImage):
                     onEnvelope?(envelope)
                 }
             } catch {

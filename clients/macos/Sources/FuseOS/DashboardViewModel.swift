@@ -16,6 +16,10 @@ final class DashboardViewModel: ObservableObject {
     let signal = SignalClient()
     let transport = LanTransport()
     private lazy var clipboard = ClipboardSync(transport: transport)
+    /// Receiving is always on; sending is a Day-3 drop zone away. A verified file lands in
+    /// `FileTransfer.defaultDirectory` — handing it to the user is a UI decision, and this
+    /// layer has none yet.
+    private lazy var files = FileTransfer(transport: transport)
     /// The notch HUD. Owned here because this is where clip events already arrive.
     private let island = ClipIsland()
     private var started = false
@@ -46,6 +50,12 @@ final class DashboardViewModel: ObservableObject {
         clipboard.onHistoryChanged = { [weak self] entries in
             self?.history = entries
         }
+        // Creating it is what wires the transport's file hook, so this touch is load-bearing
+        // until there is a UI holding on to it.
+        files.onFileReceived = { file in
+            // Size only: a file name is user content, and content never reaches a log.
+            FuseLog.lan.info("file received, \(file.size, privacy: .public) bytes")
+        }
         clipboard.onClipEvent = { [weak self] entry in
             guard let self else { return }
             // Named after whichever peer is actually reachable — with one other device
@@ -59,6 +69,7 @@ final class DashboardViewModel: ObservableObject {
     func stop() {
         island.dismiss()
         signal.stop()
+        files.stop()
         clipboard.stop()
         transport.stop()
     }
@@ -67,6 +78,7 @@ final class DashboardViewModel: ObservableObject {
     func signOut() {
         island.dismiss()
         signal.stop()
+        files.stop()
         clipboard.forget()
         transport.stop()
     }

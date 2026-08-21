@@ -4,6 +4,7 @@ import android.content.Context
 import com.fuseos.app.core.Config
 import com.fuseos.app.clipboard.ClipboardSync
 import com.fuseos.app.core.DeviceInfo
+import com.fuseos.app.file.FileTransfer
 import com.fuseos.app.net.LanTransport
 import com.fuseos.app.ui.island.ClipIsland
 import io.ktor.client.HttpClient
@@ -13,10 +14,12 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.plugin
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.serialization.kotlinx.json.json
+import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
 /** Minimal manual dependency container, initialised once from [com.fuseos.app.FuseApp]. */
@@ -37,6 +40,8 @@ object ServiceLocator {
     lateinit var connectionManager: ConnectionManager
         private set
     lateinit var clipIsland: ClipIsland
+        private set
+    lateinit var fileTransfer: FileTransfer
         private set
 
     /** Outlives every screen and every service, so work that must not die with an
@@ -97,6 +102,17 @@ object ServiceLocator {
                 clipboardSync.send(clip)
             }
         }
+        // Receiving is always on; sending is a Day-3 picker away. Files land in filesDir
+        // rather than Downloads because handing one to the user is a UI decision, and this
+        // layer has no UI. Collected on IO: every chunk is a disk write.
+        val transfer = FileTransfer(
+            directory = File(appContext.filesDir, "received"),
+            newEnvelope = { transport.newEnvelope() },
+            emit = { transport.broadcast(it) },
+        )
+        fileTransfer = transfer
+        appScope.launch(Dispatchers.IO) { transport.incoming.collect { transfer.receive(it) } }
+
         connectionManager = ConnectionManager(
             deviceRepository, signalClient, sessionStore, transport, clipboardSync,
         )

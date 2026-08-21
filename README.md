@@ -93,7 +93,7 @@ FuseOS/
 
 ## Status
 
-**Design phase.** The specifications in `docs/` are complete; the applications are being built against them. See [`CLAUDE.md`](CLAUDE.md) for engineering principles and contributor guidance.
+**In build.** The specifications in `docs/` are complete and both apps run against them; `CLAUDE.md`'s "Where the build is" tracks what is done and what is next. See [`CLAUDE.md`](CLAUDE.md) for engineering principles and contributor guidance.
 
 ## License
 

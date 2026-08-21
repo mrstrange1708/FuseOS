@@ -36,18 +36,36 @@ actor LanChannel {
     private var sendCounter: UInt64 = 0
     private var receiveCounter: UInt64 = 0
 
+    /// The most recent write, so the next one can queue behind it. See `send`.
+    private var lastWrite: Task<Void, Error>?
+
     private init(connection: NWConnection, keys: LanCrypto.SessionKeys, peerDeviceId: String) {
         self.connection = connection
         self.keys = keys
         self.peerDeviceId = peerDeviceId
     }
 
+    /// Sealing and the counter bump happen with no `await` between them, so frames are
+    /// sealed in call order — but the write itself suspends, and an actor is reentrant, so
+    /// two concurrent sends could seal in one order and reach the socket in the other. The
+    /// receiver decrypts strictly by counter, so a swapped pair fails its tag check and
+    /// kills the channel. Chaining each write behind the previous one is what stops that,
+    /// and it matters the moment a heartbeat can land in the middle of a file's chunks.
     func send(_ envelope: FuseEnvelope) async throws {
         let frame = try LanCrypto.seal(
             key: keys.send, counter: sendCounter, plaintext: try envelope.serializedData(),
         )
         sendCounter += 1
-        try await connection.sendData(bigEndianLength(frame.count) + frame)
+        let payload = bigEndianLength(frame.count) + frame
+        let connection = self.connection
+        let previous = lastWrite
+        let write = Task {
+            // Ordering only — a predecessor that failed must not cost this frame its turn.
+            _ = await previous?.result
+            try await connection.sendData(payload)
+        }
+        lastWrite = write
+        try await write.value
     }
 
     /// Throws at end of stream, on a malformed length, or when the tag check fails — all

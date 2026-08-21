@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 FuseOS is a cross-device continuity ecosystem for **Android ⇄ macOS**: copy on your phone and paste on your Mac, transfer files both ways, and use the native Share sheet to send content to the other device. One account, same login on both apps. Latency is the product — it must feel instant.
 
-Read `docs/` before writing code. `docs/PRD.md` (what & why), `docs/HLD.md` (architecture), `docs/LLD.md` (implementation detail), `docs/schema.md`, `docs/api.md`, `docs/protocol.md` (the contracts). The current repo is in the **design phase** — the specs exist; the apps do not yet.
+Read `docs/` before writing code. `docs/PRD.md` (what & why), `docs/HLD.md` (architecture), `docs/LLD.md` (implementation detail), `docs/schema.md`, `docs/api.md`, `docs/protocol.md` (the contracts). Both apps and the server are **built and running** — see "Where the build is" at the bottom of this file.
 
 ## Architecture in one paragraph (do not violate this)
 
@@ -72,7 +72,7 @@ The native clients are built with their own toolchains, outside PNPM:
 - **Android** (`clients/android/`): `./gradlew assembleDebug` to produce a debug APK; `./gradlew test` for unit tests.
 - **macOS** (`clients/macos/`): `./build-app.sh` then `open .build/FuseOS.app`; `swift test` for the unit tests. SwiftPM, no `.xcodeproj`. Run the bundle rather than `swift run` — LAN connections need local-network permission, which only a bundle identifier can hold.
 
-> Design phase: these scripts are the intended interface. Some workspaces are still stubs — expect a command to be a no-op until its workspace exists.
+> `packages/proto/` is deliberately a stub — the server never decodes a payload, so there are no TypeScript bindings and `pnpm proto:gen` is a no-op.
 
 ## Conventions
 
@@ -90,3 +90,35 @@ The native clients are built with their own toolchains, outside PNPM:
 ## Docs are part of the change
 
 The `docs/` specs and the code must not drift. If you change behavior, update the matching doc in the same change; if a doc and the code disagree, that's a bug to surface, not a discrepancy to quietly pick a side on.
+
+## Where the build is
+
+**Keep this section current.** It is the only place the plan survives between sessions — a
+session that ends mid-plan leaves nothing else behind. When a day lands, tick it here in the
+same commit as the work, and add what the next session needs to know.
+
+v1 is being finished against a seven-day plan agreed on 2026-08-20:
+
+| Day | Work | State |
+| --- | --- | --- |
+| 1 | Android one-tap send: QS tile, notification action, `CaptureActivity` | ✅ done (plus the clipboard island and an IME) |
+| 2 | File transfer core, no UI: `FileTransfer` on both clients, 64 KB chunks, sha-256 verify, `Ack` | ✅ done 2026-08-21 |
+| 3 | File transfer UI: macOS drop zone, Android SAF picker, progress, cancel on both | ⬜ next |
+| 4 | Share sheet both ways for files: macOS Share extension target, Android `ACTION_SEND` with a file `Uri` | ⬜ |
+| 5 | Real auth: Better Auth on the canonical schema, replacing `server/src/auth/dev-auth.ts` | ⬜ |
+| 6 | Inngest (presence sweep, verification email) + instrument and measure the clipboard hot path | ⬜ |
+| 7 | Two-device soak against `docs/testing.md`, and a docs pass for whatever drifted | ⬜ |
+
+Already working: auth (dev stand-in), device linking, presence/`/signal`, clipboard text and
+images both ways with history and reboot survival, Android Share-sheet send, file **receive**
+on both clients.
+
+Two constraints worth knowing before proposing anything in this area:
+
+- **Android clipboard capture stops at one tap.** Only the focused window may read the
+  clipboard (API 29+) and no permission lifts it, so the tile / notification / island route
+  through a focused `CaptureActivity`. The default-IME exemption is why `ime/` exists, but a
+  keyboard that replaces the user's own is a cost they have rejected for now — it is unused,
+  and an AccessibilityService is off the table (Play Store). See `docs/protocol.md` §5.1.
+- **File transfer is not resumable and has no picker yet.** Receiving is wired on both sides;
+  originating a transfer from a file the user chose is Day 3.
