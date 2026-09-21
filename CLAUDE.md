@@ -37,6 +37,7 @@ Monorepo managed with **PNPM workspaces + Turborepo** on **Node 22** (see `.node
 - `proto/` — the `.proto` source of truth for the device-to-device protocol. Every platform generates its own bindings from these files; when the wire format changes, it changes here first.
 - `clients/android/` — Kotlin + Jetpack Compose (Gradle toolchain; **outside** the PNPM workspace).
 - `clients/macos/` — SwiftPM (**outside** the PNPM workspace). Split into `FuseOSCore` (logic: crypto, LAN transport, clipboard rules — unit-tested) and `FuseOS` (the SwiftUI app). An executable target cannot be imported by tests, which is why the logic lives in its own library.
+- `website/` — the public download page, one static HTML file, deployed to GitHub Pages by `.github/workflows/pages.yml`. Downloads point at the `preview` GitHub release's assets (`FuseOS.dmg`, `FuseOS-preview.apk`).
 - `docs/` — the design of record. [`docs/testing.md`](docs/testing.md) explains the test strategy: what is verified where, and what only two physical devices can confirm.
 
 The two native apps coordinate **only** through the shared `proto/` contract — that is the seam between them. A protocol change is a cross-cutting change: update `proto/`, then both clients and the docs.
@@ -70,7 +71,7 @@ All JS/TS commands run from the repo root via Turborepo (they fan out to the wor
 
 The native clients are built with their own toolchains, outside PNPM:
 - **Android** (`clients/android/`): `./gradlew assembleDebug` to produce a debug APK; `./gradlew test` for unit tests.
-- **macOS** (`clients/macos/`): `./build-app.sh` then `open .build/FuseOS.app`; `swift test` for the unit tests. SwiftPM, no `.xcodeproj`. Run the bundle rather than `swift run` — LAN connections need local-network permission, which only a bundle identifier can hold.
+- **macOS** (`clients/macos/`): `./build-app.sh` then `open .build/FuseOS.app`; `./make-dmg.sh` for a release `.build/FuseOS.dmg`; `swift test` for the unit tests. SwiftPM, no `.xcodeproj`. Run the bundle rather than `swift run` — LAN connections need local-network permission, which only a bundle identifier can hold.
 
 > `packages/proto/` is deliberately a stub — the server never decodes a payload, so there are no TypeScript bindings and `pnpm proto:gen` is a no-op.
 

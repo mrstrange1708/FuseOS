@@ -1,0 +1,1312 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>FuseOS</title>
+    <meta
+      name="description"
+      content="Copy on your Android phone, paste on your Mac. Files and the share sheet, both ways, straight over your Wi-Fi."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    />
+    <style>
+      :root {
+        --bg: #f1f3f7;
+        --surface: #ffffff;
+        --surface-alt: #e7eaf0;
+        --ink: #14171f;
+        --muted: #59616f;
+        --outline: #cdd3dd;
+        --ember: #e85d2a;
+        --ember-soft: #fce3d7;
+        --ember-ink: #7a2e12;
+        --device: #1b1f29;
+        --device-screen: #0f1218;
+        --device-ink: #eceff4;
+        --shadow: 0 1px 2px rgb(20 23 31 / 0.06), 0 12px 32px -12px rgb(20 23 31 / 0.18);
+
+        --display: 'Schibsted Grotesk', 'Helvetica Neue', Arial, sans-serif;
+        --body: 'Instrument Sans', 'Helvetica Neue', Arial, sans-serif;
+        --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme='light']) {
+          --bg: #0c0e14;
+          --surface: #161922;
+          --surface-alt: #1c202a;
+          --ink: #eceff4;
+          --muted: #98a0ad;
+          --outline: #343b47;
+          --ember: #ff7a45;
+          --ember-soft: #3a1d12;
+          --ember-ink: #ffd3bc;
+          --device: #232834;
+          --device-screen: #07090d;
+          --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 16px 40px -16px rgb(0 0 0 / 0.7);
+          color-scheme: dark;
+        }
+      }
+      :root[data-theme='dark'] {
+        --bg: #0c0e14;
+        --surface: #161922;
+        --surface-alt: #1c202a;
+        --ink: #eceff4;
+        --muted: #98a0ad;
+        --outline: #343b47;
+        --ember: #ff7a45;
+        --ember-soft: #3a1d12;
+        --ember-ink: #ffd3bc;
+        --device: #232834;
+        --device-screen: #07090d;
+        --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 16px 40px -16px rgb(0 0 0 / 0.7);
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 400 17px/1.6 var(--body);
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap {
+        max-width: 1120px;
+        margin-inline: auto;
+        padding-inline: 24px;
+      }
+      @media (max-width: 480px) {
+        .wrap {
+          padding-inline: 16px;
+        }
+      }
+      a {
+        color: inherit;
+      }
+      h1,
+      h2,
+      h3 {
+        font-family: var(--display);
+        text-wrap: balance;
+        margin: 0;
+        letter-spacing: -0.02em;
+      }
+      p {
+        margin: 0;
+      }
+      :focus-visible {
+        outline: 2px solid var(--ember);
+        outline-offset: 3px;
+        border-radius: 6px;
+      }
+
+      /* ---------- header ---------- */
+      header.top {
+        position: sticky;
+        top: env(safe-area-inset-top, 0px);
+        z-index: 10;
+        background: color-mix(in srgb, var(--bg) 82%, transparent);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid color-mix(in srgb, var(--outline) 60%, transparent);
+      }
+      .top .wrap {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding-block: 14px;
+      }
+      .wordmark {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        text-decoration: none;
+        font: 700 18px/1 var(--mono);
+      }
+      .wordmark .os {
+        font-weight: 500;
+        color: var(--muted);
+      }
+      .top nav {
+        display: flex;
+        gap: 22px;
+        align-items: center;
+        font-size: 15px;
+      }
+      .top nav a {
+        text-decoration: none;
+        color: var(--muted);
+      }
+      .top nav a:hover {
+        color: var(--ink);
+      }
+      .top nav .get {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      @media (max-width: 600px) {
+        .top nav .hide-sm {
+          display: none;
+        }
+      }
+
+      /* ---------- hero ---------- */
+      .hero {
+        padding-block: 72px 40px;
+        display: grid;
+        gap: 56px;
+      }
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font: 500 12px/1 var(--mono);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .eyebrow .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--ember);
+      }
+      .hero h1 {
+        font-size: clamp(44px, 7.4vw, 92px);
+        line-height: 0.98;
+        font-weight: 800;
+        margin-top: 20px;
+        max-width: 13ch;
+      }
+      .hero h1 .arrow {
+        color: var(--ember);
+        font-family: var(--mono);
+        font-weight: 500;
+        letter-spacing: -0.06em;
+      }
+      .hero .lede {
+        margin-top: 24px;
+        font-size: clamp(18px, 2vw, 21px);
+        color: var(--muted);
+        max-width: 52ch;
+      }
+      .cta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 32px;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 20px;
+        border-radius: 12px;
+        text-decoration: none;
+        font: 600 16px/1 var(--body);
+        border: 1px solid var(--outline);
+        background: var(--surface);
+        color: var(--ink);
+        transition:
+          transform 0.15s ease,
+          border-color 0.15s ease;
+      }
+      .btn:hover {
+        transform: translateY(-1px);
+        border-color: var(--ink);
+      }
+      .btn.primary {
+        background: var(--ember);
+        border-color: var(--ember);
+        color: #fff;
+      }
+      .btn.primary:hover {
+        border-color: var(--ember);
+        filter: brightness(1.06);
+      }
+      .btn svg {
+        width: 18px;
+        height: 18px;
+        flex: none;
+      }
+
+      /* ---------- the demo: phone —— filament —— mac ---------- */
+      .stage {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 0;
+        padding: 40px clamp(16px, 4vw, 48px);
+        background: var(--surface);
+        border: 1px solid var(--outline);
+        border-radius: 28px;
+        box-shadow: var(--shadow);
+        position: relative;
+        overflow: hidden;
+      }
+      .phone {
+        width: 168px;
+        aspect-ratio: 9 / 18.5;
+        max-width: 100%;
+        background: var(--device);
+        border-radius: 28px;
+        padding: 8px;
+        box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+      }
+      .phone .screen {
+        height: 100%;
+        border-radius: 21px;
+        background: var(--device-screen);
+        color: var(--device-ink);
+        padding: 26px 12px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        position: relative;
+      }
+      .phone .screen::before {
+        content: '';
+        position: absolute;
+        top: 9px;
+        left: 50%;
+        translate: -50% 0;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #000;
+        box-shadow: 0 0 0 2px #1a1d25;
+      }
+      .mini-label {
+        font: 500 9.5px/1 var(--mono);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #8c94a3;
+      }
+      .bubble {
+        font: 500 12.5px/1.4 var(--body);
+        padding: 10px 11px;
+        border-radius: 12px;
+        background: #1d222d;
+        border: 1px solid #2b3240;
+      }
+      .bubble.copied {
+        border-color: var(--ember);
+        box-shadow: 0 0 0 3px rgb(232 93 42 / 0.18);
+      }
+      .chip {
+        align-self: flex-start;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font: 500 10px/1 var(--mono);
+        color: var(--ember);
+        background: rgb(232 93 42 / 0.12);
+        padding: 6px 8px;
+        border-radius: 999px;
+      }
+
+      .filament {
+        position: relative;
+        height: 64px;
+        min-width: 80px;
+        margin-inline: -2px;
+      }
+      .filament svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+      .filament .readout {
+        position: absolute;
+        left: 50%;
+        top: calc(50% + 22px);
+        translate: -50% 0;
+        white-space: nowrap;
+        font: 500 11px/1 var(--mono);
+        color: var(--muted);
+        letter-spacing: 0.04em;
+      }
+      .packet {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        width: 14px;
+        height: 14px;
+        margin-top: -7px;
+        border-radius: 50%;
+        background: var(--ember);
+        box-shadow:
+          0 0 0 5px rgb(232 93 42 / 0.2),
+          0 0 18px rgb(232 93 42 / 0.6);
+        animation: travel 2.6s cubic-bezier(0.6, 0, 0.2, 1) infinite;
+      }
+      @keyframes travel {
+        0% {
+          left: 0;
+          opacity: 0;
+          transform: scale(0.4);
+        }
+        12% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        70% {
+          left: calc(100% - 14px);
+          opacity: 1;
+          transform: scale(1);
+        }
+        85%,
+        100% {
+          left: calc(100% - 14px);
+          opacity: 0;
+          transform: scale(0.4);
+        }
+      }
+
+      .mac {
+        width: min(380px, 100%);
+      }
+      .mac .window {
+        background: var(--device-screen);
+        border-radius: 12px;
+        overflow: hidden;
+        color: var(--device-ink);
+        box-shadow:
+          0 0 0 8px var(--device),
+          0 0 0 9px rgb(255 255 255 / 0.05);
+      }
+      .mac .bar {
+        display: flex;
+        gap: 6px;
+        padding: 10px 12px;
+        background: #161a22;
+        border-bottom: 1px solid #232835;
+      }
+      .mac .bar i {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #3a404d;
+      }
+      .mac .bar i:first-child {
+        background: #ff5f57;
+      }
+      .mac .bar i:nth-child(2) {
+        background: #febc2e;
+      }
+      .mac .bar i:nth-child(3) {
+        background: #28c840;
+      }
+      .mac .doc {
+        padding: 18px 18px 22px;
+        display: grid;
+        gap: 10px;
+      }
+      .mac .line {
+        height: 7px;
+        border-radius: 4px;
+        background: #232937;
+      }
+      .mac .pasted {
+        font: 500 13px/1.45 var(--body);
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: rgb(232 93 42 / 0.1);
+        border: 1px dashed rgb(232 93 42 / 0.55);
+      }
+      .mac .stand {
+        width: 34%;
+        height: 18px;
+        margin: 8px auto 0;
+        background: var(--device);
+        clip-path: polygon(12% 0, 88% 0, 100% 100%, 0 100%);
+      }
+      .mac .cmd {
+        font: 500 10px/1 var(--mono);
+        color: #8c94a3;
+        justify-self: end;
+      }
+
+      @media (max-width: 760px) {
+        .stage {
+          grid-template-columns: 1fr;
+          justify-items: center;
+          gap: 4px;
+          padding: 28px 16px;
+        }
+        .filament {
+          width: 64px;
+          height: 110px;
+          min-width: 0;
+          margin: 0;
+        }
+        .filament svg {
+          transform: rotate(90deg);
+          transform-origin: center;
+          width: 110px;
+          height: 64px;
+          inset: auto;
+          left: -23px;
+          top: 23px;
+        }
+        .packet {
+          left: 50%;
+          margin-left: -7px;
+          top: 0;
+          margin-top: 0;
+          animation-name: travel-down;
+        }
+        .filament .readout {
+          top: 50%;
+          left: calc(50% + 28px);
+          translate: 0 -50%;
+        }
+        @keyframes travel-down {
+          0% {
+            top: 0;
+            opacity: 0;
+            transform: scale(0.4);
+          }
+          12% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          70% {
+            top: calc(100% - 14px);
+            opacity: 1;
+          }
+          85%,
+          100% {
+            top: calc(100% - 14px);
+            opacity: 0;
+            transform: scale(0.4);
+          }
+        }
+      }
+
+      /* ---------- sections ---------- */
+      section.block {
+        padding-block: 72px;
+      }
+      .section-head {
+        display: grid;
+        gap: 14px;
+        max-width: 60ch;
+        margin-bottom: 40px;
+      }
+      .section-head h2 {
+        font-size: clamp(30px, 4.2vw, 46px);
+        line-height: 1.05;
+        font-weight: 800;
+      }
+      .section-head p {
+        color: var(--muted);
+        font-size: 18px;
+      }
+
+      .features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 16px;
+      }
+      .feature {
+        background: var(--surface);
+        border: 1px solid var(--outline);
+        border-radius: 18px;
+        padding: 24px;
+        display: grid;
+        gap: 12px;
+        align-content: start;
+      }
+      .feature .glyph {
+        width: 40px;
+        height: 40px;
+        border-radius: 11px;
+        background: var(--ember-soft);
+        color: var(--ember-ink);
+        display: grid;
+        place-items: center;
+      }
+      .feature .glyph svg {
+        width: 21px;
+        height: 21px;
+      }
+      .feature h3 {
+        font-size: 21px;
+        font-weight: 700;
+      }
+      .feature p {
+        color: var(--muted);
+        font-size: 16px;
+      }
+      .feature .spec {
+        margin-top: 4px;
+        font: 500 12px/1.5 var(--mono);
+        color: var(--muted);
+        border-top: 1px dashed var(--outline);
+        padding-top: 12px;
+      }
+
+      /* ---------- how it moves ---------- */
+      .planes {
+        background: var(--surface);
+        border: 1px solid var(--outline);
+        border-radius: 24px;
+        padding: clamp(20px, 4vw, 40px);
+        display: grid;
+        gap: 28px;
+      }
+      .diagram {
+        overflow-x: auto;
+      }
+      .diagram svg {
+        display: block;
+        width: 100%;
+        min-width: 560px;
+        height: auto;
+      }
+      .diagram text {
+        font-family: var(--mono);
+      }
+      .legend {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 20px 32px;
+      }
+      .legend div {
+        display: grid;
+        gap: 6px;
+      }
+      .legend b {
+        font: 700 13px/1.3 var(--mono);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .legend b::before {
+        content: '';
+        width: 22px;
+        height: 0;
+        border-top: 2px solid var(--muted);
+      }
+      .legend .data b::before {
+        border-top: 3px solid var(--ember);
+      }
+      .legend .ctrl b::before {
+        border-top-style: dashed;
+      }
+      .legend p {
+        color: var(--muted);
+        font-size: 16px;
+      }
+
+      /* ---------- download ---------- */
+      .downloads {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 16px;
+      }
+      .dl {
+        background: var(--surface);
+        border: 1px solid var(--outline);
+        border-radius: 22px;
+        padding: 28px;
+        display: grid;
+        gap: 18px;
+        align-content: start;
+      }
+      .dl .head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .dl h3 {
+        font-size: 26px;
+        font-weight: 800;
+      }
+      .tag {
+        font: 500 11px/1 var(--mono);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--ember-ink);
+        background: var(--ember-soft);
+        padding: 6px 9px;
+        border-radius: 999px;
+      }
+      .dl .meta {
+        font: 400 13px/1.5 var(--mono);
+        color: var(--muted);
+      }
+      .steps {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 10px;
+        counter-reset: step;
+      }
+      .steps li {
+        counter-increment: step;
+        display: grid;
+        grid-template-columns: 26px 1fr;
+        gap: 10px;
+        font-size: 15.5px;
+        color: var(--muted);
+      }
+      .steps li::before {
+        content: counter(step);
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font: 700 12px/1 var(--mono);
+        color: var(--ink);
+        border: 1px solid var(--outline);
+      }
+      .steps b {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      code {
+        font: 500 0.86em/1.4 var(--mono);
+        background: var(--surface-alt);
+        padding: 2px 6px;
+        border-radius: 6px;
+        overflow-wrap: anywhere;
+      }
+      .notice {
+        margin-top: 20px;
+        padding: 16px 18px;
+        border-radius: 14px;
+        border: 1px dashed var(--outline);
+        color: var(--muted);
+        font-size: 15px;
+      }
+      .notice b {
+        color: var(--ink);
+      }
+
+      /* ---------- faq + footer ---------- */
+      .faq {
+        display: grid;
+        gap: 10px;
+        max-width: 780px;
+      }
+      details {
+        background: var(--surface);
+        border: 1px solid var(--outline);
+        border-radius: 14px;
+        padding: 16px 20px;
+      }
+      summary {
+        cursor: pointer;
+        font: 600 17px/1.4 var(--body);
+        list-style: none;
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      summary::-webkit-details-marker {
+        display: none;
+      }
+      summary::after {
+        content: '+';
+        font: 500 20px/1 var(--mono);
+        color: var(--ember);
+      }
+      details[open] summary::after {
+        content: '–';
+      }
+      details p {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 16px;
+      }
+
+      footer {
+        border-top: 1px solid var(--outline);
+        padding-block: 32px 48px;
+        margin-top: 40px;
+      }
+      footer .wrap {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        justify-content: space-between;
+        align-items: center;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      footer a {
+        color: var(--muted);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .packet {
+          animation: none;
+          left: calc(50% - 7px);
+        }
+        html {
+          scroll-behavior: auto;
+        }
+        .btn {
+          transition: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) and (max-width: 760px) {
+        .packet {
+          top: calc(50% - 7px);
+          left: 50%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div class="wrap">
+        <a class="wordmark" href="#" aria-label="FuseOS home">
+          <svg width="40" height="22" viewBox="0 0 40 22" aria-hidden="true">
+            <line
+              x1="7"
+              y1="11"
+              x2="33"
+              y2="11"
+              stroke="currentColor"
+              stroke-opacity=".4"
+              stroke-width="2.2"
+            />
+            <circle cx="20" cy="11" r="2.4" fill="var(--ember)" />
+            <circle cx="7" cy="11" r="4.8" fill="none" stroke="currentColor" stroke-width="2.2" />
+            <circle cx="33" cy="11" r="4.8" fill="var(--ember)" />
+          </svg>
+          <span>Fuse<span class="os">OS</span></span>
+        </a>
+        <nav aria-label="Primary">
+          <a class="hide-sm" href="#features">Features</a>
+          <a class="hide-sm" href="#how">How it works</a>
+          <a class="get" href="#download">Download</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <div class="wrap hero">
+        <div>
+          <span class="eyebrow"><span class="dot"></span>Android ⇄ macOS · Preview</span>
+          <h1>Copy on your phone. <span class="arrow">→</span>&nbsp;Paste on your Mac.</h1>
+          <p class="lede">
+            FuseOS makes an Android phone and a Mac work like one device. Your clipboard, your files
+            and the share sheet go both ways, straight across your Wi-Fi, with nothing to tap on the
+            other side.
+          </p>
+          <div class="cta">
+            <a class="btn primary" href="#download">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14" />
+              </svg>
+              Download the preview
+            </a>
+            <a class="btn" href="https://github.com/mrstrange1708/FuseOS">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path
+                  d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.56 9.56 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"
+                />
+              </svg>
+              View the source
+            </a>
+          </div>
+        </div>
+
+        <div
+          class="stage"
+          role="img"
+          aria-label="A phone and a Mac joined by a line. Text copied on the phone appears pasted on the Mac."
+        >
+          <div class="phone" aria-hidden="true">
+            <div class="screen">
+              <span class="mini-label">Messages</span>
+              <div class="bubble">Door code for tonight?</div>
+              <div class="bubble copied">4471 — buzz twice, 3rd floor</div>
+              <span class="chip">
+                <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                  <circle cx="5" cy="5" r="4" fill="currentColor" />
+                </svg>
+                Sent to MacBook
+              </span>
+            </div>
+          </div>
+
+          <div class="filament" aria-hidden="true">
+            <svg viewBox="0 0 200 64" preserveAspectRatio="none">
+              <line x1="0" y1="32" x2="200" y2="32" stroke="var(--outline)" stroke-width="2" />
+              <line
+                x1="0"
+                y1="32"
+                x2="200"
+                y2="32"
+                stroke="var(--ember)"
+                stroke-width="2"
+                stroke-dasharray="2 8"
+                stroke-linecap="round"
+              />
+            </svg>
+            <span class="packet"></span>
+            <span class="readout">same Wi-Fi · direct</span>
+          </div>
+
+          <div class="mac" aria-hidden="true">
+            <div class="window">
+              <div class="bar"><i></i><i></i><i></i></div>
+              <div class="doc">
+                <div class="line" style="width: 52%"></div>
+                <div class="line" style="width: 88%"></div>
+                <div class="pasted">4471 — buzz twice, 3rd floor</div>
+                <div class="line" style="width: 70%"></div>
+                <span class="cmd">⌘V</span>
+              </div>
+            </div>
+            <div class="stand"></div>
+          </div>
+        </div>
+      </div>
+
+      <section class="block" id="features">
+        <div class="wrap">
+          <div class="section-head">
+            <span class="eyebrow"><span class="dot"></span>What it does</span>
+            <h2>The Mac–iPhone handoff, for an Android phone.</h2>
+            <p>
+              Apple devices have always passed things between each other. An Android phone next to a
+              Mac never could. FuseOS adds that link.
+            </p>
+          </div>
+          <div class="features">
+            <article class="feature">
+              <div class="glyph">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect x="8" y="3" width="8" height="4" rx="1" />
+                  <path
+                    d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"
+                  />
+                </svg>
+              </div>
+              <h3>One clipboard</h3>
+              <p>
+                Copy text or an image on either device and paste it on the other. Everything you
+                copy stays in a history on both, so you can find it again after a restart.
+              </p>
+              <p class="spec">Text and images · both directions</p>
+            </article>
+            <article class="feature">
+              <div class="glyph">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+                  <path d="M14 3v5h5M12 18v-6m0 0-2.5 2.5M12 12l2.5 2.5" />
+                </svg>
+              </div>
+              <h3>Files, both ways</h3>
+              <p>
+                Drop a file on the Mac window, or pick one on your phone. It lands in Downloads on
+                the other side. You can watch its progress and cancel it partway.
+              </p>
+              <p class="spec">SHA-256 checked on arrival · up to 1 GB</p>
+            </article>
+            <article class="feature">
+              <div class="glyph">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="18" cy="5" r="2.5" />
+                  <circle cx="6" cy="12" r="2.5" />
+                  <circle cx="18" cy="19" r="2.5" />
+                  <path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4" />
+                </svg>
+              </div>
+              <h3>From the share sheet</h3>
+              <p>
+                Choose FuseOS in any app's Share menu to send a link, a photo or some text to your
+                other device. The FuseOS app doesn't need to be open.
+              </p>
+              <p class="spec">Android today · Mac next</p>
+            </article>
+            <article class="feature">
+              <div class="glyph">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="6" cy="12" r="3" />
+                  <circle cx="18" cy="12" r="3" />
+                  <path d="M9 12h6" />
+                </svg>
+              </div>
+              <h3>Links itself</h3>
+              <p>
+                Sign in to the same account on both devices and they find each other. There are no
+                codes to scan and no pairing screen.
+              </p>
+              <p class="spec">One account · automatic</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" id="how">
+        <div class="wrap">
+          <div class="section-head">
+            <span class="eyebrow"><span class="dot"></span>How it moves</span>
+            <h2>What you copy never touches our server.</h2>
+            <p>
+              The server only signs you in and helps your devices find each other. Your clipboard
+              and your files go straight from one device to the other, encrypted, over your own
+              network.
+            </p>
+          </div>
+          <div class="planes">
+            <div class="diagram">
+              <svg viewBox="0 0 720 250" role="img" aria-labelledby="diag-title">
+                <title id="diag-title">
+                  A phone and a Mac each talk to the FuseOS server for sign-in and discovery, while
+                  clipboard and file data goes directly between them over the local network.
+                </title>
+                <!-- server -->
+                <rect
+                  x="220"
+                  y="14"
+                  width="280"
+                  height="58"
+                  rx="12"
+                  fill="var(--surface-alt)"
+                  stroke="var(--outline)"
+                />
+                <text
+                  x="360"
+                  y="39"
+                  text-anchor="middle"
+                  font-size="13"
+                  font-weight="700"
+                  fill="var(--ink)"
+                >
+                  FuseOS server
+                </text>
+                <text x="360" y="58" text-anchor="middle" font-size="11" fill="var(--muted)">
+                  sign-in · devices · discovery
+                </text>
+                <!-- control lines -->
+                <path
+                  d="M220 52 C 170 60, 145 110, 132 150"
+                  fill="none"
+                  stroke="var(--muted)"
+                  stroke-width="1.6"
+                  stroke-dasharray="5 5"
+                />
+                <path
+                  d="M500 52 C 550 60, 575 110, 588 150"
+                  fill="none"
+                  stroke="var(--muted)"
+                  stroke-width="1.6"
+                  stroke-dasharray="5 5"
+                />
+                <!-- devices -->
+                <rect
+                  x="40"
+                  y="150"
+                  width="180"
+                  height="70"
+                  rx="14"
+                  fill="var(--surface)"
+                  stroke="var(--ink)"
+                  stroke-width="1.5"
+                />
+                <text
+                  x="130"
+                  y="181"
+                  text-anchor="middle"
+                  font-size="14"
+                  font-weight="700"
+                  fill="var(--ink)"
+                >
+                  Android phone
+                </text>
+                <text x="130" y="201" text-anchor="middle" font-size="11" fill="var(--muted)">
+                  Kotlin · Compose
+                </text>
+                <rect
+                  x="500"
+                  y="150"
+                  width="180"
+                  height="70"
+                  rx="14"
+                  fill="var(--surface)"
+                  stroke="var(--ink)"
+                  stroke-width="1.5"
+                />
+                <text
+                  x="590"
+                  y="181"
+                  text-anchor="middle"
+                  font-size="14"
+                  font-weight="700"
+                  fill="var(--ink)"
+                >
+                  Mac
+                </text>
+                <text x="590" y="201" text-anchor="middle" font-size="11" fill="var(--muted)">
+                  Swift · SwiftUI
+                </text>
+                <!-- data line -->
+                <line x1="220" y1="185" x2="500" y2="185" stroke="var(--ember)" stroke-width="3" />
+                <circle cx="360" cy="185" r="5" fill="var(--ember)" />
+                <text
+                  x="360"
+                  y="172"
+                  text-anchor="middle"
+                  font-size="11.5"
+                  font-weight="700"
+                  fill="var(--ember)"
+                >
+                  clipboard + files
+                </text>
+                <text x="360" y="208" text-anchor="middle" font-size="11" fill="var(--muted)">
+                  AES-GCM · same Wi-Fi
+                </text>
+                <text x="360" y="244" text-anchor="middle" font-size="11" fill="var(--muted)">
+                  nothing you copy goes up here ↑
+                </text>
+              </svg>
+            </div>
+            <div class="legend">
+              <div class="data">
+                <b>Your data</b>
+                <p>
+                  Every clip and file travels over a direct, encrypted connection between your two
+                  devices. It is never uploaded, never stored and never logged.
+                </p>
+              </div>
+              <div class="ctrl">
+                <b>The server</b>
+                <p>
+                  It knows your account, which devices are yours and which are online, and tells
+                  each device where to find the other.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" id="download">
+        <div class="wrap">
+          <div class="section-head">
+            <span class="eyebrow"><span class="dot"></span>Download</span>
+            <h2>Get the preview.</h2>
+            <p>Both apps are free. Install one on each device and sign in with the same account.</p>
+          </div>
+          <div class="downloads">
+            <article class="dl">
+              <div class="head">
+                <h3>macOS</h3>
+                <span class="tag">Preview</span>
+              </div>
+              <p class="meta">FuseOS.dmg · macOS 13 Ventura or later · Apple silicon</p>
+              <a
+                class="btn primary"
+                href="https://github.com/mrstrange1708/FuseOS/releases/download/preview/FuseOS.dmg"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14" />
+                </svg>
+                Download for Mac
+              </a>
+              <ol class="steps">
+                <li>
+                  <span>Open the DMG and drag <b>FuseOS</b> into <b>Applications</b>.</span>
+                </li>
+                <li>
+                  <span
+                    >Open FuseOS once. macOS will block it, because it isn't notarized by Apple
+                    yet.</span
+                  >
+                </li>
+                <li>
+                  <span
+                    >Go to <b>System Settings → Privacy &amp; Security</b> and click
+                    <b>Open Anyway</b>. You only have to do this once.</span
+                  >
+                </li>
+                <li>
+                  <span
+                    >When it asks to find devices on your local network, click <b>Allow</b>. That
+                    permission is what lets your phone reach this Mac.</span
+                  >
+                </li>
+              </ol>
+            </article>
+            <article class="dl">
+              <div class="head">
+                <h3>Android</h3>
+                <span class="tag">Preview</span>
+              </div>
+              <p class="meta">FuseOS-preview.apk · Android 8.0 or later</p>
+              <a
+                class="btn primary"
+                href="https://github.com/mrstrange1708/FuseOS/releases/download/preview/FuseOS-preview.apk"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14" />
+                </svg>
+                Download for Android
+              </a>
+              <ol class="steps">
+                <li><span>Download the APK on your phone and tap it to open it.</span></li>
+                <li>
+                  <span
+                    >If Android asks, let your browser <b>install unknown apps</b>. FuseOS isn't on
+                    the Play Store yet.</span
+                  >
+                </li>
+                <li>
+                  <span
+                    >Sign in, then allow <b>notifications</b>. They show when a file arrives, and
+                    they keep FuseOS connected in the background.</span
+                  >
+                </li>
+                <li>
+                  <span
+                    >Optionally, add the <b>Send clipboard</b> tile to Quick Settings. Then sending
+                    your clipboard to the Mac is one pull and one tap.</span
+                  >
+                </li>
+              </ol>
+            </article>
+          </div>
+          <p class="notice">
+            <b>This is an early preview.</b> Both devices need to be on the same Wi-Fi. Syncing
+            between different networks isn't supported yet. Something broken?
+            <a href="https://github.com/mrstrange1708/FuseOS/issues">Open an issue</a>.
+          </p>
+        </div>
+      </section>
+
+      <section class="block" id="faq">
+        <div class="wrap">
+          <div class="section-head">
+            <span class="eyebrow"><span class="dot"></span>Questions</span>
+            <h2>Good to know.</h2>
+          </div>
+          <div class="faq">
+            <details>
+              <summary>Does my clipboard go to the cloud?</summary>
+              <p>
+                No. Clips and files go straight from one device to the other over your Wi-Fi,
+                encrypted with AES-GCM using keys that belong to your devices. The server never
+                receives them, so there is nothing of yours for it to store.
+              </p>
+            </details>
+            <details>
+              <summary>Why do I have to tap to send from Android?</summary>
+              <p>
+                Since Android 10, only the app on screen can read the clipboard. FuseOS keeps
+                sending down to a single tap: the Quick Settings tile, the notification button, or
+                the share sheet. Copying on the Mac needs no tap at all.
+              </p>
+            </details>
+            <details>
+              <summary>Why does macOS warn me when I open it?</summary>
+              <p>
+                Apple only removes that warning for apps signed through its paid developer program.
+                The preview isn't enrolled yet, so you confirm it once in Privacy &amp; Security and
+                it won't ask again.
+              </p>
+            </details>
+            <details>
+              <summary>Is it open source?</summary>
+              <p>
+                Yes. The Android app, the Mac app and the server are all
+                <a href="https://github.com/mrstrange1708/FuseOS">on GitHub</a>.
+              </p>
+            </details>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <span>FuseOS · Android ⇄ macOS continuity</span>
+        <a href="https://github.com/mrstrange1708/FuseOS">github.com/mrstrange1708/FuseOS</a>
+      </div>
+    </footer>
+  </body>
+</html>

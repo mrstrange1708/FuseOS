@@ -24,6 +24,19 @@ fi
 mkdir -p "$GEN"
 protoc --swift_out="$GEN" --proto_path=../../proto ../../proto/fuseos.proto
 
+# Command Line Tools without Xcode ship the macOS 27 SDK, whose SwiftUI expands @State
+# through a compiler plugin the CLT do not include — every view fails to build. The 26
+# SDK the CLT also ship predates that, so fall back to it. Xcode has the plugin and is
+# left alone, as is an SDKROOT set by hand.
+PLUGINS="$(xcode-select -p)/usr/lib/swift/host/plugins"
+if [ -z "${SDKROOT:-}" ] && [ -d "$PLUGINS" ] && [ ! -e "$PLUGINS/libSwiftUIMacros.dylib" ]; then
+	FALLBACK="$(xcode-select -p)/SDKs/MacOSX26.sdk"
+	if [ -d "$FALLBACK" ]; then
+		export SDKROOT="$FALLBACK"
+		echo "no SwiftUI macro plugin in $(xcode-select -p); building against $FALLBACK"
+	fi
+fi
+
 swift build -c "$CONFIG"
 BIN="$(swift build -c "$CONFIG" --show-bin-path)/FuseOS"
 
