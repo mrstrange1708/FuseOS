@@ -1,5 +1,5 @@
-# Publishes website/ to GitHub Pages — free hosting for the download page.
-# One-time setup: repo Settings → Pages → Source: GitHub Actions.
+# Publishes website/ (Next.js, static export) to GitHub Pages — free hosting for the
+# download page. One-time setup: repo Settings → Pages → Source: GitHub Actions.
 name: pages
 
 on:
@@ -25,9 +25,19 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The project site is served from /FuseOS, so every asset URL needs that prefix.
+      - run: pnpm --filter website build
+        env:
+          PAGES_BASE_PATH: /FuseOS
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: website
+          path: website/out
       - id: deployment
         uses: actions/deploy-pages@v4

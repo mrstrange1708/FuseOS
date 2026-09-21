@@ -10,6 +10,7 @@
   "scripts": {
     "start": "mprocs",
     "dev": "pnpm --filter server dev",
+    "website": "pnpm --filter website dev --port 3100",
     "build": "turbo run build",
     "proto:gen": "turbo run proto:gen",
     "mac": "swift run --package-path clients/macos",

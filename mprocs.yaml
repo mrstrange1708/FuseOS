@@ -37,6 +37,11 @@ procs:
       adb shell am start -n com.fuseos.app/.MainActivity &&
       echo '✔ FuseOS installed and launched — press r here to rebuild'
 
+  website:
+    # The public download page (website/, Next.js) at http://localhost:3100 — 3000 is the
+    # server's.
+    shell: pnpm --filter website dev --port 3100
+
   logcat:
     # Phone-side logs. Off by default; press `s` to start it once the app is running.
     shell: export ADB_MDNS=0 && adb logcat --pid=$(adb shell pidof -s com.fuseos.app)
