@@ -113,6 +113,14 @@ private struct HomePane: View {
                     .foregroundStyle(FuseColor.ink)
                 deviceList
 
+                Text("Files")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(FuseColor.ink)
+                FileDropZone(viewModel: viewModel)
+                ForEach(viewModel.transfers) { transfer in
+                    TransferRow(transfer: transfer, peerName: viewModel.peerName, viewModel: viewModel)
+                }
+
                 HStack {
                     Text("Recent")
                         .font(.system(size: 13, weight: .semibold))
@@ -340,6 +348,124 @@ private struct ComingSoonPane: View {
                 .foregroundStyle(FuseColor.muted)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Files
+
+/// Drop files here, or click to choose them. Either way they go to the connected phone.
+private struct FileDropZone: View {
+    @ObservedObject var viewModel: DashboardViewModel
+    @State private var targeted = false
+
+    var body: some View {
+        let linked = !viewModel.connected.isEmpty
+        VStack(spacing: 6) {
+            Image(systemName: "arrow.up.doc")
+                .font(.system(size: 20))
+                .foregroundStyle(targeted ? FuseColor.accent : FuseColor.muted)
+            Text(linked ? "Drop files to send them to \(viewModel.peerName ?? "your phone")" : "Link a device to send files")
+                .font(.system(size: 12))
+                .foregroundStyle(FuseColor.ink)
+            Button("Choose…", action: choose)
+                .disabled(!linked)
+            if let notice = viewModel.fileNotice {
+                Text(notice)
+                    .font(.system(size: 11))
+                    .foregroundStyle(FuseColor.error)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity)
+        .background(targeted ? FuseColor.accent.opacity(0.08) : FuseColor.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(targeted ? FuseColor.accent : FuseColor.outline.opacity(0.6),
+                        style: StrokeStyle(lineWidth: 1, dash: [5, 4])),
+        )
+        .dropDestination(for: URL.self) { urls, _ in
+            let files = urls.filter(\.isFileURL)
+            guard !files.isEmpty else { return false }
+            viewModel.sendFiles(files)
+            return true
+        } isTargeted: { targeted = $0 }
+    }
+
+    private func choose() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        guard panel.runModal() == .OK else { return }
+        viewModel.sendFiles(panel.urls)
+    }
+}
+
+/// One file on its way in or out: name, where it is going, a bar, and a way to stop it.
+private struct TransferRow: View {
+    let transfer: TransferProgress
+    let peerName: String?
+    @ObservedObject var viewModel: DashboardViewModel
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: transfer.outgoing ? "arrow.up.circle" : "arrow.down.circle")
+                .foregroundStyle(FuseColor.accent)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(transfer.name)
+                    .font(.system(size: 13))
+                    .foregroundStyle(FuseColor.ink)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(status)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(transfer.state == .failed ? FuseColor.error : FuseColor.muted)
+                if !transfer.finished {
+                    ProgressView(value: Double(transfer.bytes), total: Double(max(transfer.total, 1)))
+                        .progressViewStyle(.linear)
+                }
+            }
+            Spacer(minLength: 0)
+            if !transfer.finished {
+                Button {
+                    viewModel.cancelTransfer(transfer.id)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(FuseColor.muted)
+                .help("Cancel")
+            } else if !transfer.outgoing && transfer.state == .done {
+                Button("Show in Finder") {
+                    if !viewModel.revealTransfer(transfer.id) {
+                        viewModel.fileNotice = "\(transfer.name) has moved or been deleted."
+                    }
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 11))
+                .foregroundStyle(FuseColor.accent)
+            }
+        }
+        .padding(12)
+        .background(FuseColor.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(FuseColor.outline.opacity(0.6), lineWidth: 1),
+        )
+    }
+
+    private var status: String {
+        let peer = peerName ?? "your phone"
+        let percent = transfer.total > 0 ? transfer.bytes * 100 / transfer.total : 0
+        switch transfer.state {
+        case .active: return transfer.outgoing ? "Sending to \(peer) · \(percent)%" : "Receiving from \(peer) · \(percent)%"
+        case .sent: return "Waiting for \(peer) to confirm"
+        case .done: return transfer.outgoing ? "Sent to \(peer)" : "Saved to Downloads"
+        case .cancelled: return "Cancelled"
+        case .failed: return "Didn't go through"
+        }
     }
 }
 

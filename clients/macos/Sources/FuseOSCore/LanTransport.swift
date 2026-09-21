@@ -233,7 +233,7 @@ public final class LanTransport {
                 switch envelope.body {
                 case .some(.heartbeat), .none:
                     break // liveness only; nothing above the transport cares
-                case .some(.fileMeta), .some(.fileChunk), .some(.ack):
+                case .some(.fileMeta), .some(.fileChunk), .some(.ack), .some(.fileCancel):
                     onFileEnvelope?(envelope)
                 case .some(.clipText), .some(.clipImage):
                     onEnvelope?(envelope)

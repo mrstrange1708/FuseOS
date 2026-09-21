@@ -231,13 +231,17 @@ class LanTransport(
     }
 
     /** Blocking receive loop for one channel; returns when the connection ends. */
-    private fun pump(channel: LanChannel) {
+    private suspend fun pump(channel: LanChannel) {
         register(channel)
         try {
             while (true) {
                 val envelope = channel.receive()
                 if (envelope.bodyCase != Envelope.BodyCase.HEARTBEAT) {
-                    _incoming.tryEmit(envelope)
+                    // Suspends while a collector is behind, which stops reading the socket
+                    // and lets TCP push back on the sender. `tryEmit` dropped the envelope
+                    // instead: 64 file chunks queued behind a disk write, and the 65th was
+                    // lost — so every file over ~4 MB failed its index check.
+                    _incoming.emit(envelope)
                 }
             }
         } finally {

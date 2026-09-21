@@ -97,21 +97,26 @@ The `docs/` specs and the code must not drift. If you change behavior, update th
 session that ends mid-plan leaves nothing else behind. When a day lands, tick it here in the
 same commit as the work, and add what the next session needs to know.
 
-v1 is being finished against a seven-day plan agreed on 2026-08-20:
+v1 is being finished against a plan agreed on 2026-08-20 (days 1–2) and replanned on 2026-09-21
+into ten days that end with v1 released and hosted. v2 (mirroring, remote control, call/SMS relay,
+cross-network relay) starts only after v1 ships.
 
-| Day | Work | State |
-| --- | --- | --- |
-| 1 | Android one-tap send: QS tile, notification action, `CaptureActivity` | ✅ done (plus the clipboard island and an IME) |
-| 2 | File transfer core, no UI: `FileTransfer` on both clients, 64 KB chunks, sha-256 verify, `Ack` | ✅ done 2026-08-21 |
-| 3 | File transfer UI: macOS drop zone, Android SAF picker, progress, cancel on both | ⬜ next |
-| 4 | Share sheet both ways for files: macOS Share extension target, Android `ACTION_SEND` with a file `Uri` | ⬜ |
-| 5 | Real auth: Better Auth on the canonical schema, replacing `server/src/auth/dev-auth.ts` | ⬜ |
-| 6 | Inngest (presence sweep, verification email) + instrument and measure the clipboard hot path | ⬜ |
-| 7 | Two-device soak against `docs/testing.md`, and a docs pass for whatever drifted | ⬜ |
+| Day | Date | Work | State |
+| --- | --- | --- | --- |
+| — | Aug | Android one-tap send: QS tile, notification action, `CaptureActivity` | ✅ done (plus the clipboard island and an IME) |
+| — | Aug 21 | File transfer core, no UI: `FileTransfer` on both clients, 64 KB chunks, sha-256 verify, `Ack` | ✅ done |
+| 1 | Sep 21 | File transfer UI: macOS drop zone + open panel, Android SAF picker, progress, cancel both ways (`FileCancel`), files land in Downloads | ✅ done — needs a two-device run |
+| 2 | Sep 22 | Share sheet both ways for files: macOS Share extension target, Android `ACTION_SEND` with a file `Uri` through `Transfers.send` | ⬜ next |
+| 3–4 | Sep 23–24 | Real auth: Better Auth on the canonical schema, replacing `server/src/auth/dev-auth.ts` | ⬜ |
+| 5 | Sep 25 | Inngest (presence sweep, verification email) + instrument and measure the clipboard hot path | ⬜ |
+| 6 | Sep 26 | Hosting: server on an always-on free VM + Neon Postgres + TLS; release builds default to the hosted `https`/`wss` URL | ⬜ |
+| 7 | Sep 27 | Release pipeline: signed release APK + DMG (self-signed cert, no notarization) on GitHub Releases | ⬜ |
+| 8–9 | Sep 28–29 | Two-device soak against `docs/testing.md`, fix what it finds | ⬜ |
+| 10 | Sep 30 | Docs pass, tag v1.0.0 | ⬜ |
 
 Already working: auth (dev stand-in), device linking, presence/`/signal`, clipboard text and
-images both ways with history and reboot survival, Android Share-sheet send, file **receive**
-on both clients.
+images both ways with history and reboot survival, Android Share-sheet send (text/images), file
+transfer both ways with progress and cancel.
 
 Two constraints worth knowing before proposing anything in this area:
 
@@ -120,5 +125,10 @@ Two constraints worth knowing before proposing anything in this area:
   through a focused `CaptureActivity`. The default-IME exemption is why `ime/` exists, but a
   keyboard that replaces the user's own is a cost they have rejected for now — it is unused,
   and an AccessibilityService is off the table (Play Store). See `docs/protocol.md` §5.1.
-- **File transfer is not resumable and has no picker yet.** Receiving is wired on both sides;
-  originating a transfer from a file the user chose is Day 3.
+- **File transfer is not resumable.** A dropped link fails the transfer and the user re-sends;
+  see `docs/protocol.md` §6.
+- **This Mac has no Xcode, and its macOS 27 Command Line Tools are incomplete.** The 27 SDK lacks
+  SwiftUI's macro plugin, so the app only builds against the 26.5 SDK:
+  `SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk ./build-app.sh`.
+  `swift build --target FuseOSCore` works as-is. XCTest ships only with Xcode, so `swift test`
+  cannot run here: install Xcode (free) to run the macOS suite.

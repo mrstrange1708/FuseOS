@@ -3,4 +3,6 @@
      as a content URI, so received images are staged in the cache and shared from here. -->
 <paths>
     <cache-path name="clipboard" path="clipboard/" />
+    <!-- Received files below API 29, which have no permission-free route to Downloads. -->
+    <files-path name="received" path="received/" />
 </paths>

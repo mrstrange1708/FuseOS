@@ -56,6 +56,7 @@ message Envelope {
     FileChunk file_chunk = 13;
     Ack       ack        = 14;
     Heartbeat heartbeat  = 15;
+    FileCancel file_cancel = 16;
   }
 }
 ```
@@ -73,6 +74,7 @@ message Envelope {
 | `FILE_CHUNK` | sender → receiver | ordered chunk index + bytes |
 | `ACK` | receiver → sender | acknowledges an applied event / completed transfer |
 | `HEARTBEAT` | either | liveness |
+| `FILE_CANCEL` | either | this end of a transfer gave up; the other stops and discards |
 
 ## 4. Loop-prevention invariant (critical)
 
@@ -151,14 +153,20 @@ On macOS the equivalent is a **login item** (`LaunchAtLogin`, via `SMAppService`
 1. Sender emits `FILE_META` (name, size, mime, checksum). The checksum is **sha-256, lowercase hex**, over the whole file — so the sender reads the file twice, once to hash and once to stream. The receiver has to be able to verify *before* it commits the file anywhere, which rules out hashing as it goes.
 2. Sender streams ordered `FILE_CHUNK` messages. **64 KB per chunk**, `index` starting at 0 and incrementing by one, `last` set on the final chunk. 64 KB keeps a frame far below `LanChannel`'s 4 MB cap even after protobuf framing and the GCM tag, while keeping a 100 MB file at ~1600 frames.
 3. Receiver writes to a hidden partial file, verifies size and checksum on `last`, and only then moves it into place under a **sanitised** name (a peer-supplied name is reduced to its last path component — a name is never a path) that never overwrites an existing file.
-4. Receiver emits `ACK` with `ref_transfer_id` on success. Nothing acts on the ack in v1; it is on the wire because a progress UI will read it, and adding it later would be a protocol change.
-5. Images larger than a single message use the same chunking mechanism.
+4. Receiver emits `ACK` with `ref_transfer_id` on success. The ack is what moves the sender's row from "waiting for the other device to confirm" to "sent": a file is only sent once it has been checked on the other end.
+5. **Either end may give up** and emits `FILE_CANCEL` with the `transfer_id` when it does. The sender does this when the user cancels or the file becomes unreadable partway. The receiver does this when the user cancels, a write fails, a chunk arrives out of order or overruns, or the file fails verification. The other end stops and discards. Without it, a cancelled send left the receiver's partial file on disk indefinitely, and a rejected one left the sender waiting for an ack that would never come. A `FILE_CANCEL` for an unknown or finished id is ignored. An older client that predates the message sees an envelope with no body and drops it, so the addition is backward-compatible.
+6. Images larger than a single message use the same chunking mechanism.
 
-**Failure is silent and total.** An out-of-order index, an over-long stream, a write error, or a checksum mismatch abandons the transfer and deletes the partial — a half file is never handed to the user. There is **no resume**: a dropped connection means the user re-sends, which on a LAN costs seconds and costs far less code than a resume protocol that would have to survive both ends restarting. A transfer is capped at **1 GiB**, which bounds what one peer can make the other write to disk.
+**Failure is total, and reported.** An out-of-order index, an over-long stream, a write error, or a checksum mismatch abandons the transfer, deletes the partial and tells the sender (`FILE_CANCEL`); a half file is never handed to the user. A peer whose channel drops mid-transfer has its partials discarded at once. With no peer left connected, outgoing transfers fail rather than wait for an ack. A partial left behind by a killed process is swept the next time the app starts. There is **no resume**: a dropped connection means the user re-sends, which on a LAN costs seconds and costs far less code than a resume protocol that would have to survive both ends restarting. A transfer is capped at **1 GiB**, which bounds what one peer can make the other write to disk.
 
 **Chunks must reach the socket in the order they were sealed.** Each frame's counter is its GCM nonce, so a pair that seals in one order and writes in the other fails its tag check and kills the channel. `LanChannel` serialises writes for this reason on both platforms — it went unnoticed while every message was a lone clipboard event, and became load-bearing the moment a heartbeat could land in the middle of a file.
 
-Both clients implement this in `FileTransfer` (`FuseOSCore/FileTransfer.swift`, `com.fuseos.app.file.FileTransfer`) and both test it by driving a sender straight into a receiver. Receiving is wired up on both platforms; **choosing a file to send is UI that does not exist yet**, so v1 currently receives files without a way to originate one from a picker.
+**Receiving applies backpressure; it never drops.** Android's receive loop suspends while its collectors are behind, which stops reading the socket and lets TCP slow the sender down. It used to `tryEmit` into a 64-slot buffer and dropped whatever did not fit. A file chunk dropped that way failed the index check, so every file over about 4 MB failed.
+
+Both clients implement this in `FileTransfer` (`FuseOSCore/FileTransfer.swift`, `com.fuseos.app.file.FileTransfer`) and both test it by driving a sender straight into a receiver. Each reports `TransferProgress` (active → sent → done, or cancelled / failed), throttled to about 1% steps.
+
+- **macOS:** files are sent from a drop zone or an open panel on Home, and a received file lands in `~/Downloads`.
+- **Android:** files are sent from the system document picker on Home. A received file is verified in app storage, then moved to the public Downloads collection (API 29+; below that it stays in app storage behind the FileProvider), and a notification opens it.
 
 ## 7. Security
 

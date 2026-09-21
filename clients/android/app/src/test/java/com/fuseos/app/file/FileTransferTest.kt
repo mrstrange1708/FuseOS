@@ -30,9 +30,23 @@ class FileTransferTest {
     private val sender = FileTransfer(File(root, "out"), ::envelope) { sent += it }
     private val receiver = FileTransfer(File(root, "in"), ::envelope) { sent += it }
 
+    private val senderProgress = mutableListOf<TransferProgress>()
+    private val receiverProgress = mutableListOf<TransferProgress>()
+
     init {
         receiver.onFileReceived = { received += it }
+        sender.onProgress = { senderProgress += it }
+        receiver.onProgress = { receiverProgress += it }
     }
+
+    /** Feeds whatever the receiver emitted (ack, cancel) back to the sender. */
+    private fun replyAll() {
+        val envelopes = sent.toList()
+        sent.clear()
+        envelopes.forEach { sender.receive(it) }
+    }
+
+    private fun inbox() = File(root, "in").listFiles().orEmpty().toList()
 
     @After
     fun tearDown() {
@@ -164,5 +178,110 @@ class FileTransferTest {
         deliverAll()
         assertEquals(File(root, "in"), received.single().file.parentFile)
         assertEquals("escape.txt", received.single().name)
+    }
+
+    @Test
+    fun `a send is done only once the receiver acknowledges it`() {
+        val bytes = Random(19).nextBytes(FileTransfer.CHUNK_BYTES * 3)
+        val id = sendBytes(bytes)!!
+        assertEquals(TransferProgress.State.Sent, senderProgress.last().state)
+        deliverAll()
+        assertEquals(TransferProgress.State.Done, receiverProgress.last().state)
+        replyAll()
+        assertEquals(TransferProgress.State.Done, senderProgress.last().state)
+        assertEquals(id, senderProgress.last().transferId)
+        assertEquals(bytes.size.toLong(), senderProgress.last().bytes)
+    }
+
+    @Test
+    fun `cancelling a send stops the stream and the receiver discards its partial`() {
+        val bytes = Random(23).nextBytes(FileTransfer.CHUNK_BYTES * 10)
+        // Cancel from inside the stream, the way the UI's button lands mid-transfer.
+        val cancelling = FileTransfer(File(root, "out2"), ::envelope) { envelope ->
+            sent += envelope
+            if (envelope.bodyCase == Envelope.BodyCase.FILE_CHUNK && envelope.fileChunk.index == 2L) {
+                sentCancel?.invoke()
+            }
+        }
+        cancelling.onProgress = { senderProgress += it }
+        sentCancel = { cancelling.cancel(senderProgress.first().transferId) }
+
+        assertNull(cancelling.send("big.bin", "application/octet-stream", bytes.size.toLong()) {
+            ByteArrayInputStream(bytes)
+        })
+        assertEquals(3, sent.count { it.bodyCase == Envelope.BodyCase.FILE_CHUNK })
+        assertEquals(TransferProgress.State.Cancelled, senderProgress.last().state)
+
+        deliverAll()
+        assertTrue(received.isEmpty())
+        assertTrue(inbox().isEmpty())
+        assertEquals(TransferProgress.State.Failed, receiverProgress.last().state)
+    }
+
+    private var sentCancel: (() -> Unit)? = null
+
+    @Test
+    fun `cancelling a receive tells the sender`() {
+        val bytes = Random(29).nextBytes(FileTransfer.CHUNK_BYTES * 2)
+        sendBytes(bytes)
+        val envelopes = sent.toList()
+        sent.clear()
+        receiver.receive(envelopes.first()) // meta only
+        val id = receiverProgress.single().transferId
+        receiver.cancel(id)
+
+        assertTrue(inbox().isEmpty())
+        assertEquals(TransferProgress.State.Cancelled, receiverProgress.last().state)
+        assertEquals(Envelope.BodyCase.FILE_CANCEL, sent.single().bodyCase)
+        replyAll()
+        assertEquals(TransferProgress.State.Failed, senderProgress.last().state)
+    }
+
+    @Test
+    fun `a file that fails verification fails the send too, rather than waiting forever`() {
+        val bytes = Random(31).nextBytes(100)
+        sendBytes(bytes)
+        val envelopes = sent.toList().map { envelope ->
+            if (envelope.bodyCase != Envelope.BodyCase.FILE_CHUNK) {
+                envelope
+            } else {
+                envelope.toBuilder().setFileChunk(
+                    envelope.fileChunk.toBuilder().setData(ByteString.copyFrom(ByteArray(100))),
+                ).build()
+            }
+        }
+        sent.clear()
+        envelopes.forEach { receiver.receive(it) }
+        replyAll()
+        assertEquals(TransferProgress.State.Failed, senderProgress.last().state)
+    }
+
+    @Test
+    fun `a peer dropping mid-transfer discards its partial file`() {
+        val bytes = Random(37).nextBytes(FileTransfer.CHUNK_BYTES * 3)
+        sendBytes(bytes)
+        sent.take(2).forEach { receiver.receive(it) } // meta + first chunk
+        assertEquals(1, inbox().size) // the partial
+
+        receiver.onPeersChanged(setOf("some-other-device"))
+        assertTrue(inbox().isEmpty())
+        assertEquals(TransferProgress.State.Failed, receiverProgress.last().state)
+    }
+
+    @Test
+    fun `a partial left by a killed process is swept on the next start`() {
+        val inbox = File(root, "in").apply { mkdirs() }
+        File(inbox, ".partial-stale").writeText("half a file")
+        File(inbox, "kept.txt").writeText("a real file")
+        FileTransfer(inbox, ::envelope) {}
+        assertEquals(listOf("kept.txt"), inbox.list()!!.toList())
+    }
+
+    @Test
+    fun `progress is throttled rather than reported per chunk`() {
+        val bytes = Random(41).nextBytes(FileTransfer.CHUNK_BYTES * 400)
+        sendBytes(bytes)
+        // 400 chunks, ~1% steps: about 100 reports, never one per chunk.
+        assertTrue(senderProgress.size in 50..120)
     }
 }

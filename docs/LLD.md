@@ -86,7 +86,7 @@ Once two trusted devices have a direct LAN channel (see [protocol.md](protocol.m
 - `CLIP_IMAGE` — image bytes + mime; for larger images, chunk as with files.
 
 ### File transfer
-- `FILE_META` (name, size, mime, checksum) → ordered `FILE_CHUNK` stream → receiver verifies checksum → `ACK`. Progress derived from bytes received. Failed transfers are retried at the transport layer, not queued on the server.
+- `FILE_META` (name, size, mime, checksum) → ordered `FILE_CHUNK` stream → receiver verifies checksum → `ACK`. Either end can stop with `FILE_CANCEL`. Progress is derived from bytes sent or received. There is no retry or resume: a failed transfer is re-sent by the user, and nothing is ever queued on the server. See `docs/protocol.md` §6.
 
 ## 7. Error handling
 
