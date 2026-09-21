@@ -1,37 +1,6 @@
-import { IconBrandGithub } from '@tabler/icons-react';
 import { Wordmark } from '@/components/fuse-mark';
 
 const GITHUB = 'https://github.com/mrstrange1708/FuseOS';
-
-/** The top bar. Sits under the island, so it keeps the centre clear. */
-export function Nav() {
-  return (
-    <header className="absolute inset-x-0 top-0 z-40">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 pt-16 sm:px-6 md:pt-5">
-        <a href="#" aria-label="FuseOS home">
-          <Wordmark />
-        </a>
-        <nav aria-label="Primary" className="flex items-center gap-6 text-[15px] text-muted">
-          <a className="hidden hover:text-ink md:inline" href="#story">
-            How it feels
-          </a>
-          <a className="hidden hover:text-ink md:inline" href="#privacy">
-            Privacy
-          </a>
-          <a className="hover:text-ink" href={GITHUB} aria-label="Source on GitHub">
-            <IconBrandGithub size={20} />
-          </a>
-          <a
-            className="rounded-full border border-white/15 bg-white/[0.04] px-4 py-2 font-semibold text-ink transition-colors hover:border-ember"
-            href="#download"
-          >
-            Download
-          </a>
-        </nav>
-      </div>
-    </header>
-  );
-}
 
 const FAQ = [
   {

@@ -1,8 +1,9 @@
 'use client';
 
 import { useRef } from 'react';
-import { IconFileZip, IconPhoto, IconClipboardCheck } from '@tabler/icons-react';
+import { IconBrandApple, IconFileZip, IconPhoto, IconClipboardCheck } from '@tabler/icons-react';
 import { PixelPhone } from '@/components/devices';
+import { FuseMark } from '@/components/fuse-mark';
 import { gsap, useGSAP } from '@/lib/gsap';
 import { pushIsland } from '@/lib/island';
 
@@ -212,7 +213,7 @@ export function SyncStory() {
             >
               <path
                 className="filament"
-                d="M 250 250 C 380 120, 470 400, 590 260"
+                d="M 250 250 C 320 130, 340 390, 404 262"
                 fill="none"
                 stroke="#343b47"
                 strokeWidth="2"
@@ -221,7 +222,7 @@ export function SyncStory() {
               />
               <path
                 className="trail"
-                d="M 250 250 C 380 120, 470 400, 590 260"
+                d="M 250 250 C 320 130, 340 390, 404 262"
                 fill="none"
                 stroke="url(#trail)"
                 strokeWidth="3"
@@ -297,43 +298,65 @@ export function SyncStory() {
               </div>
             </PixelPhone>
 
-            {/* mac window */}
-            <div className="absolute top-[60px] right-0 h-[400px] w-[400px] overflow-hidden rounded-2xl border border-white/10 bg-[#10131a] shadow-[0_40px_100px_-30px_rgb(0_0_0/0.9)]">
-              <div className="flex items-center gap-1.5 border-b border-white/5 bg-[#161a22] px-4 py-3">
-                <i className="h-3 w-3 rounded-full bg-[#ff5f57]" />
-                <i className="h-3 w-3 rounded-full bg-[#febc2e]" />
-                <i className="h-3 w-3 rounded-full bg-[#28c840]" />
-                <span className="ml-3 font-mono text-[11px] text-white/40">MacBook Air</span>
-              </div>
-              <div className="relative h-[calc(100%-44px)]">
-                <div className="mac-notes absolute inset-0 space-y-3 p-6">
-                  <p className="font-display text-xl font-bold">Friday</p>
-                  <div className="h-2 w-2/3 rounded bg-white/10" />
-                  <div className="h-2 w-5/6 rounded bg-white/10" />
-                  <div className="mac-paste rounded-lg border border-dashed border-ember/60 bg-ember/10 px-3 py-2.5 text-[15px] opacity-0">
-                    4471 — buzz twice, 3rd floor{' '}
-                    <span className="float-right font-mono text-xs text-ember">⌘V</span>
+            {/* MacBook, front on: lid with bezel and notch, the desktop, then the base. */}
+            <div className="absolute top-[88px] right-0 w-[600px]">
+              <div className="relative mx-auto h-[352px] w-[540px] rounded-t-[22px] bg-[#0b0c10] p-[11px] shadow-[0_0_0_1.5px_#3a404d,0_40px_100px_-30px_rgb(0_0_0/0.9)]">
+                <div className="absolute top-[11px] left-1/2 z-20 h-[14px] w-[92px] -translate-x-1/2 rounded-b-[8px] bg-[#0b0c10]" />
+                <div className="relative h-full w-full overflow-hidden rounded-[6px] bg-[radial-gradient(120%_90%_at_80%_110%,#5a2712_0%,#1c202a_45%,#0c0e14_100%)]">
+                  {/* menu bar */}
+                  <div className="flex h-[22px] items-center justify-between bg-black/30 px-3 font-mono text-[9.5px] text-white/70 backdrop-blur">
+                    <span className="flex items-center gap-3">
+                      <IconBrandApple size={11} className="text-white" /> Notes{' '}
+                      <span className="text-white/40">File Edit View</span>
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <FuseMark className="h-2.5 w-5 text-white" /> 9:41
+                    </span>
                   </div>
-                  <div className="h-2 w-1/2 rounded bg-white/10" />
-                </div>
-                <div className="mac-canvas absolute inset-0 grid place-items-center p-6 opacity-0">
-                  <div className="grid h-full w-full place-items-center rounded-xl border border-white/5 bg-[#0c0e14]">
-                    <Photo className="mac-image h-44 w-64 opacity-0 shadow-2xl" />
-                  </div>
-                </div>
-                <div className="mac-drop absolute inset-0 p-6 opacity-0">
-                  <p className="font-display text-lg font-bold">Files</p>
-                  <div className="mac-drop-zone mt-3 grid h-44 place-items-center rounded-xl border border-dashed border-white/20 text-center text-sm text-white/70">
-                    <div className="drag-file flex flex-col items-center gap-2">
-                      <IconFileZip size={44} className="text-amber" />
-                      <span className="font-mono text-xs">trip-photos.zip</span>
+                  {/* app window */}
+                  <div className="absolute inset-x-5 top-[34px] bottom-4 overflow-hidden rounded-xl border border-white/10 bg-[#10131a]/95 shadow-[0_20px_50px_-20px_rgb(0_0_0/0.9)]">
+                    <div className="flex items-center gap-1.5 border-b border-white/5 bg-[#161a22] px-3 py-2">
+                      <i className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
+                      <i className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
+                      <i className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
+                    </div>
+                    <div className="relative h-[calc(100%-31px)]">
+                      <div className="mac-notes absolute inset-0 space-y-2.5 p-5">
+                        <p className="font-display text-lg font-bold">Friday</p>
+                        <div className="h-2 w-2/3 rounded bg-white/10" />
+                        <div className="h-2 w-5/6 rounded bg-white/10" />
+                        <div className="mac-paste rounded-lg border border-dashed border-ember/60 bg-ember/10 px-3 py-2.5 text-[15px] opacity-0">
+                          4471 — buzz twice, 3rd floor{' '}
+                          <span className="float-right font-mono text-xs text-ember">⌘V</span>
+                        </div>
+                        <div className="h-2 w-1/2 rounded bg-white/10" />
+                      </div>
+                      <div className="mac-canvas absolute inset-0 grid place-items-center p-4 opacity-0">
+                        <div className="grid h-full w-full place-items-center rounded-lg border border-white/5 bg-[#0c0e14]">
+                          <Photo className="mac-image h-36 w-56 opacity-0 shadow-2xl" />
+                        </div>
+                      </div>
+                      <div className="mac-drop absolute inset-0 p-4 opacity-0">
+                        <p className="font-display text-base font-bold">Files</p>
+                        <div className="mac-drop-zone mt-2 grid h-32 place-items-center rounded-xl border border-dashed border-white/20 text-center text-sm text-white/70">
+                          <div className="drag-file flex flex-col items-center gap-2">
+                            <IconFileZip size={40} className="text-amber" />
+                            <span className="font-mono text-xs">trip-photos.zip</span>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-center text-xs text-white/50">
+                          Drop files to send them to Pixel 8
+                        </p>
+                      </div>
                     </div>
                   </div>
-                  <p className="mt-3 text-center text-xs text-white/50">
-                    Drop files to send them to Pixel 8
-                  </p>
                 </div>
               </div>
+              {/* base */}
+              <div className="relative h-[16px] w-full rounded-b-[14px] rounded-t-[3px] bg-[linear-gradient(180deg,#4a515e,#2a2f3a_55%,#15181f)] shadow-[0_30px_60px_-20px_rgb(0_0_0/0.9)]">
+                <div className="absolute top-0 left-1/2 h-[6px] w-[96px] -translate-x-1/2 rounded-b-[8px] bg-[#1a1d25]" />
+              </div>
+              <p className="mt-3 text-center font-mono text-[11px] text-white/40">MacBook Air</p>
             </div>
           </div>
         </div>

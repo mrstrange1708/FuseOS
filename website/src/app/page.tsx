@@ -1,6 +1,6 @@
-import { DynamicIsland } from '@/components/dynamic-island';
+import { Navbar } from '@/components/navbar';
 import { Download } from '@/components/sections/download';
-import { Faq, Footer, Nav } from '@/components/sections/chrome';
+import { Faq, Footer } from '@/components/sections/chrome';
 import { Features } from '@/components/sections/features';
 import { Hero } from '@/components/sections/hero';
 import { MacbookSection } from '@/components/sections/macbook';
@@ -10,8 +10,7 @@ import { SyncStory } from '@/components/sections/sync-story';
 export default function Home() {
   return (
     <>
-      <DynamicIsland />
-      <Nav />
+      <Navbar />
       <main>
         <Hero />
         <SyncStory />

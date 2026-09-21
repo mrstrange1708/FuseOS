@@ -7,7 +7,11 @@ import { FuseMark } from '@/components/fuse-mark';
 /** Aceternity's MacBook, lid opening on scroll onto the real FuseOS Mac app. */
 export function MacbookSection() {
   return (
-    <section aria-label="FuseOS on the Mac" className="relative w-full overflow-hidden bg-void">
+    <section
+      id="mac"
+      aria-label="FuseOS on the Mac"
+      className="relative w-full overflow-hidden bg-void"
+    >
       <MacbookScroll
         showGradient
         badge={<FuseMark className="h-5 w-9 text-white" />}

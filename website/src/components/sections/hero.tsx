@@ -51,7 +51,8 @@ function useIslandDemo() {
     let step = 0;
     let fileTimer: ReturnType<typeof setInterval> | undefined;
     const play = () => {
-      if (document.hidden) return;
+      // Only on the hero: further down, each section's own island has the stage.
+      if (document.hidden || window.scrollY > window.innerHeight * 0.6) return;
       const event = DEMO[step++ % DEMO.length];
       pushIsland(event, event.kind === 'file' ? 3800 : 3200);
       if (event.kind === 'file') {
@@ -106,7 +107,11 @@ export function Hero() {
   );
 
   return (
-    <section ref={root} className="relative isolate overflow-hidden bg-void pt-36 pb-24 md:pt-44">
+    <section
+      id="top"
+      ref={root}
+      className="relative isolate overflow-hidden bg-void pt-36 pb-24 md:pt-44"
+    >
       <Spotlight {...EMBER_LIGHT} />
       <BackgroundBeams className="opacity-60" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-void to-transparent" />
