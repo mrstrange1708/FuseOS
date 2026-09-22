@@ -359,17 +359,16 @@ class ClipboardSync(
         clip.getItemAt(0).coerceToText(appContext)?.toString()?.takeIf { it.isNotEmpty() }
     }.getOrNull()
 
-    private companion object {
+    companion object {
         /**
          * Images ride inline in a single `ClipImage` frame rather than being chunked.
          * A screenshot is typically 1–2 MB, one frame on a LAN is faster than a chunked
-         * stream, and `LanChannel` already caps a frame at 4 MB. Anything larger is not
-         * synced today; it will be covered when file transfer lands and brings
-         * FileMeta/FileChunk reassembly with it.
+         * stream, and `LanChannel` already caps a frame at 4 MB. A larger image shared
+         * from the Share sheet goes as a file transfer instead (see ShareActivity).
          */
         const val MAX_INLINE_IMAGE_BYTES = 3 * 1024 * 1024
 
-        const val MAX_ENTRIES = 50
-        const val MAX_HISTORY_BYTES = 24L * 1024 * 1024
+        private const val MAX_ENTRIES = 50
+        private const val MAX_HISTORY_BYTES = 24L * 1024 * 1024
     }
 }

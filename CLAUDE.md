@@ -107,7 +107,7 @@ cross-network relay) starts only after v1 ships.
 | — | Aug | Android one-tap send: QS tile, notification action, `CaptureActivity` | ✅ done (plus the clipboard island and an IME) |
 | — | Aug 21 | File transfer core, no UI: `FileTransfer` on both clients, 64 KB chunks, sha-256 verify, `Ack` | ✅ done |
 | 1 | Sep 21 | File transfer UI: macOS drop zone + open panel, Android SAF picker, progress, cancel both ways (`FileCancel`), files land in Downloads | ✅ done — needs a two-device run |
-| 2 | Sep 22 | Share sheet both ways for files: macOS Share extension target, Android `ACTION_SEND` with a file `Uri` through `Transfers.send` | ⬜ next |
+| 2 | Sep 22 | Share for files both ways: Android `ACTION_SEND`/`SEND_MULTIPLE` of any type (done); Mac via Finder Services + drop on the menu bar item — a real Share extension needs a sandbox + App Group signed with a paid Team ID | 🟡 Android done, Mac next |
 | 3–4 | Sep 23–24 | Real auth: Better Auth on the canonical schema, replacing `server/src/auth/dev-auth.ts` | ⬜ |
 | 5 | Sep 25 | Inngest (presence sweep, verification email) + instrument and measure the clipboard hot path | ⬜ |
 | 6 | Sep 26 | Hosting: server on an always-on free VM + Neon Postgres + TLS; release builds default to the hosted `https`/`wss` URL | ⬜ |
