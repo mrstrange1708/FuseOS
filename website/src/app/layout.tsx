@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Instrument_Sans, JetBrains_Mono, Schibsted_Grotesk } from 'next/font/google';
 import './globals.css';
+import { SmoothScroll } from '@/components/smooth-scroll';
 
 const display = Schibsted_Grotesk({
   variable: '--font-schibsted',
@@ -27,7 +28,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
     <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable} antialiased`}>
-      <body className="grain min-h-full">{children}</body>
+      <body className="grain min-h-full">
+        <SmoothScroll />
+        {children}
+      </body>
     </html>
   );
 }

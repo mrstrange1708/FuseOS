@@ -18,6 +18,7 @@ import { Photo } from '@/components/devices';
 import { gsap, ScrollTrigger, useGSAP } from '@/lib/gsap';
 import { pushIsland, useIsland } from '@/lib/island';
 import { cn } from '@/lib/utils';
+import { scrollToY } from '@/lib/scroll';
 
 /** The five things the island shows, in scroll order. */
 const STEPS = [
@@ -234,7 +235,7 @@ function NotchIsland({
           borderBottomLeftRadius: size.r,
           borderBottomRightRadius: size.r,
         }}
-        transition={reduce ? { duration: 0 } : { type: 'spring', bounce: 0.28, duration: 0.7 }}
+        transition={reduce ? { duration: 0 } : { type: 'spring', bounce: 0.2, duration: 0.85 }}
         className="relative bg-black shadow-[0_30px_60px_-20px_rgb(0_0_0/0.9)]"
       >
         {/* shoulders */}
@@ -322,24 +323,32 @@ export function NotchStage() {
               start: 'top top',
               end: '+=4600',
               pin: true,
-              scrub: 0.6,
+              scrub: 1,
               onUpdate: (self) => {
                 const t = self.progress * TOTAL;
                 setOpen(t >= OPEN);
                 const s = Math.min(STEPS.length - 1, Math.max(0, Math.floor(t - OPEN)));
                 setStep(s);
                 // The file fills across the first 80% of its own stretch, then holds.
-                setFile(s === 2 ? Math.min(1, Math.max(0, (t - OPEN - 2) / 0.8)) : s > 2 ? 1 : 0);
+                const f = s === 2 ? Math.min(1, Math.max(0, (t - OPEN - 2) / 0.8)) : s > 2 ? 1 : 0;
+                // Whole percents: a scroll frame re-renders only when the bar actually moves.
+                setFile(Math.round(f * 100) / 100);
               },
             },
           });
           trigger.current = tl.scrollTrigger ?? null;
           tl.fromTo(
             '.mac-rig',
-            { y: '70vh', scale: base * 0.85, opacity: 0 },
-            { y: 0, scale: base, opacity: 1, duration: 1, ease: 'power2.out' },
+            {
+              y: '70vh',
+              scale: base * 0.85,
+              opacity: 0,
+              rotationX: 24,
+              transformPerspective: 1400,
+            },
+            { y: 0, scale: base, opacity: 1, rotationX: 0, duration: 1, ease: 'power3.out' },
           )
-            .to('.mac-rig', { scale: end, duration: 1, ease: 'power2.inOut' })
+            .to('.mac-rig', { scale: end, duration: 1, ease: 'power3.inOut' })
             .to('.notch-intro', { opacity: 0, y: -40, duration: 0.6 }, 1)
             .to('.notch-layer', { opacity: 1, duration: 0.12 }, 1.86)
             .fromTo('.notch-glow', { opacity: 0 }, { opacity: 1, duration: 0.4 }, 1.9)
@@ -355,7 +364,7 @@ export function NotchStage() {
     const st = trigger.current;
     if (!st) return setStep(i);
     const y = st.start + ((OPEN + i + 0.5) / TOTAL) * (st.end - st.start);
-    window.scrollTo({ top: y, behavior: 'smooth' });
+    scrollToY(y);
   };
 
   const current = STEPS[step];

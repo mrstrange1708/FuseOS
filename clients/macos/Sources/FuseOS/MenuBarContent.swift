@@ -264,7 +264,7 @@ struct MenuBarContent: View {
 
     private func statusLine(linked: Bool, online: Bool, hasPeer: Bool) -> String {
         if !hasPeer { return "Sign in on your phone to link it" }
-        if linked { return "connected · direct · same Wi-Fi" }
+        if linked { return "connected · direct" }
         return online ? "online · connecting…" : "offline"
     }
 

@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 const LINKS = [
   { href: '#notch', label: 'The island' },
   { href: '#story', label: 'How it feels' },
+  { href: '#menubar', label: 'Menu bar' },
   { href: '#privacy', label: 'Privacy' },
 ];
 

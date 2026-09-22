@@ -161,7 +161,7 @@ export function Photo({ className }: { className?: string }) {
     <div
       className={`relative overflow-hidden rounded-xl bg-[linear-gradient(180deg,#2a1b3d_0%,#e85d2a_62%,#ffb347_100%)] ${className ?? ''}`}
     >
-      <div className="absolute top-[38%] left-1/2 h-10 w-10 -translate-x-1/2 rounded-full bg-[#ffd3bc] shadow-[0_0_40px_10px_rgb(255_179_71/0.6)]" />
+      <div className="absolute top-[34%] left-1/2 aspect-square h-[26%] -translate-x-1/2 rounded-full bg-[#ffd3bc] shadow-[0_0_40px_10px_rgb(255_179_71/0.6)]" />
       <div className="absolute inset-x-0 bottom-0 h-1/2 bg-[#14171f] [clip-path:polygon(0_60%,22%_20%,40%_55%,62%_10%,82%_50%,100%_30%,100%_100%,0_100%)]" />
     </div>
   );
