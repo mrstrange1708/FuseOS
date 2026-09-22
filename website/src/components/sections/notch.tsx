@@ -59,26 +59,157 @@ const STEPS = [
 const OPEN = 2.3;
 const TOTAL = OPEN + STEPS.length + 0.4;
 
-/** MacBook seen front on, lid only — the stage the camera flies into. */
-function MacLid() {
+const MAC_FONT = {
+  fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif',
+};
+
+/** A macOS-style wallpaper in the FuseOS palette: deep dusk with ember light rising. */
+function Wallpaper() {
   return (
-    <div className="relative h-[352px] w-[540px] rounded-t-[22px] bg-[#0b0c10] p-[11px] shadow-[0_0_0_1.5px_#3a404d,0_60px_120px_-40px_rgb(0_0_0/0.9)]">
-      <div className="absolute top-[11px] left-1/2 z-20 h-[14px] w-[92px] -translate-x-1/2 rounded-b-[8px] bg-black" />
-      <div className="relative h-full w-full overflow-hidden rounded-[6px] bg-[radial-gradient(120%_90%_at_70%_120%,#7a2e12_0%,#3a1d12_30%,#1c202a_60%,#0c0e14_100%)]">
-        <div className="flex h-[22px] items-center justify-between bg-black/35 px-3 text-[9.5px] text-white/80 backdrop-blur">
-          <span className="flex items-center gap-3">
-            <IconBrandApple size={11} className="text-white" />
-            <b className="font-semibold text-white">Finder</b>
-            <span className="text-white/55">File Edit View Go Window</span>
-          </span>
-          <span className="flex items-center gap-2">
-            <FuseMark className="h-2.5 w-5 text-white" />
-            <IconWifi size={10} />
-            <IconBattery3 size={12} />
-            <span className="font-mono">Tue 9:41</span>
-          </span>
+    <div className="absolute inset-0 overflow-hidden bg-[linear-gradient(180deg,#0b0d18_0%,#171133_42%,#3a1726_72%,#7a2e12_100%)]">
+      <div className="absolute -bottom-[30%] -left-[10%] h-[80%] w-[70%] rounded-[50%] bg-[#ff7a45] opacity-70 blur-[60px]" />
+      <div className="absolute -right-[15%] -bottom-[25%] h-[70%] w-[60%] rounded-[50%] bg-[#e85d2a] opacity-60 blur-[70px]" />
+      <div className="absolute top-[10%] left-[30%] h-[50%] w-[50%] rounded-[50%] bg-[#4a2a8a] opacity-40 blur-[80px]" />
+      <svg
+        viewBox="0 0 400 200"
+        preserveAspectRatio="none"
+        className="absolute inset-x-0 bottom-0 h-[55%] w-full opacity-60 mix-blend-screen"
+      >
+        <path
+          d="M0 140 C 80 90, 160 170, 240 120 S 360 80, 400 110 L 400 200 L 0 200 Z"
+          fill="#ffb347"
+          opacity=".35"
+        />
+        <path
+          d="M0 165 C 90 130, 170 190, 260 150 S 360 120, 400 140 L 400 200 L 0 200 Z"
+          fill="#ff7a45"
+          opacity=".45"
+        />
+      </svg>
+      <div className="absolute inset-0 bg-[linear-gradient(115deg,rgb(255_255_255/0.07),transparent_38%)]" />
+    </div>
+  );
+}
+
+/** The macOS menu bar, at the size it is drawn: `h` tall with text at `fs`. */
+function MenuBar({
+  h,
+  fs,
+  gap,
+  compact,
+}: {
+  h: number;
+  fs: number;
+  gap: number;
+  compact?: boolean;
+}) {
+  const icon = Math.round(fs * 1.15);
+  return (
+    <div
+      style={{ height: h, fontSize: fs, ...MAC_FONT }}
+      className="relative flex items-center justify-between bg-black/25 text-white/90 backdrop-blur-md"
+    >
+      <span className="flex items-center" style={{ gap, paddingLeft: gap }}>
+        <IconBrandApple size={icon} className="text-white" />
+        <b className="font-semibold text-white">Finder</b>
+        {!compact && <span className="hidden text-white/80 sm:inline">File</span>}
+        {!compact && <span className="hidden text-white/80 sm:inline">Edit</span>}
+        {!compact && <span className="hidden text-white/80 md:inline">View</span>}
+        {!compact && <span className="hidden text-white/80 md:inline">Go</span>}
+        {!compact && <span className="hidden text-white/80 lg:inline">Window</span>}
+      </span>
+      <span className="flex items-center" style={{ gap, paddingRight: gap }}>
+        <FuseMark className="text-white" />
+        {!compact && <IconBattery3 size={icon + 4} className="hidden sm:inline" />}
+        <IconWifi size={icon} />
+        {!compact && <span className="hidden tabular-nums md:inline">Tue 22 Sep</span>}
+        <span className="tabular-nums">9:41</span>
+      </span>
+    </div>
+  );
+}
+
+/** A macOS window's chrome with a blank body, for depth on the desktop. */
+function DesktopWindow({ className, title }: { className: string; title: string }) {
+  return (
+    <div
+      className={cn(
+        'absolute overflow-hidden rounded-[10px] border border-white/10 bg-[#1b1d24]/85 shadow-[0_20px_50px_-15px_rgb(0_0_0/0.8)] backdrop-blur-xl',
+        className,
+      )}
+    >
+      <div className="flex items-center gap-[6%] border-b border-white/5 bg-white/[0.03] px-[4%] py-[2.5%]">
+        <span className="flex gap-[5px]">
+          <i className="aspect-square w-[9px] rounded-full bg-[#ff5f57]" />
+          <i className="aspect-square w-[9px] rounded-full bg-[#febc2e]" />
+          <i className="aspect-square w-[9px] rounded-full bg-[#28c840]" />
+        </span>
+        <span className="text-[11px] text-white/50" style={MAC_FONT}>
+          {title}
+        </span>
+      </div>
+      <div className="grid gap-[8px] p-[5%]">
+        <div className="h-[7px] w-2/3 rounded bg-white/10" />
+        <div className="h-[7px] w-5/6 rounded bg-white/[0.07]" />
+        <div className="h-[7px] w-1/2 rounded bg-white/[0.07]" />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A MacBook Pro, front on and at rest: aluminium edge, thin black bezel, rounded display,
+ * the notch, and the base with its lip. The notch's top sits 12px below the lid's top,
+ * which is where the camera pushes in.
+ */
+function MacBook() {
+  return (
+    <div className="relative w-[640px]">
+      <div className="relative mx-auto aspect-[1.55] w-[580px] rounded-[22px] bg-[linear-gradient(150deg,#8a909b_0%,#3a3f48_22%,#1c1f25_60%,#565c67_100%)] p-[2px] shadow-[0_50px_120px_-40px_rgb(0_0_0/0.95)]">
+        <div className="h-full w-full rounded-[20px] bg-black p-[10px]">
+          <div className="relative h-full w-full overflow-hidden rounded-[11px]">
+            <Wallpaper />
+            <MenuBar h={14} fs={7.5} gap={8} compact />
+            <div className="absolute top-0 left-1/2 z-10 h-[14px] w-[64px] -translate-x-1/2 rounded-b-[6px] bg-black" />
+            <DesktopWindow className="top-[16%] left-[8%] w-[46%]" title="Notes" />
+            <DesktopWindow className="top-[30%] right-[7%] w-[40%]" title="Downloads" />
+            <div className="absolute bottom-[4%] left-1/2 flex -translate-x-1/2 gap-[6px] rounded-[12px] border border-white/10 bg-white/10 p-[5px] backdrop-blur-md">
+              {['#ff7a45', '#4c8dff', '#34c759', '#ffcc00', '#af52de', '#eceff4'].map((c) => (
+                <span
+                  key={c}
+                  className="h-[22px] w-[22px] rounded-[6px]"
+                  style={{ background: `linear-gradient(145deg, ${c}, ${c}99)` }}
+                />
+              ))}
+            </div>
+          </div>
         </div>
-        <div className="absolute right-6 bottom-6 left-6 h-[58%] rounded-xl border border-white/10 bg-[#10131a]/80 shadow-2xl" />
+      </div>
+      <div className="relative -mt-[2px] h-[15px] w-full rounded-t-[3px] rounded-b-[18px] bg-[linear-gradient(180deg,#9aa0ab_0%,#4a4f59_30%,#23262d_70%,#121418_100%)]">
+        <div className="absolute top-0 left-1/2 h-[6px] w-[118px] -translate-x-1/2 rounded-b-[9px] bg-[linear-gradient(180deg,#1b1e24,#3a3f48)]" />
+      </div>
+      <div className="mx-auto mt-3 h-6 w-[78%] rounded-[50%] bg-black/80 blur-2xl" />
+    </div>
+  );
+}
+
+/**
+ * The camera's close-up of the top of that display, drawn at real size rather than
+ * magnified — so the menu bar is crisp, and the notch is a real notch the island grows from.
+ */
+function CloseUp() {
+  return (
+    <div className="absolute inset-0">
+      {/* aluminium edge, then the bezel's top strip */}
+      <div className="h-px w-full bg-[linear-gradient(90deg,transparent,#8a909b_20%,#8a909b_80%,transparent)]" />
+      <div className="h-[13px] w-full bg-black" />
+      <div className="absolute inset-x-0 top-[14px] bottom-0 overflow-hidden">
+        <Wallpaper />
+        <MenuBar h={37} fs={13.5} gap={18} />
+        <DesktopWindow className="top-[90px] left-[6%] w-[34%] opacity-70" title="Notes — Friday" />
+        <DesktopWindow className="top-[150px] right-[5%] w-[30%] opacity-60" title="Downloads" />
+        {/* fade the desktop into the page so the caption reads */}
+        <div className="absolute inset-x-0 bottom-0 h-[60%] bg-gradient-to-b from-transparent via-void/80 to-void" />
       </div>
     </div>
   );
@@ -223,7 +354,7 @@ function NotchIsland({
         height: target.height,
         r: target.radius,
       }
-    : { width: `${notch.width}px`, height: notch.height, r: notch.height * 0.55 };
+    : { width: `${notch.width}px`, height: notch.height, r: 12 };
 
   return (
     <div className="pointer-events-none absolute top-0 left-1/2 z-30 -translate-x-1/2">
@@ -236,11 +367,11 @@ function NotchIsland({
           borderBottomRightRadius: size.r,
         }}
         transition={reduce ? { duration: 0 } : { type: 'spring', bounce: 0.2, duration: 0.85 }}
-        className="relative bg-black shadow-[0_30px_60px_-20px_rgb(0_0_0/0.9)]"
+        className="relative bg-black shadow-[inset_0_-1px_0_rgb(255_255_255/0.07),0_30px_60px_-20px_rgb(0_0_0/0.9)]"
       >
         {/* shoulders */}
-        <span className="absolute top-0 -left-4 h-4 w-4 bg-[radial-gradient(circle_at_0_100%,transparent_16px,#000_16.5px)]" />
-        <span className="absolute top-0 -right-4 h-4 w-4 bg-[radial-gradient(circle_at_100%_100%,transparent_16px,#000_16.5px)]" />
+        <span className="absolute top-0 -left-2.5 h-2.5 w-2.5 bg-[radial-gradient(circle_at_0_100%,transparent_10px,#000_10.5px)]" />
+        <span className="absolute top-0 -right-2.5 h-2.5 w-2.5 bg-[radial-gradient(circle_at_100%_100%,transparent_10px,#000_10.5px)]" />
         <div className="absolute inset-0 overflow-hidden">
           <AnimatePresence mode="popLayout" initial={false}>
             {open && (
@@ -273,8 +404,9 @@ export function NotchStage() {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [file, setFile] = useState(0);
-  // The zoom the camera ends at, and so the size the notch reaches: less on a phone.
-  const [zoom, setZoom] = useState(3.2);
+  // The close-up's notch, at real size. The MacBook's notch is 64px wide, so the camera
+  // push ends at this over 64 — and the two notches line up as they cross-fade.
+  const [notch, setNotch] = useState({ width: 190, height: 37 });
 
   // Copy anything on this page and the island shows it, the way the Mac app does.
   useEffect(() => {
@@ -288,7 +420,8 @@ export function NotchStage() {
 
   useEffect(() => {
     const query = window.matchMedia('(min-width: 768px)');
-    const update = () => setZoom(query.matches ? 3.2 : 1.8);
+    const update = () =>
+      setNotch(query.matches ? { width: 190, height: 37 } : { width: 124, height: 28 });
     update();
     query.addEventListener('change', update);
     return () => query.removeEventListener('change', update);
@@ -305,13 +438,14 @@ export function NotchStage() {
         (ctx) => {
           const { wide, motion: moving } = ctx.conditions as { wide: boolean; motion: boolean };
           const base = wide ? 1 : 0.55;
-          const end = wide ? 3.2 : 1.8;
-          gsap.set('.mac-rig', { xPercent: -50, transformOrigin: '50% 11px' });
+          const end = (wide ? 190 : 124) / 64;
+          gsap.set('.mac-rig', { xPercent: -50, transformOrigin: '50% 12px' });
+          gsap.set('.closeup', { transformOrigin: '50% 0%' });
 
           if (!moving) {
-            gsap.set('.mac-rig', { scale: end });
+            gsap.set('.mac-rig', { opacity: 0 });
             gsap.set('.notch-intro', { opacity: 0 });
-            gsap.set('.notch-layer', { opacity: 1 });
+            gsap.set('.closeup', { opacity: 1 });
             setOpen(true);
             return;
           }
@@ -321,9 +455,9 @@ export function NotchStage() {
             scrollTrigger: {
               trigger: '.notch-pin',
               start: 'top top',
-              end: '+=4600',
+              end: '+=4800',
               pin: true,
-              scrub: 1,
+              scrub: 1.2,
               onUpdate: (self) => {
                 const t = self.progress * TOTAL;
                 setOpen(t >= OPEN);
@@ -337,21 +471,24 @@ export function NotchStage() {
             },
           });
           trigger.current = tl.scrollTrigger ?? null;
+          // 0 → 1: the MacBook rises and settles, tipping up from below.
           tl.fromTo(
             '.mac-rig',
-            {
-              y: '70vh',
-              scale: base * 0.85,
-              opacity: 0,
-              rotationX: 24,
-              transformPerspective: 1400,
-            },
+            { y: '65vh', scale: base * 0.9, opacity: 0, rotationX: 22, transformPerspective: 1600 },
             { y: 0, scale: base, opacity: 1, rotationX: 0, duration: 1, ease: 'power3.out' },
           )
-            .to('.mac-rig', { scale: end, duration: 1, ease: 'power3.inOut' })
-            .to('.notch-intro', { opacity: 0, y: -40, duration: 0.6 }, 1)
-            .to('.notch-layer', { opacity: 1, duration: 0.12 }, 1.86)
-            .fromTo('.notch-glow', { opacity: 0 }, { opacity: 1, duration: 0.4 }, 1.9)
+            .to('.notch-intro', { opacity: 0, y: -30, duration: 0.5 }, 1)
+            // 1 → 2: the camera pushes into the notch. The MacBook grows until its notch is
+            // the close-up's size, fading out as the crisp close-up fades in over it.
+            .to('.mac-rig', { scale: end, duration: 1, ease: 'power2.in' }, 1)
+            .to('.mac-rig', { opacity: 0, duration: 0.35, ease: 'power1.in' }, 1.62)
+            .fromTo(
+              '.closeup',
+              { opacity: 0, scale: 1.08 },
+              { opacity: 1, scale: 1, duration: 0.55, ease: 'power2.out' },
+              1.5,
+            )
+            .fromTo('.notch-glow', { opacity: 0 }, { opacity: 1, duration: 0.4 }, 2)
             .to({}, { duration: TOTAL - 2 });
         },
       );
@@ -384,18 +521,16 @@ export function NotchStage() {
         </div>
 
         {/* The anchor: the notch's top edge sits here for the whole ride. */}
-        <div className="absolute inset-x-0 top-[96px] md:top-[88px]">
-          <div className="mac-rig absolute top-0 left-1/2 opacity-0 will-change-transform">
-            <MacLid />
+        <div className="absolute inset-x-0 top-[96px] bottom-0 md:top-[88px]">
+          <div className="closeup absolute inset-x-0 -top-[14px] bottom-0 opacity-0 will-change-transform">
+            <CloseUp />
+            <div className="notch-glow pointer-events-none absolute top-[14px] left-1/2 h-72 w-[620px] max-w-[100vw] -translate-x-1/2 bg-[radial-gradient(50%_60%_at_50%_0%,rgb(255_122_69/0.30),transparent_70%)] opacity-0" />
+            <div className="absolute top-[14px] left-0 w-full">
+              <NotchIsland open={open} step={step} file={file} notch={notch} />
+            </div>
           </div>
-          <div className="notch-layer absolute top-[11px] left-0 w-full opacity-0">
-            <div className="notch-glow pointer-events-none absolute top-0 left-1/2 h-72 w-[560px] max-w-[100vw] -translate-x-1/2 bg-[radial-gradient(50%_60%_at_50%_0%,rgb(255_122_69/0.28),transparent_70%)] opacity-0" />
-            <NotchIsland
-              open={open}
-              step={step}
-              file={file}
-              notch={{ width: 92 * zoom, height: 14 * zoom }}
-            />
+          <div className="mac-rig absolute -top-[12px] left-1/2 opacity-0 will-change-transform">
+            <MacBook />
           </div>
         </div>
 
