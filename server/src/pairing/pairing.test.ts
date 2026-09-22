@@ -8,7 +8,8 @@ import { auth, deleteUsers, registerDevice, signUp, type TestUser } from '../tes
  * card, it does not grant access. These cover the two things that matter: a code introduces
  * two of *your* devices, and it can never introduce someone else's.
  */
-describe('manual linking', () => {
+// Postgres-backed like the other auth tests, so it skips where there is no DATABASE_URL (CI).
+describe.skipIf(!process.env.DATABASE_URL)('manual linking', () => {
   let app: FastifyInstance;
   let owner: TestUser;
 
