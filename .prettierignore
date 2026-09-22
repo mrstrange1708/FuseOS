@@ -5,3 +5,6 @@ dist
 **/drizzle/meta
 pnpm-lock.yaml
 *.md
+.next
+website/out
+website/next-env.d.ts

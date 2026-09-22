@@ -35,6 +35,7 @@ message Envelope {
     FileChunk file_chunk = 13;
     Ack       ack        = 14;
     Heartbeat heartbeat  = 15;
+    FileCancel file_cancel = 16;
   }
 }
 
@@ -68,3 +69,11 @@ message Ack {
 }
 
 message Heartbeat {}
+
+// Either end of a transfer giving up: the sender cancelled or could not read the file,
+// or the receiver cancelled, failed a write, or failed verification. The other end stops
+// and discards. Without it a cancelled send left the receiver's partial file waiting
+// forever, and a rejected one left the sender waiting for an ack that never came.
+message FileCancel {
+  string transfer_id = 1;
+}

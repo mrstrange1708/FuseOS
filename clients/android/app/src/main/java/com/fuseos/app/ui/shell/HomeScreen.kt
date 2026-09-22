@@ -18,8 +18,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fuseos.app.clipboard.ClipEntry
 import com.fuseos.app.core.ConnectStage
+import com.fuseos.app.file.TransferProgress
 import com.fuseos.app.ui.dashboard.DashboardViewModel
 import com.fuseos.app.ui.dashboard.DeviceCard
 
@@ -52,6 +57,10 @@ fun HomeScreen(
     onCopy: (ClipEntry) -> Unit,
     onSeeAll: () -> Unit,
     peerName: String?,
+    transfers: List<TransferProgress>,
+    onSendFile: () -> Unit,
+    onCancelTransfer: (String) -> Unit,
+    onOpenTransfer: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val connect = state.connect
@@ -89,6 +98,20 @@ fun HomeScreen(
                 battery = peerBattery(device.id),
             )
             Spacer(Modifier.height(10.dp))
+        }
+
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Files", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.weight(1f))
+            OutlinedButton(onClick = onSendFile, enabled = state.connected.isNotEmpty()) {
+                Text("Send a file")
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        transfers.forEach { transfer ->
+            TransferRow(transfer, peerName, onCancelTransfer, onOpenTransfer)
+            Spacer(Modifier.height(8.dp))
         }
 
         Spacer(Modifier.height(14.dp))
@@ -199,6 +222,75 @@ private fun RecentRow(entry: ClipEntry, peerName: String?, onCopy: (ClipEntry) -
         )
     }
 }
+
+/** One file on its way in or out: name, where it is going, a bar, and a way to stop it. */
+@Composable
+private fun TransferRow(
+    transfer: TransferProgress,
+    peerName: String?,
+    onCancel: (String) -> Unit,
+    onOpen: (String) -> Unit,
+) {
+    val peer = peerName ?: "your Mac"
+    val status = when (transfer.state) {
+        TransferProgress.State.Active ->
+            (if (transfer.outgoing) "Sending to $peer · " else "Receiving from $peer · ") +
+                "${percent(transfer)}%"
+        TransferProgress.State.Sent -> "Waiting for $peer to confirm"
+        TransferProgress.State.Done ->
+            if (transfer.outgoing) "Sent to $peer" else "Saved to Downloads · tap to open"
+        TransferProgress.State.Cancelled -> "Cancelled"
+        TransferProgress.State.Failed -> "Didn't go through"
+    }
+    val openable = !transfer.outgoing && transfer.state == TransferProgress.State.Done
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
+            .then(if (openable) Modifier.clickable { onOpen(transfer.transferId) } else Modifier)
+            .padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                transfer.name,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                status,
+                style = MaterialTheme.typography.labelSmall,
+                fontFamily = FontFamily.Monospace,
+                color = if (transfer.state == TransferProgress.State.Failed) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            if (!transfer.finished) {
+                Spacer(Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    progress = { percent(transfer) / 100f },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        if (!transfer.finished) {
+            IconButton(onClick = { onCancel(transfer.transferId) }) {
+                Icon(Icons.Filled.Close, contentDescription = "Cancel ${transfer.name}")
+            }
+        } else {
+            Spacer(Modifier.size(10.dp))
+        }
+    }
+}
+
+private fun percent(transfer: TransferProgress): Int =
+    if (transfer.total <= 0) 0 else (transfer.bytes * 100 / transfer.total).toInt().coerceIn(0, 100)
 
 /**
  * A destination that exists in the bar but not yet in the product.

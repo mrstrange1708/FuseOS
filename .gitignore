@@ -32,3 +32,8 @@ clients/macos/**/xcuserdata/
 
 # Logs
 *.log
+
+# Website (Next.js)
+.next/
+website/out/
+website/next-env.d.ts

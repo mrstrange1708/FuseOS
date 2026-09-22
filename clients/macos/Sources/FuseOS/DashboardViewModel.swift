@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import FuseOSCore
 
@@ -12,14 +13,18 @@ final class DashboardViewModel: ObservableObject {
     @Published var isLoading = false
     /// Everything copied here or received from a peer, newest first.
     @Published var history: [ClipEntry] = []
+    /// Files in flight and recently finished, newest first.
+    @Published var transfers: [TransferProgress] = []
+    /// Why the last attempt to send a file did not start, until the next attempt.
+    @Published var fileNotice: String?
 
     let signal = SignalClient()
     let transport = LanTransport()
     private lazy var clipboard = ClipboardSync(transport: transport)
-    /// Receiving is always on; sending is a Day-3 drop zone away. A verified file lands in
-    /// `FileTransfer.defaultDirectory` — handing it to the user is a UI decision, and this
-    /// layer has none yet.
+    /// Verified files land in Downloads (`FileTransfer.defaultDirectory`).
     private lazy var files = FileTransfer(transport: transport)
+    /// Where each received file was saved, so its row can reveal it in Finder.
+    private var receivedURLs: [String: URL] = [:]
     /// The notch HUD. Owned here because this is where clip events already arrive.
     private let island = ClipIsland()
     private var started = false
@@ -46,15 +51,23 @@ final class DashboardViewModel: ObservableObject {
         }
         transport.onConnectedPeersChanged = { [weak self] peers in
             self?.connected = peers
+            self?.files.peersChanged(peers)
         }
         clipboard.onHistoryChanged = { [weak self] entries in
             self?.history = entries
         }
-        // Creating it is what wires the transport's file hook, so this touch is load-bearing
-        // until there is a UI holding on to it.
-        files.onFileReceived = { file in
+        // Creating `files` is what wires the transport's file hook, so this first touch
+        // must happen before any peer can connect.
+        files.onFileReceived = { [weak self] file in
             // Size only: a file name is user content, and content never reaches a log.
             FuseLog.lan.info("file received, \(file.size, privacy: .public) bytes")
+            self?.receivedURLs[file.transferId] = file.url
+        }
+        files.onProgress = { [weak self] progress in
+            guard let self else { return }
+            // ponytail: newest 20 only; a record of every file ever sent belongs in a
+            // history store, which files do not have yet.
+            self.transfers = Array(([progress] + self.transfers.filter { $0.id != progress.id }).prefix(20))
         }
         clipboard.onClipEvent = { [weak self] entry in
             guard let self else { return }
@@ -178,6 +191,38 @@ final class DashboardViewModel: ObservableObject {
             presence: presence,
             connected: connected,
         )
+    }
+
+    /// Sends files one after another, in the order given. Dropped or picked, same path.
+    func sendFiles(_ urls: [URL]) {
+        guard !connected.isEmpty else {
+            fileNotice = "No device connected. Open FuseOS on your phone."
+            return
+        }
+        fileNotice = nil
+        Task {
+            for url in urls {
+                do {
+                    try await files.send(fileAt: url)
+                } catch FileTransfer.Failure.empty {
+                    fileNotice = "\(url.lastPathComponent) is empty."
+                } catch FileTransfer.Failure.tooLarge {
+                    fileNotice = "\(url.lastPathComponent) is over the 1 GB limit."
+                } catch {
+                    // A folder lands here too: it has no file size to put on the wire.
+                    fileNotice = "Couldn't read \(url.lastPathComponent)."
+                }
+            }
+        }
+    }
+
+    func cancelTransfer(_ id: String) { files.cancel(id) }
+
+    /// Selects a received file in Finder. False when it is not there any more.
+    func revealTransfer(_ id: String) -> Bool {
+        guard let url = receivedURLs[id], FileManager.default.fileExists(atPath: url.path) else { return false }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+        return true
     }
 
     /// Clicking a history entry puts it back on this Mac's clipboard.

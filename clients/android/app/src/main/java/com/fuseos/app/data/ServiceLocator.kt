@@ -5,6 +5,7 @@ import com.fuseos.app.core.Config
 import com.fuseos.app.clipboard.ClipboardSync
 import com.fuseos.app.core.DeviceInfo
 import com.fuseos.app.file.FileTransfer
+import com.fuseos.app.file.Transfers
 import com.fuseos.app.net.LanTransport
 import com.fuseos.app.ui.island.ClipIsland
 import io.ktor.client.HttpClient
@@ -41,7 +42,7 @@ object ServiceLocator {
         private set
     lateinit var clipIsland: ClipIsland
         private set
-    lateinit var fileTransfer: FileTransfer
+    lateinit var transfers: Transfers
         private set
 
     /** Outlives every screen and every service, so work that must not die with an
@@ -102,16 +103,17 @@ object ServiceLocator {
                 clipboardSync.send(clip)
             }
         }
-        // Receiving is always on; sending is a Day-3 picker away. Files land in filesDir
-        // rather than Downloads because handing one to the user is a UI decision, and this
-        // layer has no UI. Collected on IO: every chunk is a disk write.
+        // Files are received into app storage and moved to Downloads once verified, so a
+        // half-written file is never visible there. Collected on IO: every chunk is a
+        // disk write.
         val transfer = FileTransfer(
             directory = File(appContext.filesDir, "received"),
             newEnvelope = { transport.newEnvelope() },
             emit = { transport.broadcast(it) },
         )
-        fileTransfer = transfer
+        transfers = Transfers(appContext, transfer, transport, appScope)
         appScope.launch(Dispatchers.IO) { transport.incoming.collect { transfer.receive(it) } }
+        appScope.launch(Dispatchers.IO) { transport.connectedPeers.collect { transfer.onPeersChanged(it) } }
 
         connectionManager = ConnectionManager(
             deviceRepository, signalClient, sessionStore, transport, clipboardSync,

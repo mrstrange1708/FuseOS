@@ -1,3 +1,4 @@
+import CoreServices
 import CryptoKit
 import Foundation
 
@@ -9,6 +10,32 @@ public struct ReceivedFile: Equatable, Identifiable {
     public let name: String
     public let mime: String
     public let size: Int
+}
+
+/// Where one transfer is, for the progress UI. The Android `TransferProgress` is its mirror.
+public struct TransferProgress: Equatable, Identifiable {
+    public enum State: Equatable {
+        /// Chunks are moving.
+        case active
+        /// Every chunk is out; waiting for the receiver's verified `Ack`. Outgoing only.
+        case sent
+        /// Acknowledged (outgoing) or verified and on disk (incoming).
+        case done
+        /// This device cancelled it.
+        case cancelled
+        /// The other end gave up, the link dropped, or the file failed verification.
+        case failed
+    }
+
+    public var id: String { transferId }
+    public let transferId: String
+    public let name: String
+    public let outgoing: Bool
+    public let bytes: Int
+    public let total: Int
+    public let state: State
+
+    public var finished: Bool { state == .done || state == .cancelled || state == .failed }
 }
 
 /// File transfer over the LAN data plane. The Android `FileTransfer` is the mirror of this
@@ -31,27 +58,33 @@ public final class FileTransfer {
     /// Small enough that a chunk is nowhere near `LanChannel`'s 4 MB frame cap even after
     /// protobuf framing and the GCM tag, large enough that a 100 MB file is ~1600 frames
     /// rather than 100k.
-    static let chunkBytes = 64 * 1024
+    nonisolated static let chunkBytes = 64 * 1024
 
     /// Bounds what one peer can make this device write to disk in a single transfer.
     public static let maxFileBytes = 1 << 30 // 1 GiB
 
-    /// Where verified files land. Not the user's Downloads yet — choosing a destination is
-    /// a UI decision, and this layer deliberately has no UI.
+    /// Where verified files land: the user's Downloads, which is where a Mac user looks
+    /// for a file that came from somewhere else.
     public nonisolated static var defaultDirectory: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return base.appendingPathComponent("FuseOS/Received", isDirectory: true)
     }
+
+    private static let partialPrefix = ".fuseos-partial-"
 
     /// Fires once per file, after the checksum has been verified. Nothing is published for
     /// a transfer that fails — a corrupt file is not an event worth showing anyone.
     public var onFileReceived: ((ReceivedFile) -> Void)?
 
+    /// Every state change and roughly every 1% of bytes. Throttled because a 1 GiB file is
+    /// 16k chunks, and a UI does not need 16k redraws.
+    public var onProgress: ((TransferProgress) -> Void)?
+
     private let newEnvelope: () -> FuseEnvelope
     private let emit: (FuseEnvelope) async -> Void
     private let directory: URL
     private var receiving: [String: Reception] = [:]
+    private var sending: [String: Outgoing] = [:]
 
     /// The transport init used by the app. Wiring the receive hook here rather than in a
     /// `start()` means a file cannot arrive before anyone is listening for it.
@@ -74,12 +107,54 @@ public final class FileTransfer {
         self.newEnvelope = newEnvelope
         self.emit = emit
         self.directory = directory
+        // A partial is only ever alive inside one process: one left on disk is from a run
+        // that was killed mid-transfer, and nothing will ever finish it.
+        let leftovers = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        for name in leftovers where name.hasPrefix(Self.partialPrefix) {
+            try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+        }
     }
 
     /// Abandons every partial transfer. Called on teardown; the temp files go with it.
     public func stop() {
         for reception in receiving.values { reception.discard() }
         receiving.removeAll()
+        for outgoing in sending.values { outgoing.cancelled = true }
+        sending.removeAll()
+    }
+
+    /// Stops a transfer in either direction and tells the other end, which discards its
+    /// side. A no-op for an id that already finished.
+    public func cancel(_ transferId: String) {
+        if let outgoing = sending.removeValue(forKey: transferId) {
+            // The send loop sees the flag after its current chunk and stops quietly; the
+            // cancel below is what the receiver acts on.
+            outgoing.cancelled = true
+            emitCancel(transferId)
+            report(outgoing.progress(.cancelled))
+            return
+        }
+        guard let reception = receiving.removeValue(forKey: transferId) else { return }
+        reception.discard()
+        emitCancel(transferId)
+        report(reception.progress(.cancelled))
+    }
+
+    /// Fails whatever cannot finish now that only `connected` peers are reachable: an
+    /// incoming file from a peer that dropped will never get its last chunk, and with nobody
+    /// connected an outgoing one will never be acknowledged.
+    public func peersChanged(_ connected: Set<String>) {
+        for reception in receiving.values where !connected.contains(reception.sourceDeviceId) {
+            receiving.removeValue(forKey: reception.transferId)
+            reception.discard()
+            report(reception.progress(.failed))
+        }
+        guard connected.isEmpty else { return }
+        for outgoing in sending.values {
+            outgoing.cancelled = true
+            report(outgoing.progress(.failed))
+        }
+        sending.removeAll()
     }
 
     // MARK: - Sending
@@ -100,30 +175,48 @@ public final class FileTransfer {
         guard size > 0 else { throw Failure.empty }
         guard size <= Self.maxFileBytes else { throw Failure.tooLarge(size) }
 
+        // Off the main actor: hashing a gigabyte takes seconds, and on the main actor those
+        // seconds were a frozen window. The send loop below awaits every write, so it can
+        // stay here.
+        let checksum = try await Task.detached(priority: .userInitiated) {
+            try Self.sha256(of: url)
+        }.value
+
         guard let handle = try? FileHandle(forReadingFrom: url) else { throw Failure.unreadable }
         defer { try? handle.close() }
 
-        var hasher = SHA256()
-        while let block = try handle.read(upToCount: Self.chunkBytes), !block.isEmpty {
-            hasher.update(data: block)
-        }
-
         let transferId = UUID().uuidString
+        let outgoing = Outgoing(transferId: transferId, name: url.lastPathComponent, size: size)
+        sending[transferId] = outgoing
+        report(outgoing.progress(.active))
         var meta = newEnvelope()
         meta.fileMeta = FuseFileMeta.with {
             $0.transferID = transferId
             $0.name = url.lastPathComponent
             $0.size = UInt64(size)
             $0.mime = Self.mime(for: url)
-            $0.checksum = hasher.finalize().hexString
+            $0.checksum = checksum
         }
         await emit(meta)
 
-        try handle.seek(toOffset: 0)
         var index: UInt64 = 0
         var sent = 0
         while true {
-            let block = (try handle.read(upToCount: Self.chunkBytes)) ?? Data()
+            // Cancelled from the UI, or failed by a dropped peer: whoever set the flag has
+            // already reported it and told the receiver.
+            if outgoing.cancelled { return transferId }
+            let block: Data
+            do {
+                block = (try handle.read(upToCount: Self.chunkBytes)) ?? Data()
+            } catch {
+                // Unreadable halfway: the receiver holds a partial that will never finish,
+                // so it has to be told rather than left to wait.
+                if sending.removeValue(forKey: transferId) != nil {
+                    emitCancel(transferId)
+                    report(outgoing.progress(.failed))
+                }
+                throw Failure.unreadable
+            }
             sent += block.count
             // The file shrinking mid-send ends the stream here; the receiver's checksum is
             // what catches it, which is the same check that catches a corrupted chunk.
@@ -136,9 +229,16 @@ public final class FileTransfer {
                 $0.last = last
             }
             await emit(envelope)
+            // Checked after the write as well: a cancel that lands while a chunk is on its
+            // way must not be followed by an "active" report.
+            if outgoing.cancelled { return transferId }
+            outgoing.bytes = sent
             if last { break }
             index += 1
+            if outgoing.shouldReport() { report(outgoing.progress(.active)) }
         }
+        // Still ours unless an ack or a cancel raced the last chunk.
+        if sending[transferId] != nil { report(outgoing.progress(.sent)) }
         return transferId
     }
 
@@ -147,49 +247,74 @@ public final class FileTransfer {
     /// Feed every `FileMeta` / `FileChunk` / `Ack` envelope here.
     func receive(_ envelope: FuseEnvelope) {
         switch envelope.body {
-        case let .some(.fileMeta(meta)): begin(meta)
+        case let .some(.fileMeta(meta)): begin(meta, from: envelope.sourceDeviceID)
         case let .some(.fileChunk(chunk)): append(chunk)
-        // The sender has nothing left to do on an ack in v1 — no retry queue, no resume.
-        // It stays on the wire because the receiver's "I have it, verified" is what a
-        // progress UI will read in Day 3, and adding it later would be a protocol change.
+        case let .some(.ack(ack)): acknowledged(ack.refTransferID)
+        case let .some(.fileCancel(cancel)): cancelledRemotely(cancel.transferID)
         default: break
         }
     }
 
-    private func begin(_ meta: FuseFileMeta) {
+    /// The receiver has the file and it verified: the only point a send is really done.
+    private func acknowledged(_ transferId: String) {
+        guard let outgoing = sending.removeValue(forKey: transferId) else { return }
+        report(outgoing.progress(.done, bytes: outgoing.size))
+    }
+
+    /// The other end gave up. Same handling whichever end of the transfer we are.
+    private func cancelledRemotely(_ transferId: String) {
+        if let outgoing = sending.removeValue(forKey: transferId) {
+            outgoing.cancelled = true
+            report(outgoing.progress(.failed))
+            return
+        }
+        guard let reception = receiving.removeValue(forKey: transferId) else { return }
+        reception.discard()
+        report(reception.progress(.failed))
+    }
+
+    private func begin(_ meta: FuseFileMeta, from sourceDeviceId: String) {
         // Peer-supplied and therefore untrusted: a name is a *file* name, never a path,
         // or "../../.ssh/authorized_keys" would be a valid transfer.
         let name = Self.safeName(meta.name)
+        // Bounds-checked while still a UInt64: `Int(meta.size)` traps on anything above
+        // Int.max, so a peer sending a huge size would have crashed the app.
+        guard meta.size > 0, meta.size <= UInt64(Self.maxFileBytes), !meta.checksum.isEmpty else { return }
         let size = Int(meta.size)
-        guard size > 0, size <= Self.maxFileBytes, !meta.checksum.isEmpty else { return }
         // A repeated meta for a live transfer restarts it rather than corrupting it.
         receiving[meta.transferID]?.discard()
 
-        let partial = directory.appendingPathComponent(".partial-\(Self.safeName(meta.transferID))")
+        let partial = directory.appendingPathComponent("\(Self.partialPrefix)\(Self.safeName(meta.transferID))")
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: partial.path, contents: nil)
         guard let handle = try? FileHandle(forWritingTo: partial) else { return }
-        receiving[meta.transferID] = Reception(
-            transferId: meta.transferID, name: name, mime: meta.mime, size: size,
-            checksum: meta.checksum.lowercased(), url: partial, handle: handle,
+        let reception = Reception(
+            transferId: meta.transferID, sourceDeviceId: sourceDeviceId, name: name,
+            mime: meta.mime, size: size, checksum: meta.checksum.lowercased(), url: partial,
+            handle: handle,
         )
+        receiving[meta.transferID] = reception
+        report(reception.progress(.active))
     }
 
     private func append(_ chunk: FuseFileChunk) {
         guard let reception = receiving[chunk.transferID] else { return }
         // Ordering is the transport's job (TCP, one channel), so an out-of-order index
         // means something is wrong enough that the file cannot be trusted.
-        guard chunk.index == reception.nextIndex else { return abandon(chunk.transferID) }
+        guard chunk.index == reception.nextIndex else { return abandon(reception) }
         reception.written += chunk.data.count
-        guard reception.written <= reception.size else { return abandon(chunk.transferID) }
+        guard reception.written <= reception.size else { return abandon(reception) }
         do {
             try reception.handle.write(contentsOf: chunk.data)
         } catch {
-            return abandon(chunk.transferID)
+            return abandon(reception)
         }
         reception.hasher.update(data: chunk.data)
         reception.nextIndex += 1
-        guard chunk.last else { return }
+        guard chunk.last else {
+            if reception.shouldReport() { report(reception.progress(.active)) }
+            return
+        }
         finish(reception)
     }
 
@@ -199,18 +324,18 @@ public final class FileTransfer {
         guard reception.written == reception.size,
               reception.hasher.finalize().hexString == reception.checksum
         else {
-            try? FileManager.default.removeItem(at: reception.url)
             FuseLog.lan.warning("file transfer failed verification, discarded")
-            return
+            return fail(reception)
         }
 
         let destination = Self.uniqueURL(in: directory, name: reception.name)
         do {
             try FileManager.default.moveItem(at: reception.url, to: destination)
         } catch {
-            try? FileManager.default.removeItem(at: reception.url)
-            return
+            return fail(reception)
         }
+        Self.quarantine(destination)
+        report(reception.progress(.done))
         onFileReceived?(ReceivedFile(
             transferId: reception.transferId, url: destination, name: destination.lastPathComponent,
             mime: reception.mime, size: reception.size,
@@ -221,41 +346,116 @@ public final class FileTransfer {
         Task { await emit(ack) }
     }
 
-    private func abandon(_ transferId: String) {
-        receiving.removeValue(forKey: transferId)?.discard()
+    /// Drops a reception that went wrong, and tells the sender so it stops waiting.
+    private func abandon(_ reception: Reception) {
+        receiving.removeValue(forKey: reception.transferId)
+        fail(reception)
+    }
+
+    private func fail(_ reception: Reception) {
+        reception.discard()
+        emitCancel(reception.transferId)
+        report(reception.progress(.failed))
+    }
+
+    private func emitCancel(_ transferId: String) {
+        var envelope = newEnvelope()
+        envelope.fileCancel = FuseFileCancel.with { $0.transferID = transferId }
+        Task { await emit(envelope) }
+    }
+
+    private func report(_ progress: TransferProgress) {
+        onProgress?(progress)
     }
 
     // MARK: - Helpers
 
-    private final class Reception {
+    /// What both directions share: a byte count to report, throttled to about 1%.
+    private class Tracked {
         let transferId: String
         let name: String
-        let mime: String
         let size: Int
+        var outgoing: Bool { false }
+        var bytesDone: Int { 0 }
+        private var reportedAt = 0
+
+        init(transferId: String, name: String, size: Int) {
+            self.transferId = transferId
+            self.name = name
+            self.size = size
+        }
+
+        func shouldReport() -> Bool {
+            guard bytesDone - reportedAt >= size / 100 else { return false }
+            reportedAt = bytesDone
+            return true
+        }
+
+        func progress(_ state: TransferProgress.State, bytes: Int? = nil) -> TransferProgress {
+            TransferProgress(
+                transferId: transferId, name: name, outgoing: outgoing,
+                bytes: bytes ?? bytesDone, total: size, state: state,
+            )
+        }
+    }
+
+    private final class Outgoing: Tracked {
+        var bytes = 0
+        var cancelled = false
+        override var outgoing: Bool { true }
+        override var bytesDone: Int { bytes }
+    }
+
+    private final class Reception: Tracked {
+        let sourceDeviceId: String
+        let mime: String
         let checksum: String
         let url: URL
         let handle: FileHandle
         var hasher = SHA256()
         var nextIndex: UInt64 = 0
         var written = 0
+        override var bytesDone: Int { written }
 
         init(
-            transferId: String, name: String, mime: String, size: Int,
+            transferId: String, sourceDeviceId: String, name: String, mime: String, size: Int,
             checksum: String, url: URL, handle: FileHandle,
         ) {
-            self.transferId = transferId
-            self.name = name
+            self.sourceDeviceId = sourceDeviceId
             self.mime = mime
-            self.size = size
             self.checksum = checksum
             self.url = url
             self.handle = handle
+            super.init(transferId: transferId, name: name, size: size)
         }
 
         func discard() {
             try? handle.close()
             try? FileManager.default.removeItem(at: url)
         }
+    }
+
+    /// Marks a received file as downloaded, the way a browser or AirDrop does, so Gatekeeper
+    /// checks an app or script from the phone before it first runs. The sender is the
+    /// user's own device, but a phone can download malware too.
+    private static func quarantine(_ url: URL) {
+        var values = URLResourceValues()
+        values.quarantineProperties = [
+            kLSQuarantineTypeKey as String: kLSQuarantineTypeOtherDownload as String,
+            kLSQuarantineAgentNameKey as String: "FuseOS",
+        ]
+        var url = url
+        try? url.setResourceValues(values)
+    }
+
+    private nonisolated static func sha256(of url: URL) throws -> String {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { throw Failure.unreadable }
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while let block = try handle.read(upToCount: chunkBytes), !block.isEmpty {
+            hasher.update(data: block)
+        }
+        return hasher.finalize().hexString
     }
 
     /// Reduces anything a peer sends to a plain file name. Internal so the traversal cases

@@ -4,6 +4,8 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -29,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fuseos.app.data.ServiceLocator
+import com.fuseos.app.file.Transfers
 import com.fuseos.app.ui.components.ErrorBanner
 import com.fuseos.app.ui.components.FuseWordmark
 import com.fuseos.app.ui.dashboard.DashboardViewModel
@@ -50,6 +53,19 @@ fun FuseShell() {
     val email by ServiceLocator.session.emailFlow.collectAsState(initial = null)
     val deviceName by ServiceLocator.session.deviceNameFlow.collectAsState(initial = null)
     val context = LocalContext.current
+    val transfers by ServiceLocator.transfers.list.collectAsState()
+    // The system picker, not a file browser of our own: it reaches Drive, Downloads and
+    // every other provider with no storage permission at all.
+    val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val message = when (ServiceLocator.transfers.send(uri)) {
+            Transfers.SendResult.Started -> null
+            Transfers.SendResult.NoPeer -> "No device connected. Open FuseOS on your Mac."
+            Transfers.SendResult.Unreadable -> "Couldn't read that file."
+            Transfers.SendResult.TooLarge -> "That file is over the 1 GB limit."
+        }
+        message?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+    }
 
     var tab by remember { mutableStateOf(FuseTab.Home) }
     var showPairing by remember { mutableStateOf(false) }
@@ -88,6 +104,14 @@ fun FuseShell() {
                         onCopy = viewModel::copyToClipboard,
                         onSeeAll = { tab = FuseTab.History },
                         peerName = peerName,
+                        transfers = transfers,
+                        onSendFile = { pickFile.launch(arrayOf("*/*")) },
+                        onCancelTransfer = ServiceLocator.transfers::cancel,
+                        onOpenTransfer = { id ->
+                            if (!ServiceLocator.transfers.open(id)) {
+                                Toast.makeText(context, "That file has moved or been deleted.", Toast.LENGTH_SHORT).show()
+                            }
+                        },
                     )
 
                     FuseTab.Screen -> ComingSoonScreen(
