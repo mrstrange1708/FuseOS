@@ -49,11 +49,18 @@ struct MenuBarContent: View {
     @Environment(\.openWindow) private var openWindow
     @State private var copiedId: Int?
     @State private var dropTargeted = false
+    @State private var search: SearchPhase = .idle
+
+    private enum SearchPhase: Equatable { case idle, searching, notFound }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
-            deviceCard
+            if viewModel.connected.isEmpty {
+                connectCard
+            } else {
+                deviceCard
+            }
             if !activeTransfers.isEmpty { transfersCard }
             clipsCard
             notificationsCard
@@ -81,6 +88,18 @@ struct MenuBarContent: View {
             viewModel.sendFiles(files)
             return true
         } isTargeted: { dropTargeted = $0 }
+        // A link coming up ends the search, whichever way it came.
+        .onChange(of: viewModel.connected) { connected in
+            if !connected.isEmpty { withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { search = .idle } }
+        }
+        // Gives up after 12 s: long enough for a dial and a TLS-free LAN handshake, short
+        // enough that someone watching the radar is not left wondering.
+        .task(id: search) {
+            guard search == .searching else { return }
+            try? await Task.sleep(nanoseconds: 12_000_000_000)
+            guard !Task.isCancelled, search == .searching, viewModel.connected.isEmpty else { return }
+            withAnimation { search = .notFound }
+        }
     }
 
     // MARK: - Sections
@@ -142,6 +161,122 @@ struct MenuBarContent: View {
                 }
             }
         }
+    }
+
+    /// Nothing linked: a way to link, and what the search is finding while it runs.
+    private var connectCard: some View {
+        Card {
+            VStack(spacing: 12) {
+                switch search {
+                case .idle:
+                    HStack(spacing: 12) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(FuseColor.muted.opacity(0.12))
+                                .frame(width: 42, height: 42)
+                            Image(systemName: "iphone.slash")
+                                .font(.system(size: 19))
+                                .foregroundStyle(FuseColor.muted)
+                        }
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Not connected")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(FuseColor.ink)
+                            Text("Find your phone on this Wi-Fi")
+                                .font(.system(size: 10.5, design: .monospaced))
+                                .foregroundStyle(FuseColor.muted)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    Button { startSearch() } label: {
+                        Label("Connect", systemImage: "dot.radiowaves.left.and.right")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PillButtonStyle(prominent: true))
+
+                case .searching:
+                    Radar()
+                        .frame(height: 96)
+                    Text("Looking for your devices…")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(FuseColor.ink)
+                    foundList
+
+                case .notFound:
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Couldn't reach your phone", systemImage: "exclamationmark.magnifyingglass")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(FuseColor.ink)
+                        tip("Open FuseOS on your phone and sign in to the same account.")
+                        tip("Put both devices on the same Wi-Fi network.")
+                        tip("Allow FuseOS on the local network in System Settings → Privacy & Security.")
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    foundList
+                    Button { startSearch() } label: {
+                        Label("Try again", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PillButtonStyle(prominent: true))
+                }
+            }
+        }
+    }
+
+    /// The account's other devices, and what the search can say about each right now.
+    @ViewBuilder
+    private var foundList: some View {
+        if !viewModel.peers.isEmpty {
+            VStack(spacing: 6) {
+                ForEach(viewModel.peers) { peer in
+                    let presence = viewModel.onlineState(for: peer)
+                    let linked = viewModel.isConnected(peer)
+                    HStack(spacing: 8) {
+                        Image(systemName: peer.platform == "android" ? "iphone.gen3" : "laptopcomputer")
+                            .foregroundStyle(presence.online ? FuseColor.accent : FuseColor.muted)
+                            .frame(width: 18)
+                        Text(peer.name)
+                            .font(.system(size: 12))
+                            .foregroundStyle(FuseColor.ink)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        if linked {
+                            Label("Linked", systemImage: "checkmark.circle.fill")
+                                .font(.system(size: 10.5, weight: .semibold))
+                                .foregroundStyle(FuseColor.accent)
+                        } else if presence.online {
+                            HStack(spacing: 5) {
+                                ProgressView().controlSize(.mini)
+                                Text("connecting").font(.system(size: 10.5, design: .monospaced))
+                            }
+                            .foregroundStyle(FuseColor.muted)
+                        } else {
+                            Text("offline")
+                                .font(.system(size: 10.5, design: .monospaced))
+                                .foregroundStyle(FuseColor.muted)
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(FuseColor.surfaceAlt.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+        }
+    }
+
+    private func tip(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Circle().fill(FuseColor.accent).frame(width: 4, height: 4)
+            Text(text)
+                .font(.system(size: 11))
+                .foregroundStyle(FuseColor.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func startSearch() {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { search = .searching }
+        Task { await viewModel.connect() }
     }
 
     private var transfersCard: some View {
@@ -285,6 +420,30 @@ struct MenuBarContent: View {
 }
 
 // MARK: - Pieces
+
+/// Three rings pulsing out from the Mac: the search, running.
+private struct Radar: View {
+    var body: some View {
+        TimelineView(.animation) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            ZStack {
+                ForEach(0 ..< 3, id: \.self) { i in
+                    let phase = (t / 2.1 + Double(i) / 3).truncatingRemainder(dividingBy: 1)
+                    Circle()
+                        .stroke(FuseColor.accent.opacity(0.7 * (1 - phase)), lineWidth: 1.5)
+                        .scaleEffect(0.25 + phase * 0.95)
+                }
+                ZStack {
+                    Circle().fill(FuseColor.accent.opacity(0.15)).frame(width: 40, height: 40)
+                    Image(systemName: "laptopcomputer")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(FuseColor.accent)
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+}
 
 /// A section of the popover: a rounded surface with an optional small-caps title.
 private struct Card<Content: View>: View {

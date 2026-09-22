@@ -128,6 +128,17 @@ public final class LanTransport {
         }
     }
 
+    /// Dials every unconnected peer now instead of waiting out its backoff, which grows to
+    /// 15 s. What the popover's Connect button runs, so a phone that just joined the Wi-Fi
+    /// links while the user is still looking rather than on the next retry.
+    public func retryNow() {
+        for (peerId, task) in supervisors where channels[peerId] == nil {
+            task.cancel()
+            supervisors[peerId] = nil
+        }
+        updatePeers(peers)
+    }
+
     /// Ordered, back-pressured send to every connected peer.
     ///
     /// Unlike `broadcast` this waits for each write to reach the socket, which is what

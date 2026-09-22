@@ -195,6 +195,13 @@ final class DashboardViewModel: ObservableObject {
         )
     }
 
+    /// The popover's Connect: re-read which devices are on the account (a phone that just
+    /// signed in), then dial everything unconnected at once rather than after its backoff.
+    func connect() async {
+        await refresh()
+        transport.retryNow()
+    }
+
     /// Sends files one after another, in the order given. Dropped or picked, same path.
     func sendFiles(_ urls: [URL]) {
         // Finder can hand over folders (Services, drops); a folder has no single size to
