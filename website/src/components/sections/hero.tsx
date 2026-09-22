@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { IconBrandApple, IconBrandAndroid } from '@tabler/icons-react';
 import { Spotlight } from '@/components/ui/spotlight-new';
 import { BackgroundBeams } from '@/components/ui/background-beams';
 import { AndroidAppScreen, PixelPhone } from '@/components/devices';
 import { gsap, SplitText, useGSAP } from '@/lib/gsap';
-import { pushIsland, updateIsland, type IslandEvent } from '@/lib/island';
 
 const EMBER_LIGHT = {
   gradientFirst:
@@ -17,70 +16,8 @@ const EMBER_LIGHT = {
     'radial-gradient(50% 50% at 50% 50%, hsla(18, 100%, 75%, .05) 0, hsla(18, 100%, 45%, .02) 80%, transparent 100%)',
 };
 
-/** What the island plays while nobody is doing anything: one of each thing FuseOS moves. */
-const DEMO: IslandEvent[] = [
-  {
-    kind: 'clip',
-    title: 'Copied on Pixel 8',
-    detail: '4471 — buzz twice, 3rd floor',
-    from: 'phone',
-  },
-  {
-    kind: 'image',
-    title: 'Image on your clipboard',
-    detail: 'Screenshot 09:41 · 1.2 MB',
-    from: 'phone',
-  },
-  {
-    kind: 'file',
-    title: 'Receiving from Pixel 8',
-    detail: 'trip-photos.zip',
-    from: 'phone',
-    progress: 0,
-  },
-  {
-    kind: 'link',
-    title: 'Copied on MacBook Air',
-    detail: 'https://maps.app.goo.gl/tx8Qe',
-    from: 'mac',
-  },
-];
-
-function useIslandDemo() {
-  useEffect(() => {
-    let step = 0;
-    let fileTimer: ReturnType<typeof setInterval> | undefined;
-    const play = () => {
-      // Only on the hero: further down, each section's own island has the stage.
-      if (document.hidden || window.scrollY > window.innerHeight * 0.6) return;
-      const event = DEMO[step++ % DEMO.length];
-      pushIsland(event, event.kind === 'file' ? 3800 : 3200);
-      if (event.kind === 'file') {
-        let p = 0;
-        clearInterval(fileTimer);
-        fileTimer = setInterval(() => {
-          p = Math.min(1, p + 0.07);
-          updateIsland({
-            progress: p,
-            title: p >= 1 ? 'Saved to Downloads' : 'Receiving from Pixel 8',
-          });
-          if (p >= 1) clearInterval(fileTimer);
-        }, 180);
-      }
-    };
-    const first = setTimeout(play, 1400);
-    const loop = setInterval(play, 5600);
-    return () => {
-      clearTimeout(first);
-      clearInterval(loop);
-      clearInterval(fileTimer);
-    };
-  }, []);
-}
-
 export function Hero() {
   const root = useRef<HTMLElement>(null);
-  useIslandDemo();
 
   useGSAP(
     () => {
@@ -144,7 +81,7 @@ export function Hero() {
             </a>
           </div>
           <p className="hero-fade mt-6 font-mono text-xs text-muted/80">
-            Tip: copy any text on this page and watch the island.
+            Scroll to meet the island in the notch ↓
           </p>
         </div>
 

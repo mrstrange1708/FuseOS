@@ -2,10 +2,9 @@
 
 import { useRef } from 'react';
 import { IconBrandApple, IconFileZip, IconPhoto, IconClipboardCheck } from '@tabler/icons-react';
-import { PixelPhone } from '@/components/devices';
+import { Photo, PixelPhone } from '@/components/devices';
 import { FuseMark } from '@/components/fuse-mark';
 import { gsap, useGSAP } from '@/lib/gsap';
-import { pushIsland } from '@/lib/island';
 
 const STEPS = [
   {
@@ -27,18 +26,6 @@ const STEPS = [
     body: 'Drag files into the FuseOS window, up to 1 GB each. Every file is checked with SHA-256 when it arrives, and you can cancel partway through.',
   },
 ] as const;
-
-/** A sunset drawn in CSS, standing in for the photo that gets copied. */
-function Photo({ className }: { className?: string }) {
-  return (
-    <div
-      className={`relative overflow-hidden rounded-xl bg-[linear-gradient(180deg,#2a1b3d_0%,#e85d2a_62%,#ffb347_100%)] ${className ?? ''}`}
-    >
-      <div className="absolute top-[38%] left-1/2 h-10 w-10 -translate-x-1/2 rounded-full bg-[#ffd3bc] shadow-[0_0_40px_10px_rgb(255_179_71/0.6)]" />
-      <div className="absolute inset-x-0 bottom-0 h-1/2 bg-[#14171f] [clip-path:polygon(0_60%,22%_20%,40%_55%,62%_10%,82%_50%,100%_30%,100%_100%,0_100%)]" />
-    </div>
-  );
-}
 
 export function SyncStory() {
   const root = useRef<HTMLElement>(null);
@@ -92,14 +79,6 @@ export function SyncStory() {
             duration: 0.3,
           })
           .to('.copy-menu', { opacity: 0, duration: 0.2 })
-          .call(() =>
-            pushIsland({
-              kind: 'clip',
-              title: 'Copied on Pixel 8',
-              detail: '4471 — buzz twice, 3rd floor',
-              from: 'phone',
-            }),
-          )
           .add(travel())
           .fromTo('.mac-paste', { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.4 }, '-=0.5')
           .to({}, { duration: 0.6 })
@@ -116,14 +95,6 @@ export function SyncStory() {
           )
           .to('.mac-notes', { opacity: 0, duration: 0.3 }, '<')
           .fromTo('.mac-canvas', { opacity: 0 }, { opacity: 1, duration: 0.3 }, '<')
-          .call(() =>
-            pushIsland({
-              kind: 'image',
-              title: 'Image on your clipboard',
-              detail: 'Screenshot 09:41 · 1.2 MB',
-              from: 'phone',
-            }),
-          )
           .add(travel())
           .fromTo(
             '.mac-image',
@@ -150,15 +121,6 @@ export function SyncStory() {
           })
           .to('.phone-photo', { opacity: 0, duration: 0.3 })
           .fromTo('.phone-file', { opacity: 0 }, { opacity: 1, duration: 0.3 }, '<')
-          .call(() =>
-            pushIsland({
-              kind: 'file',
-              title: 'Sending to Pixel 8',
-              detail: 'trip-photos.zip · 48 MB',
-              from: 'mac',
-              progress: 0.35,
-            }),
-          )
           .add(travel(true))
           .fromTo(
             '.file-bar',
@@ -168,14 +130,6 @@ export function SyncStory() {
           )
           .to('.file-state', { opacity: 0, duration: 0.1 })
           .to('.file-done', { opacity: 1, duration: 0.2 })
-          .call(() =>
-            pushIsland({
-              kind: 'file',
-              title: 'Saved to Downloads',
-              detail: 'trip-photos.zip · verified',
-              from: 'mac',
-            }),
-          )
           .to({}, { duration: 0.8 });
       });
     },
