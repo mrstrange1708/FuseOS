@@ -2,7 +2,7 @@
 
 import { useRef } from 'react';
 import { IconBrandApple, IconFileZip, IconPhoto, IconClipboardCheck } from '@tabler/icons-react';
-import { Photo, PixelPhone } from '@/components/devices';
+import { MacWallpaper, Photo, PixelPhone } from '@/components/devices';
 import { FuseMark } from '@/components/fuse-mark';
 import { gsap, useGSAP } from '@/lib/gsap';
 
@@ -256,9 +256,10 @@ export function SyncStory() {
             <div className="absolute top-[88px] right-0 w-[600px]">
               <div className="relative mx-auto h-[352px] w-[540px] rounded-t-[22px] bg-[#0b0c10] p-[11px] shadow-[0_0_0_1.5px_#3a404d,0_40px_100px_-30px_rgb(0_0_0/0.9)]">
                 <div className="absolute top-[11px] left-1/2 z-20 h-[14px] w-[92px] -translate-x-1/2 rounded-b-[8px] bg-[#0b0c10]" />
-                <div className="relative h-full w-full overflow-hidden rounded-[6px] bg-[radial-gradient(120%_90%_at_80%_110%,#5a2712_0%,#1c202a_45%,#0c0e14_100%)]">
+                <div className="relative h-full w-full overflow-hidden rounded-[6px]">
+                  <MacWallpaper />
                   {/* menu bar */}
-                  <div className="flex h-[22px] items-center justify-between bg-black/30 px-3 font-mono text-[9.5px] text-white/70 backdrop-blur">
+                  <div className="relative flex h-[22px] items-center justify-between bg-black/30 px-3 font-mono text-[9.5px] text-white/70 backdrop-blur">
                     <span className="flex items-center gap-3">
                       <IconBrandApple size={11} className="text-white" /> Notes{' '}
                       <span className="text-white/40">File Edit View</span>

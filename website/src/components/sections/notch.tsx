@@ -14,7 +14,7 @@ import {
   IconBattery3,
 } from '@tabler/icons-react';
 import { FuseMark } from '@/components/fuse-mark';
-import { Photo } from '@/components/devices';
+import { MacWallpaper, Photo } from '@/components/devices';
 import { Keypad, SpeakerGrid, Trackpad } from '@/components/ui/macbook-scroll';
 import { gsap, ScrollTrigger, useGSAP } from '@/lib/gsap';
 import { pushIsland, useIsland } from '@/lib/island';
@@ -71,34 +71,6 @@ const MAC_FONT = {
  * stretched, and there is only ever one laptop on screen: nothing to cross-fade.
  */
 const NOTCH = { width: 60, height: 12, top: 8 };
-
-/** A macOS-style wallpaper in the FuseOS palette: deep dusk with ember light rising. */
-function Wallpaper() {
-  return (
-    <div className="absolute inset-0 overflow-hidden bg-[linear-gradient(180deg,#0b0d18_0%,#171133_42%,#3a1726_72%,#7a2e12_100%)]">
-      <div className="absolute -bottom-[30%] -left-[10%] h-[80%] w-[70%] rounded-[50%] bg-[#ff7a45] opacity-70 blur-[40px]" />
-      <div className="absolute -right-[15%] -bottom-[25%] h-[70%] w-[60%] rounded-[50%] bg-[#e85d2a] opacity-60 blur-[44px]" />
-      <div className="absolute top-[10%] left-[30%] h-[50%] w-[50%] rounded-[50%] bg-[#4a2a8a] opacity-40 blur-[50px]" />
-      <svg
-        viewBox="0 0 400 200"
-        preserveAspectRatio="none"
-        className="absolute inset-x-0 bottom-0 h-[55%] w-full opacity-60 mix-blend-screen"
-      >
-        <path
-          d="M0 140 C 80 90, 160 170, 240 120 S 360 80, 400 110 L 400 200 L 0 200 Z"
-          fill="#ffb347"
-          opacity=".35"
-        />
-        <path
-          d="M0 165 C 90 130, 170 190, 260 150 S 360 120, 400 140 L 400 200 L 0 200 Z"
-          fill="#ff7a45"
-          opacity=".45"
-        />
-      </svg>
-      <div className="absolute inset-0 bg-[linear-gradient(115deg,rgb(255_255_255/0.07),transparent_38%)]" />
-    </div>
-  );
-}
 
 /** The macOS menu bar, in proportion to a real one: as tall as the notch. */
 function MenuBar() {
@@ -166,7 +138,7 @@ function MacBook() {
           className="mac-lid-inner relative h-[20.5rem] w-[32rem] rounded-2xl bg-[#010101] p-2 shadow-[0px_2px_0px_2px_#171717_inset]"
         >
           <div className="relative h-full w-full overflow-hidden rounded-lg">
-            <Wallpaper />
+            <MacWallpaper />
             <MenuBar />
             <div
               style={{ width: NOTCH.width, height: NOTCH.height }}

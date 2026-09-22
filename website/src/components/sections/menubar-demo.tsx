@@ -16,7 +16,7 @@ import {
   IconAppWindow,
 } from '@tabler/icons-react';
 import { FuseMark } from '@/components/fuse-mark';
-import { Photo } from '@/components/devices';
+import { MacWallpaper, Photo } from '@/components/devices';
 import { cn } from '@/lib/utils';
 
 const CLIPS = [
@@ -63,8 +63,9 @@ export function MenuBarDemo() {
         </div>
 
         {/* A slice of a Mac desktop: wallpaper, menu bar, and the FuseOS item. */}
-        <div className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[radial-gradient(120%_100%_at_80%_120%,#7a2e12_0%,#3a1d12_28%,#1c202a_60%,#0c0e14_100%)] shadow-[0_40px_100px_-40px_rgb(0_0_0/0.9)]">
-          <div className="flex h-8 items-center justify-between bg-black/35 px-4 text-[12px] text-white/85 backdrop-blur">
+        <div className="relative overflow-hidden rounded-[28px] border border-white/10 shadow-[0_40px_100px_-40px_rgb(0_0_0/0.9)]">
+          <MacWallpaper />
+          <div className="relative z-10 flex h-8 items-center justify-between bg-black/35 px-4 text-[12px] text-white/85 backdrop-blur">
             <span className="flex items-center gap-4">
               <IconBrandApple size={14} />
               <b className="font-semibold">Notes</b>

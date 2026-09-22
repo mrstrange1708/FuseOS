@@ -166,3 +166,43 @@ export function Photo({ className }: { className?: string }) {
     </div>
   );
 }
+
+/**
+ * A macOS wallpaper in the manner of Apple's own (Sequoia's blue waves): deep navy rising
+ * into Apple blue, with soft light-blue swells. Restrained on purpose; the orange belongs
+ * to FuseOS, not to the Mac.
+ */
+export function MacWallpaper() {
+  return (
+    <div className="absolute inset-0 overflow-hidden bg-[linear-gradient(180deg,#050b1c_0%,#0a1a3d_38%,#0f3a86_72%,#2a6fd8_100%)]">
+      <div className="absolute -bottom-[35%] -left-[15%] h-[85%] w-[75%] rounded-[50%] bg-[#3d8bff] opacity-45 blur-[48px]" />
+      <div className="absolute -right-[20%] -bottom-[30%] h-[75%] w-[65%] rounded-[50%] bg-[#1b58c9] opacity-60 blur-[52px]" />
+      <div className="absolute top-[5%] left-[35%] h-[45%] w-[45%] rounded-[50%] bg-[#123a8c] opacity-50 blur-[60px]" />
+      <svg
+        viewBox="0 0 400 200"
+        preserveAspectRatio="none"
+        className="absolute inset-x-0 bottom-0 h-[58%] w-full"
+      >
+        <defs>
+          <linearGradient id="mac-wave-a" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#9cc8ff" stopOpacity=".55" />
+            <stop offset="1" stopColor="#2a6fd8" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id="mac-wave-b" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#5aa2ff" stopOpacity=".6" />
+            <stop offset="1" stopColor="#0f3a86" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M0 120 C 90 70, 170 160, 260 105 S 370 70, 400 95 L 400 200 L 0 200 Z"
+          fill="url(#mac-wave-a)"
+        />
+        <path
+          d="M0 155 C 100 115, 180 185, 270 140 S 370 115, 400 132 L 400 200 L 0 200 Z"
+          fill="url(#mac-wave-b)"
+        />
+      </svg>
+      <div className="absolute inset-0 bg-[linear-gradient(115deg,rgb(255_255_255/0.06),transparent_38%)]" />
+    </div>
+  );
+}
