@@ -80,9 +80,6 @@ export function Hero() {
               See it move
             </a>
           </div>
-          <p className="hero-fade mt-6 font-mono text-xs text-muted/80">
-            Scroll to meet the island in the notch ↓
-          </p>
         </div>
 
         <div className="relative flex justify-center">
