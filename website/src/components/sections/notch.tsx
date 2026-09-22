@@ -367,7 +367,7 @@ export function NotchStage() {
 
         <div className="notch-intro pointer-events-none absolute inset-x-0 bottom-[10vh] z-10 px-4 text-center">
           <p className="font-mono text-xs tracking-[0.14em] text-ember uppercase">
-            Meet the island
+            Once they’re linked
           </p>
           <h2 className="mx-auto mt-4 max-w-[16ch] font-display text-[clamp(38px,6vw,76px)] leading-[0.95] font-black tracking-[-0.045em]">
             Your phone lives in your Mac’s notch.
