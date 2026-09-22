@@ -26,6 +26,47 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>FuseOS connects directly to your other devices on this Wi-Fi network so clipboard content and files travel between them without going through a server.</string>
 
+	<!-- Finder right-click → Services. The Mac side of sharing to the other device: a real
+	     Share-sheet extension needs a sandbox and an App Group signed with a paid Team ID.
+	     Handled in AppDelegate.sendFiles / sendText. -->
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Send to Phone with FuseOS</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>sendFiles</string>
+			<key>NSPortName</key>
+			<string>FuseOS</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>public.item</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Send Text to Phone with FuseOS</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>sendText</string>
+			<key>NSPortName</key>
+			<string>FuseOS</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendTypes</key>
+			<array>
+				<string>public.utf8-plain-text</string>
+			</array>
+		</dict>
+	</array>
+
 	<!-- DEV ONLY: the control-plane server runs on plain http during development.
 	     Remove once the server is reachable over https. -->
 	<key>NSAppTransportSecurity</key>

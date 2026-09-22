@@ -68,6 +68,8 @@ final class DashboardViewModel: ObservableObject {
             // ponytail: newest 20 only; a record of every file ever sent belongs in a
             // history store, which files do not have yet.
             self.transfers = Array(([progress] + self.transfers.filter { $0.id != progress.id }).prefix(20))
+            // Files get the island too: it swells out of the notch and fills as bytes move.
+            self.island.present(progress, peerName: self.peerName)
         }
         clipboard.onClipEvent = { [weak self] entry in
             guard let self else { return }
@@ -195,6 +197,13 @@ final class DashboardViewModel: ObservableObject {
 
     /// Sends files one after another, in the order given. Dropped or picked, same path.
     func sendFiles(_ urls: [URL]) {
+        // Finder can hand over folders (Services, drops); a folder has no single size to
+        // put on the wire, so it is skipped rather than failing the whole batch.
+        let urls = urls.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != true }
+        guard !urls.isEmpty else {
+            fileNotice = "Folders can't be sent yet. Zip it first."
+            return
+        }
         guard !connected.isEmpty else {
             fileNotice = "No device connected. Open FuseOS on your phone."
             return
