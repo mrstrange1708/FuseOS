@@ -676,6 +676,7 @@ private struct AccountPane: View {
     @AppStorage(DockIcon.key) private var showInDock = true
     @AppStorage(DashboardViewModel.askBeforeSendKey) private var askBeforeSend = false
     @AppStorage(MacPointer.enabledKey) private var phoneControlsMac = false
+    @AppStorage(ScreenLock.enabledKey) private var lockWhenPhoneLeaves = false
 
     var body: some View {
         ScrollView {
@@ -746,6 +747,12 @@ private struct AccountPane: View {
                             title: "Ask before sending copies",
                             detail: "Each copy waits in the island for you to click Send.",
                             isOn: $askBeforeSend,
+                        )
+                        Divider().opacity(0.5)
+                        SettingSwitch(
+                            title: "Lock this Mac when your phone leaves",
+                            detail: "When your phone leaves this Wi-Fi but is still online, the Mac locks after 20 s.",
+                            isOn: $lockWhenPhoneLeaves,
                         )
                         Divider().opacity(0.5)
                         SettingSwitch(

@@ -121,9 +121,12 @@ final class DashboardViewModel: ObservableObject {
             self?.island.present(symbol: "safari", title: "Opened from \(self?.peerName ?? "your phone")", detail: url.host ?? url.absoluteString)
         }
         transport.onConnectedPeersChanged = { [weak self] peers in
-            self?.connected = peers
-            if peers.isEmpty { self?.media.peerGone() }
-            self?.files.peersChanged(peers)
+            guard let self else { return }
+            let left = self.connected.subtracting(peers)
+            self.connected = peers
+            if !left.isEmpty { self.watchForAway() }
+            if peers.isEmpty { self.media.peerGone() }
+            self.files.peersChanged(peers)
         }
         clipboard.onHistoryChanged = { [weak self] entries in
             self?.history = entries
@@ -287,6 +290,24 @@ final class DashboardViewModel: ObservableObject {
     /// one there is. Used wherever the UI would otherwise say "your phone".
     var peerName: String? {
         (peers.first { connected.contains($0.id) } ?? peers.first)?.name
+    }
+
+    private var awayCheck: Task<Void, Never>?
+
+    /// The phone's direct link just dropped. If it is still gone after the grace period
+    /// while the server sees it online elsewhere, it has left — lock (when the user asked).
+    private func watchForAway() {
+        guard UserDefaults.standard.bool(forKey: ScreenLock.enabledKey) else { return }
+        awayCheck?.cancel()
+        awayCheck = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(AwayLock.grace * 1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            let online = self.allPeers.contains { self.onlineState(for: $0).online && $0.platform == "android" }
+            if AwayLock.shouldLock(enabled: UserDefaults.standard.bool(forKey: ScreenLock.enabledKey),
+                                   linkedNow: !self.connected.isEmpty, phoneOnlineViaServer: online) {
+                ScreenLock.lockNow()
+            }
+        }
     }
 
     /// Removes a stale (offline) device from the account, then reloads the list.
