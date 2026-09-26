@@ -74,6 +74,8 @@ fun FuseShell() {
     }
 
     var tab by remember { mutableStateOf(FuseTab.Home) }
+    var callsGranted by remember { mutableStateOf(ServiceLocator.notificationSync.calls.hasPermission()) }
+    val askCalls = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { callsGranted = it }
     var showPairing by remember { mutableStateOf(false) }
 
     if (showPairing) {
@@ -189,6 +191,8 @@ fun FuseShell() {
                                 runCatching { context.startActivity(sync.accessSettingsIntent()) }
                             }
                         },
+                        callsOn = callsGranted,
+                        onCalls = { askCalls.launch(android.Manifest.permission.ANSWER_PHONE_CALLS) },
                         remoteControlOn = RemoteControlService.instance != null,
                         onRemoteControl = {
                             runCatching { context.startActivity(ServiceLocator.screenShare.remoteControlSettingsIntent()) }

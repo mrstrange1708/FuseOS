@@ -29,6 +29,10 @@
          session; this only lets the service hold the capture while it runs. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
+    <!-- Answer, decline and end calls from the Mac. Asked for from Profile, never at launch;
+         without it FuseOS falls back to pressing the call notification's own buttons. -->
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+
     <application
         android:name=".FuseApp"
         android:allowBackup="true"

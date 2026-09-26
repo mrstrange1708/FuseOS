@@ -60,6 +60,8 @@ fun ProfileScreen(
     notificationAccess: Boolean,
     notificationsOn: Boolean,
     onNotifications: () -> Unit,
+    callsOn: Boolean,
+    onCalls: () -> Unit,
     remoteControlOn: Boolean,
     onRemoteControl: () -> Unit,
     onRemoveDevice: (String) -> Unit,
@@ -162,6 +164,14 @@ fun ProfileScreen(
                     else -> "Off"
                 },
                 trailingLit = notificationAccess && notificationsOn,
+            )
+            SettingItem(
+                "Calls on your Mac",
+                if (callsOn) "Answer and decline this phone's calls from your Mac."
+                else "Allow FuseOS to answer calls, so the Mac's Answer and Decline always work.",
+                onCalls,
+                trailing = if (callsOn) "On" else "Set up",
+                trailingLit = callsOn,
             )
             SettingItem(
                 "Remote control",
