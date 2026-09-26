@@ -675,6 +675,7 @@ private struct AccountPane: View {
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @AppStorage(DockIcon.key) private var showInDock = true
     @AppStorage(DashboardViewModel.askBeforeSendKey) private var askBeforeSend = false
+    @AppStorage(MacPointer.enabledKey) private var phoneControlsMac = false
 
     var body: some View {
         ScrollView {
@@ -746,6 +747,18 @@ private struct AccountPane: View {
                             detail: "Each copy waits in the island for you to click Send.",
                             isOn: $askBeforeSend,
                         )
+                        Divider().opacity(0.5)
+                        SettingSwitch(
+                            title: "Let your phone control this Mac",
+                            detail: MacPointer.accessibilityGranted(prompt: false) || !phoneControlsMac
+                                ? "Use your phone as this Mac's trackpad and keyboard."
+                                : "Allow FuseOS in System Settings → Privacy & Security → Accessibility.",
+                            isOn: $phoneControlsMac,
+                        )
+                        .onChange(of: phoneControlsMac) { on in
+                            // macOS decides; this only asks it to show its own prompt.
+                            if on { MacPointer.accessibilityGranted(prompt: true) }
+                        }
                     }
                 }
 

@@ -46,6 +46,7 @@ message Envelope {
     OpenLink open_link = 24;
     MediaState media_state = 25;
     MediaCommand media_command = 26;
+    PointerInput pointer_input = 27;
   }
 }
 
@@ -222,4 +223,29 @@ message MediaCommand {
   }
   Action action      = 1;
   int64  position_ms = 2;
+}
+
+// Phone -> Mac: the phone as the Mac's trackpad and keyboard. The Mac acts on these only
+// while the user has turned "Let your phone control this Mac" on, and macOS has granted it
+// Accessibility access.
+message PointerInput {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    MOVE             = 1; // by (dx, dy) points
+    CLICK            = 2;
+    RIGHT_CLICK      = 3;
+    DOUBLE_CLICK     = 4;
+    SCROLL           = 5; // by (dx, dy) points
+    DRAG_START       = 6; // press and hold the button; MOVEs drag until DRAG_END
+    DRAG_END         = 7;
+    TEXT             = 8; // text typed at the focused field
+    KEY              = 9; // key_code: a Mac virtual key code (return 36, delete 51, tab 48,
+                          // escape 53, arrows 123-126), with modifiers
+  }
+  Kind   kind      = 1;
+  float  dx        = 2;
+  float  dy        = 3;
+  string text      = 4;
+  uint32 key_code  = 5;
+  uint32 modifiers = 6; // bitmask: 1 command, 2 shift, 4 option, 8 control
 }

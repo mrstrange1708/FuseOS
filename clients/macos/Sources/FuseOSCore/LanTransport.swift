@@ -33,6 +33,9 @@ public final class LanTransport {
     /// Screen mirroring: control messages and video frames.
     var onScreenEnvelope: ((FuseEnvelope) -> Void)?
 
+    /// The phone as trackpad and keyboard: `PointerInput`.
+    var onPointerEnvelope: ((FuseEnvelope) -> Void)?
+
     /// Now Playing: `MediaState`, `MediaCommand`.
     var onMediaEnvelope: ((FuseEnvelope) -> Void)?
 
@@ -274,6 +277,8 @@ public final class LanTransport {
                     onActionEnvelope?(envelope)
                 case .some(.mediaState), .some(.mediaCommand):
                     onMediaEnvelope?(envelope)
+                case .some(.pointerInput):
+                    onPointerEnvelope?(envelope)
                 }
             } catch {
                 return
