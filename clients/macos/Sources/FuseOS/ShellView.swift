@@ -22,11 +22,11 @@ enum FuseSection: String, CaseIterable, Identifiable {
     }
 }
 
-/// The signed-in Mac app: a source list and a detail pane.
+/// The signed-in Mac app: one full-bleed pane under a floating glass bar.
 ///
-/// Deliberately *not* the phone's bottom bar. A tab bar exists because a thumb reaches the
-/// bottom of a phone; a Mac window has width to spare and a sidebar is what people already
-/// know here. The five areas are the same on both platforms — only the furniture differs.
+/// No sidebar. Five destinations fit in one capsule, and giving the pane the whole width
+/// suits content that is mostly one column of cards. The five areas are the same as
+/// Android's bar; only the furniture differs.
 struct ShellView: View {
     @EnvironmentObject var session: SessionStore
     @ObservedObject var viewModel: DashboardViewModel
@@ -35,65 +35,152 @@ struct ShellView: View {
     @State private var section: FuseSection = .home
 
     var body: some View {
-        NavigationSplitView {
-            List(FuseSection.allCases, selection: Binding(
-                get: { section },
-                set: { section = $0 ?? section },
-            )) { item in
-                Label(item.rawValue, systemImage: item.symbol)
-                    .tag(item)
-            }
-            .navigationSplitViewColumnWidth(min: 168, ideal: 184, max: 220)
-            .safeAreaInset(edge: .bottom) { sidebarStatus }
-        } detail: {
-            Group {
-                switch section {
-                case .home:
-                    HomePane(viewModel: viewModel, onSeeAll: { section = .history })
-                case .history:
-                    HistoryPane(viewModel: viewModel)
-                case .devices:
-                    DevicesPane(viewModel: viewModel, onLinkManually: { showPairing = true })
-                case .screen:
-                    ComingSoonPane(
-                        title: "Screen sharing",
-                        detail: "See and control your phone from this Mac.",
-                        symbol: "rectangle.on.rectangle",
-                    )
-                case .account:
-                    AccountPane(viewModel: viewModel, onLinkManually: { showPairing = true })
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(FuseColor.bg)
+        // The ZStack is what lets the old pane leave and the new one arrive as a transition.
+        ZStack {
+            pane
+                .id(section)
+                .transition(.opacity.combined(with: .offset(y: 10)))
         }
-        .frame(minWidth: 720, minHeight: 520)
-        .onAppear {
-            viewModel.start()
-            // Reaching the shell means the user is set up, which is the honest moment to
-            // start at login — not at first launch, when they have not decided to keep it.
-            LaunchAtLogin.enableOnFirstRun()
-        }
-        .sheet(isPresented: $showPairing) {
-            PairingView(viewModel: viewModel).environmentObject(session)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            // Scrolling panes slide under the bar; the glass is what makes that readable.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                GlassNav(section: $section, viewModel: viewModel)
+                    .padding(.top, 10)
+                    .padding(.bottom, 6)
+            }
+            .background(ShellBackground())
+            .ignoresSafeArea(edges: .top)
+            .frame(minWidth: 720, minHeight: 520)
+            .onAppear {
+                viewModel.start()
+                // Reaching the shell means the user is set up, which is the honest moment to
+                // start at login — not at first launch, when they have not decided to keep it.
+                LaunchAtLogin.enableOnFirstRun()
+            }
+            .sheet(isPresented: $showPairing) {
+                PairingView(viewModel: viewModel).environmentObject(session)
+            }
+    }
+
+    @ViewBuilder private var pane: some View {
+        switch section {
+        case .home:
+            HomePane(viewModel: viewModel, onSeeAll: { go(.history) })
+        case .history:
+            HistoryPane(viewModel: viewModel)
+        case .devices:
+            DevicesPane(viewModel: viewModel, onLinkManually: { showPairing = true })
+        case .screen:
+            ComingSoonPane(
+                title: "Screen sharing",
+                detail: "See and control your phone from this Mac.",
+                symbol: "rectangle.on.rectangle",
+            )
+        case .account:
+            AccountPane(viewModel: viewModel, onLinkManually: { showPairing = true })
         }
     }
 
-    /// The link state, always visible regardless of which pane is open — it is the thing
-    /// people glance at, and hiding it behind a tab would mean navigating to check.
-    private var sidebarStatus: some View {
-        let connected = !viewModel.connected.isEmpty
-        return HStack(spacing: 8) {
-            Circle()
-                .fill(connected ? FuseColor.accent : FuseColor.muted)
-                .frame(width: 8, height: 8)
-            Text(connected ? "Linked" : "Not linked")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(FuseColor.muted)
-            Spacer(minLength: 0)
+    private func go(_ target: FuseSection) {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { section = target }
+    }
+}
+
+/// The floating bar: the five areas in a glass capsule, the open one lit in ember, and the
+/// link state at the end — the thing people glance at, so it is on every pane.
+private struct GlassNav: View {
+    @Binding var section: FuseSection
+    @ObservedObject var viewModel: DashboardViewModel
+    @Namespace private var pill
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(Array(FuseSection.allCases.enumerated()), id: \.element) { index, item in
+                tab(item, shortcut: Character(String(index + 1)))
+            }
+            Divider().frame(height: 18).padding(.horizontal, 6)
+            linkState.padding(.trailing, 8)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(5)
+        .modifier(GlassCapsule())
+        .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
+    }
+
+    private func tab(_ item: FuseSection, shortcut: Character) -> some View {
+        let selected = item == section
+        return Button {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { section = item }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: item.symbol)
+                    .font(.system(size: 13, weight: .medium))
+                if selected {
+                    Text(item.rawValue)
+                        .font(.system(size: 12, weight: .semibold))
+                        .fixedSize()
+                        .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
+                }
+            }
+            .foregroundStyle(selected ? FuseColor.accent : FuseColor.muted)
+            .padding(.horizontal, selected ? 12 : 10)
+            .frame(height: 30)
+            .background {
+                if selected {
+                    Capsule()
+                        .fill(FuseColor.accent.opacity(0.16))
+                        .overlay(Capsule().stroke(FuseColor.accent.opacity(0.35), lineWidth: 1))
+                        .matchedGeometryEffect(id: "pill", in: pill)
+                }
+            }
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(KeyEquivalent(shortcut), modifiers: .command)
+        .help("\(item.rawValue)  ⌘\(shortcut)")
+    }
+
+    private var linkState: some View {
+        let linked = !viewModel.connected.isEmpty
+        return HStack(spacing: 6) {
+            Circle()
+                .fill(linked ? FuseColor.accent : FuseColor.muted.opacity(0.6))
+                .frame(width: 7, height: 7)
+                .shadow(color: linked ? FuseColor.accent : .clear, radius: 4)
+            Text(linked ? (viewModel.peerName ?? "Linked") : "Not linked")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(linked ? FuseColor.ink : FuseColor.muted)
+                .lineLimit(1)
+        }
+    }
+}
+
+/// Liquid Glass capsule on macOS 26; a material capsule before it.
+private struct GlassCapsule: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.glassEffect(.regular, in: Capsule())
+        } else {
+            content
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().stroke(FuseColor.outline.opacity(0.5), lineWidth: 1))
+        }
+    }
+}
+
+/// The window's ground: the app's slate, with the ember glowing up from behind the bar.
+/// Glass over a flat colour reads as flat; this gives it something to bend.
+private struct ShellBackground: View {
+    var body: some View {
+        ZStack {
+            FuseColor.bg
+            RadialGradient(
+                colors: [FuseColor.accent.opacity(0.22), .clear],
+                center: UnitPoint(x: 0.5, y: -0.15),
+                startRadius: 0,
+                endRadius: 420,
+            )
+        }
+        .ignoresSafeArea()
     }
 }
 
@@ -459,12 +546,7 @@ private struct TransferRow: View {
             }
         }
         .padding(12)
-        .background(FuseColor.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(FuseColor.outline.opacity(0.6), lineWidth: 1),
-        )
+        .glassCard(radius: 12)
     }
 
     private var status: String {
@@ -540,12 +622,7 @@ struct ClipRow: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(FuseColor.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(FuseColor.outline.opacity(0.6), lineWidth: 1),
-            )
+            .glassCard(radius: 14)
         }
         .buttonStyle(.plain)
     }

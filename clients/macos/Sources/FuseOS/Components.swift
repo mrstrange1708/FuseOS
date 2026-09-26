@@ -154,3 +154,25 @@ struct SwitchRow: View {
         }
     }
 }
+
+/// The one card surface: Liquid Glass on macOS 26, the old solid card before it. Every card
+/// in the app goes through here so they read as one material.
+struct GlassCard: ViewModifier {
+    var radius: CGFloat = 14
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        if #available(macOS 26.0, *) {
+            content.glassEffect(.regular, in: shape)
+        } else {
+            content
+                .background(FuseColor.surface)
+                .clipShape(shape)
+                .overlay(shape.stroke(FuseColor.outline.opacity(0.6), lineWidth: 1))
+        }
+    }
+}
+
+extension View {
+    func glassCard(radius: CGFloat = 14) -> some View { modifier(GlassCard(radius: radius)) }
+}

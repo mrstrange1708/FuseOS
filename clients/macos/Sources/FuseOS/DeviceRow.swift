@@ -24,9 +24,7 @@ struct DeviceRow: View {
             BatteryBadge(percent: presence.battery)
         }
         .padding(16)
-        .background(FuseColor.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(FuseColor.outline.opacity(0.6), lineWidth: 1))
+        .glassCard(radius: 16)
     }
 
     private var statusText: String {
@@ -99,10 +97,6 @@ struct SelfDeviceRow: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity)
-        .background(FuseColor.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16).stroke(FuseColor.outline.opacity(0.6), lineWidth: 1),
-        )
+        .glassCard(radius: 16)
     }
 }

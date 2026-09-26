@@ -104,6 +104,8 @@ struct FuseOSApp: App {
         // the auth screens are a fixed column. Pinning the window to its content would
         // let the narrow screens dictate the size of the wide one.
         .windowResizability(.automatic)
+        // The glass bar sits where the title would; the traffic lights stay.
+        .windowStyle(.hiddenTitleBar)
 
         // The menu bar item is the app's real home on a Mac: continuity is something you
         // reach for mid-task, and hunting for a window to paste yesterday's link defeats
