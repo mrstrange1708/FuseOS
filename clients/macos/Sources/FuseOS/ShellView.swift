@@ -667,16 +667,36 @@ private struct ScreenPane: View {
         VStack(spacing: 18) {
             switch viewModel.screenState {
             case .streaming(let width, let height):
-                PhoneScreen(layer: viewModel.screen.layer)
+                PhoneScreen(layer: viewModel.screen.layer, onInput: viewModel.screen.send)
                     .aspectRatio(CGFloat(width) / CGFloat(max(height, 1)), contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous)
                         .stroke(Color.white.opacity(0.12), lineWidth: 6))
                     .shadow(color: .black.opacity(0.35), radius: 24, y: 12)
                     .frame(maxHeight: .infinity)
-                Button("Stop mirroring") { viewModel.screen.stop() }
+                if viewModel.canControlPhone {
+                    HStack(spacing: 8) {
+                        Button { viewModel.screen.send(.back) } label: { Image(systemName: "chevron.backward") }
+                            .help("Back  (Esc)")
+                        Button { viewModel.screen.send(.home) } label: { Image(systemName: "circle") }
+                            .help("Home")
+                        Button { viewModel.screen.send(.recents) } label: { Image(systemName: "square.on.square") }
+                            .help("Recent apps")
+                        Divider().frame(height: 16)
+                        Button("Stop mirroring") { viewModel.screen.stop() }
+                    }
                     .buttonStyle(CapsuleButtonStyle(prominent: false))
-                    .keyboardShortcut(.escape, modifiers: [])
+                    Text("Click to tap · drag to swipe · hold to long-press · type to enter text")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(FuseColor.muted)
+                } else {
+                    Button("Stop mirroring") { viewModel.screen.stop() }
+                        .buttonStyle(CapsuleButtonStyle(prominent: false))
+                        .keyboardShortcut(.escape, modifiers: [])
+                    Text("View only. Turn on Remote control in FuseOS on your phone to use it from here.")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(FuseColor.muted)
+                }
             case .requesting:
                 placeholder(
                     title: "Check your phone",
@@ -735,21 +755,89 @@ private struct ScreenPane: View {
     }
 }
 
-/// Hosts the receiver's display layer. The layer decodes and draws on its own.
+/// Hosts the receiver's display layer, and turns what the user does on it into input for
+/// the phone: a click is a tap, a hold a long-press, a drag a swipe, the scroll wheel a
+/// swipe, and typing goes to the phone's focused field (Esc is Back).
 private struct PhoneScreen: NSViewRepresentable {
     let layer: CALayer
+    let onInput: (ScreenReceiver.Input) -> Void
 
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
+    func makeNSView(context: Context) -> MirrorView {
+        let view = MirrorView()
         view.wantsLayer = true
         view.layer?.backgroundColor = NSColor.black.cgColor
         layer.frame = view.bounds
         layer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
         view.layer?.addSublayer(layer)
+        view.onInput = onInput
         return view
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ view: MirrorView, context: Context) {
+        view.onInput = onInput
+    }
+}
+
+final class MirrorView: NSView {
+    var onInput: ((ScreenReceiver.Input) -> Void)?
+    private var downAt: (point: CGPoint, time: TimeInterval)?
+    private var scrollAccumulated: CGFloat = 0
+    private var scrollFlush: DispatchWorkItem?
+
+    override var acceptsFirstResponder: Bool { true }
+    override var isFlipped: Bool { true } // top-left origin, as the phone counts
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+
+    /// 0–1 of the view, which the aspect-fit frame keeps equal to the phone's screen.
+    private func normalized(_ point: CGPoint) -> CGPoint {
+        CGPoint(x: min(max(point.x / max(bounds.width, 1), 0), 1),
+                y: min(max(point.y / max(bounds.height, 1), 0), 1))
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        downAt = (convert(event.locationInWindow, from: nil), event.timestamp)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard let down = downAt else { return }
+        downAt = nil
+        let up = convert(event.locationInWindow, from: nil)
+        let held = event.timestamp - down.time
+        let a = normalized(down.point), b = normalized(up)
+        if hypot(up.x - down.point.x, up.y - down.point.y) < 6 {
+            onInput?(held > 0.5 ? .longPress(x: a.x, y: a.y) : .tap(x: a.x, y: a.y))
+        } else {
+            onInput?(.swipe(fromX: a.x, fromY: a.y, toX: b.x, toY: b.y, durationMs: Int(held * 1000)))
+        }
+    }
+
+    /// Wheel and trackpad scrolls arrive as dozens of small deltas; they are gathered and
+    /// sent as one swipe once they pause, so the phone scrolls once rather than stuttering.
+    override func scrollWheel(with event: NSEvent) {
+        scrollAccumulated += event.scrollingDeltaY
+        scrollFlush?.cancel()
+        let flush = DispatchWorkItem { [weak self] in
+            guard let self, abs(self.scrollAccumulated) > 2 else { return }
+            let travel = min(max(self.scrollAccumulated / max(self.bounds.height, 1), -0.6), 0.6)
+            self.onInput?(.swipe(fromX: 0.5, fromY: 0.5, toX: 0.5, toY: 0.5 + travel, durationMs: 180))
+            self.scrollAccumulated = 0
+        }
+        scrollFlush = flush
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: flush)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        switch event.keyCode {
+        case 51: onInput?(.delete)
+        case 36, 76: onInput?(.enter)
+        case 53: onInput?(.back)
+        default:
+            let typed = (event.characters ?? "").filter { !$0.isASCII || !($0.asciiValue.map { $0 < 32 || $0 == 127 } ?? false) }
+            if !typed.isEmpty { onInput?(.text(typed)) }
+        }
+    }
 }
 
 // MARK: - Files

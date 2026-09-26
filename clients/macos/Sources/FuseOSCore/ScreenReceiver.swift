@@ -24,6 +24,13 @@ public final class ScreenReceiver {
     }
     public var onStateChanged: ((State) -> Void)?
 
+    /// Whether the phone will act on input (its remote-control service is on). It says so
+    /// with its START; until then, and for a view-only phone, clicks do nothing.
+    public private(set) var canControl = false {
+        didSet { if canControl != oldValue { onCanControlChanged?(canControl) } }
+    }
+    public var onCanControlChanged: ((Bool) -> Void)?
+
     /// Put this in a view. Frames are enqueued with "display immediately": mirroring wants
     /// the newest frame now, not a smooth schedule.
     public let layer = AVSampleBufferDisplayLayer()
@@ -56,7 +63,9 @@ public final class ScreenReceiver {
             // The phone echoes our own stop; only a stop we did not ask for is news.
             case .stop: if state != .idle { reset(to: .ended) }
             // The phone is about to stream — whether we asked or its user started it there.
-            case .start: if case .streaming = state {} else { state = .requesting }
+            case .start:
+                canControl = control.remoteControl
+                if case .streaming = state {} else { state = .requesting }
             default: break
             }
         case .screenFrame(let frame):
@@ -102,11 +111,49 @@ public final class ScreenReceiver {
         layer.enqueue(sample)
     }
 
+    // MARK: - Remote control
+
+    /// Positions are 0–1 of the mirrored image, top-left origin.
+    public enum Input {
+        case tap(x: Double, y: Double)
+        case longPress(x: Double, y: Double)
+        case swipe(fromX: Double, fromY: Double, toX: Double, toY: Double, durationMs: Int)
+        case back, home, recents
+        case text(String)
+        case delete, enter
+    }
+
+    /// Sends one input to the phone. Ignored unless mirroring and the phone accepts control.
+    public func send(_ input: Input) {
+        guard canControl, case .streaming = state else { return }
+        var message = FuseRemoteInput()
+        switch input {
+        case let .tap(x, y):
+            message.kind = .tap; message.x = Float(x); message.y = Float(y)
+        case let .longPress(x, y):
+            message.kind = .longPress; message.x = Float(x); message.y = Float(y)
+        case let .swipe(x1, y1, x2, y2, ms):
+            message.kind = .swipe
+            message.x = Float(x1); message.y = Float(y1); message.x2 = Float(x2); message.y2 = Float(y2)
+            message.durationMs = UInt32(max(0, ms))
+        case .back: message.kind = .back
+        case .home: message.kind = .home
+        case .recents: message.kind = .recents
+        case let .text(text): message.kind = .text; message.text = text
+        case .delete: message.kind = .key; message.keyCode = 67
+        case .enter: message.kind = .key; message.keyCode = 66
+        }
+        var envelope = transport.newEnvelope()
+        envelope.remoteInput = message
+        transport.broadcast(envelope)
+    }
+
     private func reset(to next: State) {
         format = nil
         sps = nil
         pps = nil
         layer.flushAndRemoveImage()
+        canControl = false
         state = next
     }
 

@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">FuseOS</string>
+    <string name="remote_control_description">Lets your Mac tap, swipe, type, and go back or home on this phone — only while you are mirroring its screen to the Mac. FuseOS performs the input you make on the Mac and finds the focused text field to type into; it does not read or keep what other apps show.</string>
 </resources>

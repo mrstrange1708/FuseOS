@@ -48,7 +48,7 @@ Clipboard sync is a broadcast, so it can loop. The rule (see `docs/protocol.md`)
 
 ## Scope discipline (v1)
 
-v1 is auth, device linking, clipboard sync (text + images, with history catch-up), file transfer, Share-sheet send, and — pulled into v1 by the user on 2026-09-26 — notification sync and **view-only** screen mirroring, both phone → Mac over the existing LAN channel (`docs/protocol.md` §9–§11). **Remote control and call/SMS relay are still out of scope for v1** — remote control needs an AccessibilityService (off the table, Play Store), and relay would change the transport design.
+v1 is auth, device linking, clipboard sync (text + images, with history catch-up), file transfer, Share-sheet send, and — pulled into v1 by the user on 2026-09-26 — notification sync and **view-only** screen mirroring, both phone → Mac over the existing LAN channel (`docs/protocol.md` §9–§11). On 2026-09-26 the user also chose **free distribution only** — an APK on GitHub Releases, never Google Play, and no paid Apple account — so Play Store policy no longer rules anything out: remote control of the phone from the Mac (an AccessibilityService, `docs/protocol.md` §11) is in, and the continuity features listed in "Where the build is" are being built one feature branch at a time. Anything that needs a paid Apple Team ID (Share extension, notarization, camera/system extensions) stays out.
 
 ## Commands
 
@@ -128,8 +128,9 @@ Two constraints worth knowing before proposing anything in this area:
 - **Android clipboard capture stops at one tap.** Only the focused window may read the
   clipboard (API 29+) and no permission lifts it, so the tile / notification / island route
   through a focused `CaptureActivity`. The default-IME exemption is why `ime/` exists, but a
-  keyboard that replaces the user's own is a cost they have rejected for now — it is unused,
-  and an AccessibilityService is off the table (Play Store). See `docs/protocol.md` §5.1.
+  keyboard that replaces the user's own is a cost they have rejected for now — it is optional
+  (it has a clipboard strip), and an AccessibilityService cannot read the clipboard either — it
+  is used for remote control, not capture. See `docs/protocol.md` §5.1.
 - **File transfer is not resumable.** A dropped link fails the transfer and the user re-sends;
   see `docs/protocol.md` §6.
 - **This Mac has no Xcode, and its macOS 27 Command Line Tools are incomplete.** The 27 SDK lacks

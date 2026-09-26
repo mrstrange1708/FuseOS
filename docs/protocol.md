@@ -80,6 +80,7 @@ message Envelope {
 | `NOTIFICATION_DISMISS` | either | a mirrored notification went away (§10) |
 | `SCREEN_CONTROL` | either | start / stop / keyframe for screen mirroring (§11) |
 | `SCREEN_FRAME` | phone → Mac | one H.264 access unit of the phone's screen (§11) |
+| `REMOTE_INPUT` | Mac → phone | a tap, swipe, long-press, Back/Home/Recents, text or key for the phone to perform (§11) |
 
 ## 4. Loop-prevention invariant (critical)
 
@@ -214,12 +215,14 @@ Phone → Mac, while linked.
 
 ## 11. Screen mirroring
 
-Phone → Mac, view only. Remote control would need an AccessibilityService, which is off the table (`CLAUDE.md`).
+Phone → Mac, with remote control when the user allows it.
 
 1. Either end starts it. The Mac sends `SCREEN_CONTROL START`; the phone opens Android's capture-consent dialog (directly when it holds the overlay permission, which exempts it from the background-activity-launch block; otherwise through a notification). Or the user taps *Share screen* on the phone. Android asks for consent every session.
 2. On consent the phone starts a `mediaProjection` foreground service, sends `SCREEN_CONTROL START`, and streams: a virtual display draws into a hardware H.264 encoder's input surface, and each encoded access unit goes out as a `SCREEN_FRAME` (Annex-B) on the **same encrypted channel** as everything else. Realtime priority, 30 fps, 6 Mbit/s, long side ≤ 1600 px, a keyframe every 2 s with SPS/PPS prepended, and the last frame repeated after 100 ms of stillness so the Mac never waits on a static screen.
 3. The Mac reframes Annex-B to AVCC, builds the format from the SPS/PPS, and enqueues each sample on an `AVSampleBufferDisplayLayer` marked *display immediately* — hardware decode, no decoder session of our own. A decode failure flushes the layer and sends `SCREEN_CONTROL KEYFRAME`.
 4. **Rotation** swaps in a new encoder at the new size and resizes the same virtual display (Android 14 allows one per projection). The new encoder's parameter sets tell the Mac the new shape; the Mac rebuilds its format from any frame carrying SPS/PPS and flushes the layer when the shape changes.
 5. `SCREEN_CONTROL STOP` from either end ends it; the phone also stops when its user ends it from the system chip or notification, or when no Mac is linked any more. A refused consent sends `STOP`, so the Mac does not wait forever.
+
+**Remote control.** With the phone's *FuseOS remote control* accessibility service on (Settings → Accessibility; a Profile row links there), the phone's `SCREEN_CONTROL START` carries `remote_control = true` and the Mac turns its mirror interactive: a click is a `TAP`, a hold over 0.5 s a `LONG_PRESS`, a drag a `SWIPE` (its real duration, clamped to 60 ms–2 s), wheel/trackpad scrolling a `SWIPE` gathered over 80 ms, typing `TEXT` into the focused field, Delete and Return `KEY` 67/66, and Esc `BACK`; buttons send `BACK`, `HOME` and `RECENTS`. Positions are 0–1 of the mirrored image, top-left origin — the aspect-fit mirror keeps that equal to the phone's screen. The phone performs them with `dispatchGesture`, global actions, and `ACTION_SET_TEXT` on the focused editable node — the one piece of other apps' UI it reads. **The phone drops every `REMOTE_INPUT` unless it is sharing its screen at that moment**, so control never outlives the consent the user gave to be seen. The service is possible because FuseOS ships as an APK, not through Google Play.
 
 Sharing the channel means a burst of video can delay a clipboard frame behind it on the same TCP stream. At these bitrates on a LAN that is milliseconds; a separate channel is the fix if measurement ever says otherwise.

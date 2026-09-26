@@ -60,6 +60,8 @@ fun ProfileScreen(
     notificationAccess: Boolean,
     notificationsOn: Boolean,
     onNotifications: () -> Unit,
+    remoteControlOn: Boolean,
+    onRemoteControl: () -> Unit,
     onRemoveDevice: (String) -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
@@ -160,6 +162,14 @@ fun ProfileScreen(
                     else -> "Off"
                 },
                 trailingLit = notificationAccess && notificationsOn,
+            )
+            SettingItem(
+                "Remote control",
+                if (remoteControlOn) "While you mirror this screen, your Mac can tap, swipe and type here."
+                else "Let your Mac tap, swipe and type on this phone while you mirror its screen.",
+                onRemoteControl,
+                trailing = if (remoteControlOn) "On" else "Set up",
+                trailingLit = remoteControlOn,
             )
             SettingItem(
                 "Island",
