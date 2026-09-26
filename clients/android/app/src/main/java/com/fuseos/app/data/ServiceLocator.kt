@@ -5,9 +5,11 @@ import com.fuseos.app.core.Config
 import com.fuseos.app.clipboard.ClipboardSync
 import com.fuseos.app.core.DeviceInfo
 import com.fuseos.app.file.FileTransfer
+import com.fuseos.app.file.TransferProgress
 import com.fuseos.app.file.Transfers
 import com.fuseos.app.net.LanTransport
 import com.fuseos.app.ui.island.ClipIsland
+import com.fuseos.app.ui.island.IslandIcon
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpSend
@@ -111,7 +113,25 @@ object ServiceLocator {
             newEnvelope = { transport.newEnvelope() },
             emit = { transport.broadcast(it) },
         )
-        transfers = Transfers(appContext, transfer, transport, appScope)
+        transfers = Transfers(appContext, transfer, transport, appScope).apply {
+            // The island says what happened to a file, the same way it does for a clip.
+            // Without overlay permission the notification and the app's list still do.
+            onFinished = { p ->
+                // A cancel is the user's own doing; announcing it back to them is noise.
+                if (island.canDraw() && p.state != TransferProgress.State.Cancelled) {
+                    val done = p.state == TransferProgress.State.Done
+                    island.status(
+                        title = when {
+                            !done -> "File didn't go through"
+                            p.outgoing -> "Sent to your Mac"
+                            else -> "File from your Mac"
+                        },
+                        subtitle = p.name,
+                        icon = if (p.outgoing) IslandIcon.Sent else IslandIcon.Incoming,
+                    )
+                }
+            }
+        }
         appScope.launch(Dispatchers.IO) { transport.incoming.collect { transfer.receive(it) } }
         appScope.launch(Dispatchers.IO) { transport.connectedPeers.collect { transfer.onPeersChanged(it) } }
 

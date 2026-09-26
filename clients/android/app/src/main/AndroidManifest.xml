@@ -70,11 +70,17 @@
             android:label="@string/app_name"
             android:noHistory="true"
             android:theme="@style/Theme.FuseOS.Transparent">
+            <!-- Any type: text and small images go to the Mac's clipboard, everything else
+                 (PDFs, videos, several photos) as a file transfer into its Downloads. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/plain" />
-                <data android:mimeType="image/*" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
             </intent-filter>
         </activity>
 

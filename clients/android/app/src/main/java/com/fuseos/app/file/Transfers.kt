@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * The Android side of [FileTransfer]: what the UI lists, where a received file ends up, and
@@ -44,8 +45,12 @@ class Transfers(
 
     enum class SendResult { Started, NoPeer, Unreadable, TooLarge }
 
+    /** Every transfer that reaches an end state, once — what the island announces. */
+    var onFinished: ((TransferProgress) -> Unit)? = null
+
     init {
         transfer.onProgress = { progress ->
+            if (progress.finished) onFinished?.invoke(progress)
             _list.update { rows ->
                 (listOf(progress) + rows.filter { it.transferId != progress.transferId })
                     // ponytail: newest 20 only; a list of every file ever sent belongs in a
@@ -63,16 +68,7 @@ class Transfers(
     fun send(uri: Uri): SendResult {
         if (transport.connectedPeers.value.isEmpty()) return SendResult.NoPeer
         val resolver = context.contentResolver
-        val (name, size) = resolver.query(
-            uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null,
-        )?.use { cursor ->
-            if (!cursor.moveToFirst()) return SendResult.Unreadable
-            // A provider may not know the size (a stream being generated, say). The size goes
-            // on the wire before the first chunk, so an unknown one cannot be sent.
-            if (cursor.isNull(1)) return SendResult.Unreadable
-            (cursor.getString(0) ?: "file") to cursor.getLong(1)
-        } ?: return SendResult.Unreadable
-        if (size <= 0) return SendResult.Unreadable
+        val (name, size) = describe(uri) ?: return SendResult.Unreadable
         if (size > FileTransfer.MAX_FILE_BYTES) return SendResult.TooLarge
         val mime = resolver.getType(uri) ?: "application/octet-stream"
 
@@ -80,6 +76,50 @@ class Transfers(
         scope.launch(Dispatchers.IO) {
             transfer.send(name, mime, size) {
                 resolver.openInputStream(uri) ?: error("provider returned no stream")
+            }
+        }
+        return SendResult.Started
+    }
+
+    /**
+     * A document's display name and size, or null when the provider cannot say. The size
+     * goes on the wire before the first chunk, so a stream of unknown length (one being
+     * generated, say) cannot be sent.
+     */
+    fun describe(uri: Uri): Pair<String, Long>? =
+        runCatching {
+            context.contentResolver.query(
+                uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null,
+            )?.use { cursor ->
+                if (!cursor.moveToFirst() || cursor.isNull(1)) return@use null
+                val size = cursor.getLong(1)
+                if (size <= 0) null else (cursor.getString(0) ?: "file") to size
+            }
+        }.getOrNull()
+
+    /**
+     * Sends a file this app owns and deletes it afterwards, however the send ends.
+     *
+     * For the Share sheet: a shared Uri is readable only while the sharing activity lives,
+     * and that activity finishes at once, so it hands over a private copy instead.
+     */
+    fun sendCopy(copy: File, name: String, mime: String): SendResult {
+        val size = copy.length()
+        val refusal = when {
+            transport.connectedPeers.value.isEmpty() -> SendResult.NoPeer
+            size <= 0 -> SendResult.Unreadable
+            size > FileTransfer.MAX_FILE_BYTES -> SendResult.TooLarge
+            else -> null
+        }
+        if (refusal != null) {
+            copy.delete()
+            return refusal
+        }
+        scope.launch(Dispatchers.IO) {
+            try {
+                transfer.send(name, mime, size) { copy.inputStream() }
+            } finally {
+                copy.delete()
             }
         }
         return SendResult.Started
