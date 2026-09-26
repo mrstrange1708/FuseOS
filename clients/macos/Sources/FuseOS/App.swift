@@ -45,6 +45,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         DockIcon.apply(DockIcon.isShown)
+        if let directory = DemoMode.directory {
+            Task { @MainActor in await DemoMode.snapshot(to: directory) }
+        }
         // The Mac side of "share to the other device": Finder's right-click → Services.
         // A Share-sheet extension would need a sandbox and an App Group signed with a
         // paid Team ID; a Service needs neither and lands in the same place.
@@ -86,7 +89,9 @@ struct FuseOSApp: App {
         // group opens another copy each time the menu bar's Open is clicked.
         Window("FuseOS", id: "main") {
             Group {
-                if session.token == nil {
+                if DemoMode.isOn {
+                    ShellView(viewModel: dashboard)
+                } else if session.token == nil {
                     AuthView()
                 } else if session.deviceName == nil {
                     DeviceNameView()

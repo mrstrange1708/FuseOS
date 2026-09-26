@@ -10,26 +10,45 @@ struct DeviceRow: View {
     let isConnected: Bool
 
     var body: some View {
+        DeviceCard(
+            platform: device.platform,
+            name: device.name,
+            status: isConnected ? "Linked · direct" : (presence.online ? "Online" : "Offline"),
+            lit: isConnected || presence.online,
+            battery: presence.battery,
+        )
+    }
+}
+
+/// One device as a card: glyph, name, where it stands, battery.
+struct DeviceCard: View {
+    let platform: String
+    let name: String
+    let status: String
+    let lit: Bool
+    let battery: Int?
+
+    var body: some View {
         HStack(spacing: 14) {
-            deviceGlyph(platform: device.platform, online: presence.online)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(device.name)
-                    .font(.system(size: 15, weight: .semibold))
+            deviceGlyph(platform: platform, online: lit)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(name)
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(FuseColor.ink)
-                Text(statusText)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(presence.online ? FuseColor.accent : FuseColor.muted)
+                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    Circle().fill(lit ? FuseColor.accent : FuseColor.muted).frame(width: 6, height: 6)
+                    Text(status)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(lit ? FuseColor.accent : FuseColor.muted)
+                }
             }
             Spacer(minLength: 0)
-            BatteryBadge(percent: presence.battery)
+            BatteryBadge(percent: battery)
         }
         .padding(16)
-        .glassCard(radius: 16)
-    }
-
-    private var statusText: String {
-        if isConnected { return "\(device.platform) · connected · direct" }
-        return "\(device.platform) · \(presence.online ? "online" : "offline")"
+        .frame(maxWidth: .infinity)
+        .panelSurface(radius: 16)
     }
 }
 
@@ -42,7 +61,8 @@ struct BatteryBadge: View {
                 Image(systemName: symbol(for: percent))
                     .font(.system(size: 13))
                 Text("\(percent)%")
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .font(.system(size: 12, weight: .medium))
+                    .monospacedDigit()
             }
             .foregroundStyle(percent <= 20 ? FuseColor.error : FuseColor.muted)
         } else {
@@ -83,20 +103,12 @@ struct SelfDeviceRow: View {
     let name: String?
 
     var body: some View {
-        HStack(spacing: 14) {
-            deviceGlyph(platform: "macos", online: true)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(name ?? SessionStore.detectedDeviceName())
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(FuseColor.ink)
-                Text("This device · online")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(FuseColor.muted)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity)
-        .glassCard(radius: 16)
+        DeviceCard(
+            platform: "macos",
+            name: name ?? SessionStore.detectedDeviceName(),
+            status: "This Mac",
+            lit: true,
+            battery: nil,
+        )
     }
 }

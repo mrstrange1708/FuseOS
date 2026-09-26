@@ -36,6 +36,15 @@ public struct TransferProgress: Equatable, Identifiable {
     public let state: State
 
     public var finished: Bool { state == .done || state == .cancelled || state == .failed }
+
+    public init(transferId: String, name: String, outgoing: Bool, bytes: Int, total: Int, state: State) {
+        self.transferId = transferId
+        self.name = name
+        self.outgoing = outgoing
+        self.bytes = bytes
+        self.total = total
+        self.state = state
+    }
 }
 
 /// File transfer over the LAN data plane. The Android `FileTransfer` is the mirror of this

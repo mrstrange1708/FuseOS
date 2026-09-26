@@ -55,7 +55,10 @@ struct ShellView: View {
                 viewModel.start()
                 // Reaching the shell means the user is set up, which is the honest moment to
                 // start at login — not at first launch, when they have not decided to keep it.
-                LaunchAtLogin.enableOnFirstRun()
+                if !DemoMode.isOn { LaunchAtLogin.enableOnFirstRun() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: DemoMode.showSection)) { note in
+                if let raw = note.object as? String, let target = FuseSection(rawValue: raw) { section = target }
             }
             .sheet(isPresented: $showPairing) {
                 PairingView(viewModel: viewModel).environmentObject(session)
@@ -70,7 +73,10 @@ struct ShellView: View {
     @ViewBuilder private var pane: some View {
         switch section {
         case .home:
-            HomePane(viewModel: viewModel, onSeeAll: { go(.history) })
+            HomePane(viewModel: viewModel, onSeeAll: { go(.history) }, onMirror: {
+                go(.screen)
+                viewModel.screen.start()
+            })
         case .history:
             HistoryPane(viewModel: viewModel)
         case .devices:
@@ -187,118 +193,172 @@ private struct ShellBackground: View {
 
 // MARK: - Panes
 
+/// Home: the link, then two columns — what was copied, and what is moving.
 private struct HomePane: View {
     @ObservedObject var viewModel: DashboardViewModel
     let onSeeAll: () -> Void
+    let onMirror: () -> Void
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                LinkHero(viewModel: viewModel, statusLine: statusLine)
-
-                VStack(alignment: .leading, spacing: 10) {
-                    SectionLabel("Files")
-                    FileDropZone(viewModel: viewModel)
-                    ForEach(viewModel.transfers) { transfer in
-                        TransferRow(transfer: transfer, peerName: viewModel.peerName, viewModel: viewModel)
+            VStack(spacing: 18) {
+                LinkHero(viewModel: viewModel, onMirror: onMirror)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 18) {
+                        clipboard.frame(minWidth: 420)
+                        files.frame(width: 340)
                     }
-                }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        SectionLabel("Recent")
-                        Spacer()
-                        Button("See all", action: onSeeAll)
-                            .buttonStyle(.plain)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(FuseColor.accent)
-                    }
-                    if viewModel.history.isEmpty {
-                        Text("Nothing yet. Copy something on either device.")
-                            .font(.system(size: 13))
-                            .foregroundStyle(FuseColor.muted)
-                    } else {
-                        // Five is enough to prove sync is alive without turning home into
-                        // the history pane; the rest is one click away.
-                        ForEach(viewModel.history.prefix(5)) { entry in
-                            ClipRow(entry: entry, peerName: viewModel.peerName) {
-                                viewModel.copyToClipboard(entry)
-                            }
-                        }
+                    VStack(spacing: 18) {
+                        clipboard
+                        files
                     }
                 }
             }
             .padding(.horizontal, 28)
-            .padding(.top, 12)
+            .padding(.top, 8)
             .padding(.bottom, 28)
-            .frame(maxWidth: 680)
+            .frame(maxWidth: 1040)
             .frame(maxWidth: .infinity)
         }
     }
 
-    private var statusLine: String {
-        switch viewModel.connectState.stage {
-        case .connected: return "Clipboard and files move directly over your Wi-Fi."
-        case .connecting: return "Connecting over your Wi-Fi…"
-        case .differentNetwork: return "Your devices are on different networks."
-        case .peerOffline: return "Open FuseOS on your phone to link it."
-        case .alone: return "Sign in on your phone with this account."
+    private var clipboard: some View {
+        Panel(title: "Clipboard", accessory: {
+            Button("See all", action: onSeeAll)
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(FuseColor.accent)
+        }) {
+            if viewModel.history.isEmpty {
+                EmptyNote(symbol: "doc.on.clipboard", text: "Copy something on either device and it shows up here.")
+            } else {
+                VStack(spacing: 2) {
+                    // Six proves sync is alive without turning Home into History.
+                    ForEach(viewModel.history.prefix(6)) { entry in
+                        ClipRow(entry: entry, peerName: viewModel.peerName) {
+                            viewModel.copyToClipboard(entry)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var files: some View {
+        Panel(title: "Files") {
+            VStack(spacing: 10) {
+                FileDropZone(viewModel: viewModel)
+                ForEach(viewModel.transfers.prefix(4)) { transfer in
+                    TransferRow(transfer: transfer, peerName: viewModel.peerName, viewModel: viewModel)
+                }
+            }
         }
     }
 }
 
-/// The top of Home: this Mac and the phone, joined by the filament. The one place in the
-/// app that is allowed to be showy — it answers the only question people open it to ask.
+/// The top of Home: this Mac and the phone, joined by the filament a spark runs along while
+/// they are linked. The one showy thing in the app — it answers the question people open
+/// it to ask. Everything below it stays quiet.
 private struct LinkHero: View {
     @ObservedObject var viewModel: DashboardViewModel
-    let statusLine: String
+    let onMirror: () -> Void
 
     var body: some View {
         let peer = viewModel.peers.first { viewModel.isConnected($0) } ?? viewModel.peers.first
         let linked = peer.map(viewModel.isConnected) ?? false
-        return VStack(spacing: 18) {
+        return HStack(spacing: 28) {
             HStack(spacing: 0) {
                 endpoint(symbol: "laptopcomputer", name: viewModel.selfDevice?.name ?? "This Mac", lit: true)
                 Filament(linked: linked)
                     .frame(height: 24)
-                    .padding(.horizontal, 6)
+                    .padding(.horizontal, 4)
                 endpoint(symbol: "iphone", name: peer?.name ?? "Your phone", lit: linked)
             }
-            VStack(spacing: 5) {
-                Text(linked ? "Linked to \(peer?.name ?? "your phone")" : (peer == nil ? "No phone yet" : "Not linked"))
-                    .font(.system(size: 20, weight: .semibold))
+            .frame(maxWidth: 420)
+
+            VStack(alignment: .leading, spacing: 6) {
+                StatusPill(linked: linked, text: linked ? "Linked · direct" : status)
+                Text(peer?.name ?? "No phone yet")
+                    .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(FuseColor.ink)
-                Text(statusLine)
-                    .font(.system(size: 12))
+                    .lineLimit(1)
+                Text(detail)
+                    .font(.system(size: 12.5))
                     .foregroundStyle(FuseColor.muted)
-                if let peer, let battery = viewModel.onlineState(for: peer).battery {
-                    BatteryBadge(percent: battery).padding(.top, 2)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 8) {
+                    if let peer, let battery = viewModel.onlineState(for: peer).battery {
+                        BatteryBadge(percent: battery)
+                    }
+                    Spacer(minLength: 0)
+                    Button(action: onMirror) {
+                        Label("Mirror screen", systemImage: "rectangle.on.rectangle")
+                    }
+                    .buttonStyle(CapsuleButtonStyle(prominent: false))
+                    .disabled(!linked)
                 }
+                .padding(.top, 6)
             }
-            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 24)
-        .padding(.horizontal, 28)
-        .frame(maxWidth: .infinity)
-        .glassCard(radius: 22)
+        .padding(.vertical, 22)
+        .padding(.horizontal, 26)
+        .background(heroBackground)
         .animation(.easeInOut(duration: 0.4), value: linked)
+    }
+
+    /// The panel surface with the ember rising from its bottom edge — the hero's own glow.
+    private var heroBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+        return shape.fill(FuseColor.surface)
+            .overlay(
+                shape.fill(RadialGradient(
+                    colors: [FuseColor.accent.opacity(0.10), .clear],
+                    center: UnitPoint(x: 0.25, y: 1.1), startRadius: 0, endRadius: 360,
+                )),
+            )
+            .overlay(shape.stroke(FuseColor.outline.opacity(0.55), lineWidth: 1))
+    }
+
+    private var status: String {
+        switch viewModel.connectState.stage {
+        case .connected: return "Linked · direct"
+        case .connecting: return "Connecting"
+        case .differentNetwork: return "Different networks"
+        case .peerOffline: return "Phone offline"
+        case .alone: return "Waiting for a phone"
+        }
+    }
+
+    private var detail: String {
+        switch viewModel.connectState.stage {
+        case .connected: return "Clipboard, files and notifications move straight over your Wi-Fi."
+        case .connecting: return "Finding your phone on this Wi-Fi…"
+        case .differentNetwork: return "Put both devices on the same Wi-Fi network."
+        case .peerOffline: return "Open FuseOS on your phone to link it."
+        case .alone: return "Sign in on your phone with this account."
+        }
     }
 
     private func endpoint(symbol: String, name: String, lit: Bool) -> some View {
         VStack(spacing: 8) {
             ZStack {
                 Circle()
-                    .fill(FuseColor.accent.opacity(lit ? 0.16 : 0.06))
-                    .frame(width: 62, height: 62)
+                    .fill(FuseColor.accent.opacity(lit ? 0.15 : 0.05))
+                    .frame(width: 60, height: 60)
+                Circle()
+                    .stroke(FuseColor.accent.opacity(lit ? 0.35 : 0.1), lineWidth: 1)
+                    .frame(width: 60, height: 60)
                 Image(systemName: symbol)
-                    .font(.system(size: 24, weight: .light))
+                    .font(.system(size: 23, weight: .light))
                     .foregroundStyle(lit ? FuseColor.accent : FuseColor.muted)
             }
             Text(name)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(FuseColor.muted)
                 .lineLimit(1)
-                .frame(maxWidth: 110)
+                .truncationMode(.middle)
+                .frame(maxWidth: 104)
         }
     }
 }
@@ -316,77 +376,98 @@ private struct Filament: View {
                 line.move(to: CGPoint(x: 0, y: y))
                 line.addLine(to: CGPoint(x: size.width, y: y))
                 if linked {
-                    ctx.stroke(line, with: .color(FuseColor.accent.opacity(0.35)), lineWidth: 2)
+                    ctx.stroke(line, with: .color(FuseColor.accent.opacity(0.3)), lineWidth: 1.5)
                     // One trip every 1.8 s, eased so it gathers at each end like a hand-off.
                     let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.8) / 1.8
-                    let eased = 0.5 - cos(t * .pi) / 2
-                    let x = size.width * eased
-                    let glow = Path(ellipseIn: CGRect(x: x - 9, y: y - 9, width: 18, height: 18))
-                    ctx.fill(glow, with: .color(FuseColor.accent.opacity(0.25)))
-                    let spark = Path(ellipseIn: CGRect(x: x - 4, y: y - 4, width: 8, height: 8))
-                    ctx.fill(spark, with: .color(FuseColor.accent))
+                    let x = size.width * (0.5 - cos(t * .pi) / 2)
+                    ctx.fill(Path(ellipseIn: CGRect(x: x - 9, y: y - 9, width: 18, height: 18)),
+                             with: .color(FuseColor.accent.opacity(0.22)))
+                    ctx.fill(Path(ellipseIn: CGRect(x: x - 3.5, y: y - 3.5, width: 7, height: 7)),
+                             with: .color(FuseColor.accent))
                 } else {
                     ctx.stroke(line, with: .color(FuseColor.muted.opacity(0.4)),
                                style: StrokeStyle(lineWidth: 1.5, dash: [4, 6]))
                 }
             }
         }
-        .frame(minWidth: 80)
+        .frame(minWidth: 60)
         .accessibilityHidden(true)
     }
 }
 
-private struct SectionLabel: View {
-    let text: String
-    init(_ text: String) { self.text = text }
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(FuseColor.ink)
-    }
-}
-
+/// Everything ever copied, grouped by day, in one panel.
 private struct HistoryPane: View {
     @ObservedObject var viewModel: DashboardViewModel
     @State private var window: HistoryWindow = .day
 
     var body: some View {
         let shown = window.filter(viewModel.history)
-        return VStack(alignment: .leading, spacing: 14) {
-            PaneTitle("Clipboard history", subtitle: "Click an item to put it back on this Mac's clipboard.")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .lastTextBaseline) {
+                    PaneTitle("Clipboard history", subtitle: "Click an item to put it back on this Mac's clipboard.")
+                    Spacer()
+                    Picker("", selection: $window) {
+                        ForEach(HistoryWindow.allCases) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 300)
+                }
 
-            Picker("", selection: $window) {
-                ForEach(HistoryWindow.allCases) { Text($0.label).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 360)
-
-            if shown.isEmpty {
-                // "Nothing in 24 hours" and "nothing ever" need different answers: one is
-                // a filter to widen, the other is a feature to try.
-                Text(viewModel.history.isEmpty
-                     ? "Nothing yet. Copy something on either device and it lands here."
-                     : "Nothing copied in the last \(window.label.lowercased()). Try a wider range.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(FuseColor.muted)
-                Spacer()
-            } else {
-                ScrollView {
-                    VStack(spacing: 10) {
-                        ForEach(shown) { entry in
-                            ClipRow(entry: entry, peerName: viewModel.peerName) {
-                                viewModel.copyToClipboard(entry)
+                if shown.isEmpty {
+                    Panel {
+                        // "Nothing in 24 hours" and "nothing ever" need different answers: one
+                        // is a filter to widen, the other is a feature to try.
+                        EmptyNote(
+                            symbol: "clock.arrow.circlepath",
+                            text: viewModel.history.isEmpty
+                                ? "Nothing yet. Copy something on either device and it lands here."
+                                : "Nothing copied in the last \(window.label.lowercased()). Try a wider range.",
+                        )
+                    }
+                } else {
+                    ForEach(Self.days(shown), id: \.title) { day in
+                        Panel(title: day.title) {
+                            VStack(spacing: 2) {
+                                ForEach(day.entries) { entry in
+                                    ClipRow(entry: entry, peerName: viewModel.peerName) {
+                                        viewModel.copyToClipboard(entry)
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
+            .padding(.horizontal, 28)
+            .padding(.top, 8)
+            .padding(.bottom, 28)
+            .frame(maxWidth: 820)
+            .frame(maxWidth: .infinity)
         }
-        .padding(28)
-        .frame(maxWidth: 680, alignment: .leading)
-        .frame(maxWidth: .infinity)
+    }
+
+    /// Entries (already newest first) split into Today / Yesterday / dated groups.
+    private static func days(_ entries: [ClipEntry]) -> [(title: String, entries: [ClipEntry])] {
+        let calendar = Calendar.current
+        var groups: [(title: String, entries: [ClipEntry])] = []
+        for entry in entries {
+            let title: String
+            if calendar.isDateInToday(entry.at) {
+                title = "Today"
+            } else if calendar.isDateInYesterday(entry.at) {
+                title = "Yesterday"
+            } else {
+                title = entry.at.formatted(.dateTime.weekday(.wide).day().month(.wide))
+            }
+            if groups.last?.title == title {
+                groups[groups.count - 1].entries.append(entry)
+            } else {
+                groups.append((title, [entry]))
+            }
+        }
+        return groups
     }
 }
 
@@ -395,34 +476,37 @@ private struct DevicesPane: View {
     let onLinkManually: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            PaneTitle("Devices", subtitle: "Everything signed in to this account.")
-
-            SelfDeviceRow(name: viewModel.selfDevice?.name)
-
-            ForEach(viewModel.peers) { peer in
-                DeviceRow(
-                    device: peer,
-                    presence: viewModel.onlineState(for: peer),
-                    isConnected: viewModel.isConnected(peer),
-                )
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                PaneTitle("Devices", subtitle: "Everything signed in to this account links itself.")
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 14)], spacing: 14) {
+                    SelfDeviceRow(name: viewModel.selfDevice?.name)
+                    ForEach(viewModel.peers) { peer in
+                        DeviceRow(
+                            device: peer,
+                            presence: viewModel.onlineState(for: peer),
+                            isConnected: viewModel.isConnected(peer),
+                        )
+                    }
+                }
+                HStack(spacing: 10) {
+                    Button("Link with a code", action: onLinkManually)
+                        .buttonStyle(CapsuleButtonStyle(prominent: false))
+                    Text("Only needed if a device on this account didn't show up.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(FuseColor.muted)
+                }
             }
-
-            Text("Any device signed in to this account links itself.")
-                .font(.system(size: 11))
-                .foregroundStyle(FuseColor.muted)
-            Button("Link manually", action: onLinkManually)
-                .buttonStyle(.plain)
-                .font(.system(size: 12))
-                .foregroundStyle(FuseColor.accent)
-            Spacer()
+            .padding(.horizontal, 28)
+            .padding(.top, 8)
+            .padding(.bottom, 28)
+            .frame(maxWidth: 820)
+            .frame(maxWidth: .infinity)
         }
-        .padding(28)
-        .frame(maxWidth: 640, alignment: .leading)
-        .frame(maxWidth: .infinity)
     }
 }
 
+/// Settings, grouped the way macOS groups them: this Mac, how FuseOS behaves, the account.
 private struct AccountPane: View {
     @EnvironmentObject var session: SessionStore
     @ObservedObject var viewModel: DashboardViewModel
@@ -434,79 +518,132 @@ private struct AccountPane: View {
     @AppStorage(DashboardViewModel.askBeforeSendKey) private var askBeforeSend = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            PaneTitle("Account", subtitle: session.email ?? "Signed in")
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("This Mac's name")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(FuseColor.ink)
-                HStack {
-                    FuseTextField(title: "Device name", text: $draftName)
-                    Button("Save") {
-                        let trimmed = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !trimmed.isEmpty else { return }
-                        session.setDeviceName(trimmed)
-                        // Push it now rather than at the next launch, so the phone's list
-                        // updates while the user is still looking at the change.
-                        Task { await viewModel.refresh(reregister: true) }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 14) {
+                    ZStack {
+                        Circle().fill(FuseColor.accent.opacity(0.16)).frame(width: 52, height: 52)
+                        Text((session.email ?? "?").prefix(1).uppercased())
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(FuseColor.accent)
+                    }
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(session.email ?? "Signed in")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(FuseColor.ink)
+                        Text("\(viewModel.peers.count + 1) devices · \(viewModel.connected.count) linked")
+                            .font(.system(size: 12))
+                            .foregroundStyle(FuseColor.muted)
                     }
                 }
-                Text("Your phone shows this name.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(FuseColor.muted)
-            }
-            .onAppear { draftName = session.deviceName ?? SessionStore.detectedDeviceName() }
 
-            Divider().padding(.vertical, 2)
+                Panel(title: "This Mac") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 10) {
+                            FuseTextField(title: "Device name", text: $draftName)
+                            Button("Save") {
+                                let trimmed = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard !trimmed.isEmpty else { return }
+                                session.setDeviceName(trimmed)
+                                // Push it now rather than at the next launch, so the phone's
+                                // list updates while the user is still looking at the change.
+                                Task { await viewModel.refresh(reregister: true) }
+                            }
+                            .buttonStyle(CapsuleButtonStyle(prominent: true))
+                            .disabled(draftName.trimmingCharacters(in: .whitespaces) == (session.deviceName ?? ""))
+                        }
+                        Text("Your phone shows this name.")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(FuseColor.muted)
+                    }
+                }
+                .onAppear { draftName = session.deviceName ?? SessionStore.detectedDeviceName() }
 
-            HStack(spacing: 12) {
-                Text("\(viewModel.peers.count + 1) devices")
-                Text("·")
-                Text("\(viewModel.connected.count) linked")
-            }
-            .font(.system(size: 12, design: .monospaced))
-            .foregroundStyle(FuseColor.muted)
-
-            Divider().padding(.vertical, 4)
-
-            Toggle("Start FuseOS at login", isOn: Binding(
-                get: { launchAtLogin },
-                set: { launchAtLogin = LaunchAtLogin.setEnabled($0) ? $0 : LaunchAtLogin.isEnabled },
-            ))
-            .toggleStyle(.checkbox)
-            .font(.system(size: 12))
-
-            Toggle("Show in Dock", isOn: $showInDock)
-                .toggleStyle(.checkbox)
-                .font(.system(size: 12))
-                .onChange(of: showInDock) { shown in
-                    DockIcon.apply(shown)
-                    // Leaving the Dock deactivates the app; keep this window in front of
-                    // the user who is still looking at it.
-                    DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
+                Panel(title: "Behaviour") {
+                    VStack(spacing: 0) {
+                        SettingSwitch(
+                            title: "Start at login",
+                            detail: "Sync is ready before you reach for it.",
+                            isOn: Binding(
+                                get: { launchAtLogin },
+                                set: { launchAtLogin = LaunchAtLogin.setEnabled($0) ? $0 : LaunchAtLogin.isEnabled },
+                            ),
+                        )
+                        Divider().opacity(0.5)
+                        SettingSwitch(
+                            title: "Show in Dock",
+                            detail: "Off, FuseOS lives in the menu bar only.",
+                            isOn: $showInDock,
+                        )
+                        .onChange(of: showInDock) { shown in
+                            DockIcon.apply(shown)
+                            // Leaving the Dock deactivates the app; keep this window in front
+                            // of the user who is still looking at it.
+                            DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
+                        }
+                        Divider().opacity(0.5)
+                        SettingSwitch(
+                            title: "Ask before sending copies",
+                            detail: "Each copy waits in the island for you to click Send.",
+                            isOn: $askBeforeSend,
+                        )
+                    }
                 }
 
-            Toggle("Ask before sending copies", isOn: $askBeforeSend)
-                .toggleStyle(.checkbox)
-                .font(.system(size: 12))
-                .help("Each copy waits in the island for you to click Send. Off, copies go instantly.")
-
-            Button("Link manually", action: onLinkManually)
-            Button("Sign out") {
-                viewModel.signOut()
-                session.clear()
+                Panel(title: "Account") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Link with a code").font(.system(size: 13, weight: .medium))
+                                Text("Devices on this account link themselves; this is the fallback.")
+                                    .font(.system(size: 11.5)).foregroundStyle(FuseColor.muted)
+                            }
+                            Spacer()
+                            Button("Show code", action: onLinkManually)
+                                .buttonStyle(CapsuleButtonStyle(prominent: false))
+                        }
+                        Divider().opacity(0.5)
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Sign out").font(.system(size: 13, weight: .medium))
+                                Text("Clears this Mac's session and its clipboard history.")
+                                    .font(.system(size: 11.5)).foregroundStyle(FuseColor.muted)
+                            }
+                            Spacer()
+                            Button("Sign out") {
+                                viewModel.signOut()
+                                session.clear()
+                            }
+                            .buttonStyle(CapsuleButtonStyle(prominent: false, destructive: true))
+                        }
+                    }
+                }
             }
-            .foregroundStyle(FuseColor.error)
-
-            Text("Signing out clears this Mac's session and its stored clipboard history.")
-                .font(.system(size: 11))
-                .foregroundStyle(FuseColor.muted)
-            Spacer()
+            .padding(.horizontal, 28)
+            .padding(.top, 8)
+            .padding(.bottom, 28)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
         }
-        .padding(28)
-        .frame(maxWidth: 560, alignment: .leading)
-        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct SettingSwitch: View {
+    let title: String
+    let detail: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 13, weight: .medium)).foregroundStyle(FuseColor.ink)
+                Text(detail).font(.system(size: 11.5)).foregroundStyle(FuseColor.muted)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .toggleStyle(.switch)
+        .tint(FuseColor.accent)
+        .padding(.vertical, 9)
     }
 }
 
@@ -517,17 +654,18 @@ private struct ScreenPane: View {
 
     var body: some View {
         let linked = !viewModel.connected.isEmpty
-        VStack(spacing: 16) {
+        VStack(spacing: 18) {
             switch viewModel.screenState {
             case .streaming(let width, let height):
                 PhoneScreen(layer: viewModel.screen.layer)
                     .aspectRatio(CGFloat(width) / CGFloat(max(height, 1)), contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous)
                         .stroke(Color.white.opacity(0.12), lineWidth: 6))
                     .shadow(color: .black.opacity(0.35), radius: 24, y: 12)
                     .frame(maxHeight: .infinity)
                 Button("Stop mirroring") { viewModel.screen.stop() }
+                    .buttonStyle(CapsuleButtonStyle(prominent: false))
                     .keyboardShortcut(.escape, modifiers: [])
             case .requesting:
                 placeholder(
@@ -536,20 +674,19 @@ private struct ScreenPane: View {
                     busy: true,
                 )
                 Button("Cancel") { viewModel.screen.stop() }
+                    .buttonStyle(CapsuleButtonStyle(prominent: false))
             case .idle, .ended:
                 placeholder(
-                    title: viewModel.screenState == .ended ? "Mirroring ended" : "See your phone here",
+                    title: viewModel.screenState == .ended ? "Mirroring ended" : "Your phone, on this Mac",
                     detail: linked
-                        ? "Your phone's screen, live on this Mac over your Wi-Fi."
+                        ? "See your phone's screen live, straight over your Wi-Fi."
                         : "Link your phone first — mirroring runs over the same direct connection.",
                     busy: false,
                 )
                 Button(viewModel.screenState == .ended ? "Mirror again" : "Mirror \(viewModel.peerName ?? "phone")") {
                     viewModel.screen.start()
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(FuseColor.accent)
-                .controlSize(.large)
+                .buttonStyle(CapsuleButtonStyle(prominent: true))
                 .disabled(!linked)
             }
         }
@@ -558,21 +695,25 @@ private struct ScreenPane: View {
     }
 
     private func placeholder(title: String, detail: String, busy: Bool) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(FuseColor.outline, style: StrokeStyle(lineWidth: 1.5, dash: [5, 5]))
-                    .frame(width: 120, height: 220)
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .fill(FuseColor.surface)
+                    .frame(width: 132, height: 240)
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .stroke(FuseColor.outline, lineWidth: 1)
+                    .frame(width: 132, height: 240)
+                Capsule().fill(FuseColor.outline).frame(width: 38, height: 5).offset(y: -106)
                 if busy {
                     ProgressView().controlSize(.small)
                 } else {
-                    Image(systemName: "iphone.gen3")
-                        .font(.system(size: 30, weight: .light))
-                        .foregroundStyle(FuseColor.muted)
+                    Image(systemName: "rectangle.on.rectangle")
+                        .font(.system(size: 26, weight: .light))
+                        .foregroundStyle(FuseColor.accent)
                 }
             }
             Text(title)
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: 19, weight: .semibold))
                 .foregroundStyle(FuseColor.ink)
             Text(detail)
                 .font(.system(size: 13))
@@ -580,7 +721,7 @@ private struct ScreenPane: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 340)
         }
-        .frame(maxHeight: .infinity)
+        .padding(.bottom, 6)
     }
 }
 
@@ -603,21 +744,24 @@ private struct PhoneScreen: NSViewRepresentable {
 
 // MARK: - Files
 
-/// Drop files here, or click to choose them. Either way they go to the connected phone.
+/// Drop files here, or choose them. Either way they go to the connected phone.
 private struct FileDropZone: View {
     @ObservedObject var viewModel: DashboardViewModel
     @State private var targeted = false
 
     var body: some View {
         let linked = !viewModel.connected.isEmpty
-        VStack(spacing: 6) {
-            Image(systemName: "arrow.up.doc")
-                .font(.system(size: 20))
-                .foregroundStyle(targeted ? FuseColor.accent : FuseColor.muted)
-            Text(linked ? "Drop files to send them to \(viewModel.peerName ?? "your phone")" : "Link a device to send files")
-                .font(.system(size: 12))
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        VStack(spacing: 10) {
+            Image(systemName: targeted ? "arrow.down.doc.fill" : "arrow.up.doc")
+                .font(.system(size: 22, weight: .light))
+                .foregroundStyle(targeted || linked ? FuseColor.accent : FuseColor.muted)
+            Text(linked ? "Drop files for \(viewModel.peerName ?? "your phone")" : "Link a device to send files")
+                .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(FuseColor.ink)
-            Button("Choose…", action: choose)
+                .multilineTextAlignment(.center)
+            Button("Choose files", action: choose)
+                .buttonStyle(CapsuleButtonStyle(prominent: true))
                 .disabled(!linked)
             if let notice = viewModel.fileNotice {
                 Text(notice)
@@ -625,15 +769,14 @@ private struct FileDropZone: View {
                     .foregroundStyle(FuseColor.error)
             }
         }
-        .padding(18)
+        .padding(.vertical, 22)
         .frame(maxWidth: .infinity)
-        .background(targeted ? FuseColor.accent.opacity(0.08) : FuseColor.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .background(shape.fill(targeted ? FuseColor.accent.opacity(0.08) : FuseColor.surfaceAlt.opacity(0.6)))
         .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(targeted ? FuseColor.accent : FuseColor.outline.opacity(0.6),
-                        style: StrokeStyle(lineWidth: 1, dash: [5, 4])),
+            shape.stroke(targeted ? FuseColor.accent : FuseColor.outline.opacity(0.8),
+                         style: StrokeStyle(lineWidth: 1, dash: [5, 4])),
         )
+        .animation(.easeOut(duration: 0.15), value: targeted)
         .dropDestination(for: URL.self) { urls, _ in
             let files = urls.filter(\.isFileURL)
             guard !files.isEmpty else { return false }
@@ -659,21 +802,27 @@ private struct TransferRow: View {
     @ObservedObject var viewModel: DashboardViewModel
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: transfer.outgoing ? "arrow.up.circle" : "arrow.down.circle")
-                .foregroundStyle(FuseColor.accent)
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 12) {
+            IconTile(
+                symbol: transfer.outgoing ? "arrow.up" : "arrow.down",
+                tint: transfer.state == .failed ? FuseColor.error : FuseColor.accent,
+            )
+            VStack(alignment: .leading, spacing: 5) {
                 Text(transfer.name)
-                    .font(.system(size: 13))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(FuseColor.ink)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(status)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(transfer.state == .failed ? FuseColor.error : FuseColor.muted)
-                if !transfer.finished {
-                    ProgressView(value: Double(transfer.bytes), total: Double(max(transfer.total, 1)))
-                        .progressViewStyle(.linear)
+                if transfer.finished {
+                    Text(status)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(transfer.state == .failed ? FuseColor.error : FuseColor.muted)
+                } else {
+                    ProgressBar(fraction: Double(transfer.bytes) / Double(max(transfer.total, 1)))
+                    Text(status)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(FuseColor.muted)
+                        .monospacedDigit()
                 }
             }
             Spacer(minLength: 0)
@@ -681,31 +830,31 @@ private struct TransferRow: View {
                 Button {
                     viewModel.cancelTransfer(transfer.id)
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .frame(width: 22, height: 22)
+                        .background(Circle().fill(FuseColor.surfaceAlt))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(FuseColor.muted)
                 .help("Cancel")
             } else if !transfer.outgoing && transfer.state == .done {
-                Button("Show in Finder") {
+                Button("Show") {
                     if !viewModel.revealTransfer(transfer.id) {
                         viewModel.fileNotice = "\(transfer.name) has moved or been deleted."
                     }
                 }
-                .buttonStyle(.plain)
-                .font(.system(size: 11))
-                .foregroundStyle(FuseColor.accent)
+                .buttonStyle(CapsuleButtonStyle(prominent: false))
             }
         }
-        .padding(12)
-        .glassCard(radius: 12)
+        .padding(.vertical, 4)
     }
 
     private var status: String {
         let peer = peerName ?? "your phone"
         let percent = transfer.total > 0 ? transfer.bytes * 100 / transfer.total : 0
         switch transfer.state {
-        case .active: return transfer.outgoing ? "Sending to \(peer) · \(percent)%" : "Receiving from \(peer) · \(percent)%"
+        case .active: return transfer.outgoing ? "To \(peer) · \(percent)%" : "From \(peer) · \(percent)%"
         case .sent: return "Waiting for \(peer) to confirm"
         case .done: return transfer.outgoing ? "Sent to \(peer)" : "Saved to Downloads"
         case .cancelled: return "Cancelled"
@@ -715,6 +864,42 @@ private struct TransferRow: View {
 }
 
 // MARK: - Shared bits
+
+/// The app's one card: a solid panel with a hairline edge, and an optional title row.
+/// Glass is kept for the floating bar, where there is content underneath to show through.
+private struct Panel<Accessory: View, Content: View>: View {
+    var title: String?
+    @ViewBuilder var accessory: () -> Accessory
+    @ViewBuilder var content: () -> Content
+
+    init(
+        title: String? = nil,
+        @ViewBuilder accessory: @escaping () -> Accessory = { EmptyView() },
+        @ViewBuilder content: @escaping () -> Content,
+    ) {
+        self.title = title
+        self.accessory = accessory
+        self.content = content
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let title {
+                HStack {
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(FuseColor.ink)
+                    Spacer()
+                    accessory()
+                }
+            }
+            content()
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .panelSurface(radius: 18)
+    }
+}
 
 private struct PaneTitle: View {
     let title: String
@@ -728,54 +913,143 @@ private struct PaneTitle: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.system(size: 22, weight: .bold))
+                .font(.system(size: 26, weight: .bold))
                 .foregroundStyle(FuseColor.ink)
             Text(subtitle)
-                .font(.system(size: 12))
+                .font(.system(size: 13))
                 .foregroundStyle(FuseColor.muted)
         }
     }
 }
 
-/// One clipboard entry. Shared by the home pane, the history pane and the menu bar.
+private struct EmptyNote: View {
+    let symbol: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            IconTile(symbol: symbol, tint: FuseColor.muted)
+            Text(text)
+                .font(.system(size: 12.5))
+                .foregroundStyle(FuseColor.muted)
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+private struct StatusPill: View {
+    let linked: Bool
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(linked ? FuseColor.accent : FuseColor.muted)
+                .frame(width: 6, height: 6)
+            Text(text)
+                .font(.system(size: 11, weight: .semibold))
+        }
+        .foregroundStyle(linked ? FuseColor.accent : FuseColor.muted)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .background(Capsule().fill((linked ? FuseColor.accent : FuseColor.muted).opacity(0.12)))
+    }
+}
+
+private struct ProgressBar: View {
+    let fraction: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(FuseColor.outline.opacity(0.6))
+                Capsule()
+                    .fill(FuseColor.accent)
+                    .frame(width: geo.size.width * min(max(fraction, 0), 1))
+                    .animation(.easeOut(duration: 0.25), value: fraction)
+            }
+        }
+        .frame(height: 4)
+    }
+}
+
+/// One clipboard entry: what it is, where it came from, when. Click to copy it back.
 struct ClipRow: View {
     let entry: ClipEntry
     /// Named rather than "your phone": the user chose that name, so this is where it earns
     /// its keep. Nil only before a second device joins the account.
     var peerName: String?
     let onCopy: () -> Void
+    @State private var hovering = false
+    @State private var copied = false
 
     var body: some View {
-        Button(action: onCopy) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(entry.fromSelf ? "Copied here" : "From \(peerName ?? "your phone")")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(FuseColor.accent)
-                    Spacer()
-                    Text(entry.at, style: .time)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(FuseColor.muted)
-                }
+        Button {
+            onCopy()
+            copied = true
+            Task {
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                copied = false
+            }
+        } label: {
+            HStack(spacing: 12) {
                 if let data = entry.imageData, let image = NSImage(data: data) {
                     Image(nsImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
-                        .frame(height: 120)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .frame(width: 34, height: 34)
+                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 } else {
-                    Text(entry.text ?? "")
+                    IconTile(symbol: symbol, tint: entry.fromSelf ? FuseColor.muted : FuseColor.accent)
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(preview)
                         .font(.system(size: 13))
                         .foregroundStyle(FuseColor.ink)
-                        .lineLimit(4)
+                        .lineLimit(2)
                         .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(entry.fromSelf ? "Copied here" : "From \(peerName ?? "your phone")")
+                        .font(.system(size: 11))
+                        .foregroundStyle(FuseColor.muted)
+                }
+                Spacer(minLength: 8)
+                if copied {
+                    Label("Copied", systemImage: "checkmark")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(FuseColor.accent)
+                } else if hovering {
+                    Label("Copy", systemImage: "doc.on.doc")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(FuseColor.muted)
+                } else {
+                    Text(entry.at, style: .time)
+                        .font(.system(size: 11))
+                        .foregroundStyle(FuseColor.muted)
+                        .monospacedDigit()
                 }
             }
-            .padding(14)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 7)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .glassCard(radius: 14)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(hovering ? FuseColor.surfaceAlt : Color.clear),
+            )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+    }
+
+    private var symbol: String {
+        guard let text = entry.text else { return "photo" }
+        if text.hasPrefix("http://") || text.hasPrefix("https://") { return "link" }
+        return "text.alignleft"
+    }
+
+    private var preview: String {
+        if entry.isImage { return "Image" }
+        // A two-line preview reads as one thought; raw newlines made it a ragged fragment.
+        return (entry.text ?? "").split(whereSeparator: \.isNewline).joined(separator: "  ")
     }
 }

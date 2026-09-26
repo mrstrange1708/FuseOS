@@ -15,6 +15,15 @@ public struct ClipEntry: Identifiable, Equatable {
 
     public var isImage: Bool { imageData != nil }
 
+    public init(id: Int, text: String?, imageData: Data?, mime: String?, fromSelf: Bool, at: Date) {
+        self.id = id
+        self.text = text
+        self.imageData = imageData
+        self.mime = mime
+        self.fromSelf = fromSelf
+        self.at = at
+    }
+
     public static func == (a: ClipEntry, b: ClipEntry) -> Bool { a.id == b.id }
 }
 

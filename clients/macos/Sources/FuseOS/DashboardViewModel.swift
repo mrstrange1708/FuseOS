@@ -66,6 +66,10 @@ final class DashboardViewModel: ObservableObject {
     func start() {
         guard !started else { return }
         started = true
+        if DemoMode.isOn {
+            DemoMode.fill(self)
+            return
+        }
         signal.lanAddressProvider = { [weak self] in self?.transport.lanAddress() }
         signal.onPresenceChanged = { [weak self] presence in
             guard let self else { return }
