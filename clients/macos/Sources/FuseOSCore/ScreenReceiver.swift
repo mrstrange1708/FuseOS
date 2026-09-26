@@ -70,16 +70,21 @@ public final class ScreenReceiver {
 
     private func enqueue(_ frame: FuseScreenFrame) {
         var picture: [Data] = []
+        var carriesParameterSets = false
         for nal in Self.nalUnits(in: frame.data) {
             switch nal.first.map({ $0 & 0x1F }) {
-            case 7: sps = nal
-            case 8: pps = nal
+            case 7: sps = nal; carriesParameterSets = true
+            case 8: pps = nal; carriesParameterSets = true
             case .some: picture.append(nal)
             case nil: break
             }
         }
-        if frame.config || format == nil {
+        if carriesParameterSets || format == nil {
             if let sps, let pps, let made = Self.format(sps: sps, pps: pps) {
+                // A new shape (the phone rotated): samples of the old one must not linger.
+                if let format, !CMFormatDescriptionEqual(format, otherFormatDescription: made) {
+                    layer.flush()
+                }
                 format = made
                 let size = CMVideoFormatDescriptionGetDimensions(made)
                 state = .streaming(width: Int(size.width), height: Int(size.height))

@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.MediaCodec
@@ -21,6 +22,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.util.DisplayMetrics
+import android.view.Surface
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.IntentCompat
@@ -39,13 +41,18 @@ import kotlin.concurrent.thread
  * Tuned for latency, not quality: realtime priority, 30 fps, a keyframe every 2 s, the
  * codec config prepended to every keyframe so the Mac can join or recover at any one, and
  * the last frame repeated while the screen is still so a static screen is never stale.
+ * A rotation swaps in an encoder at the new size (see [onConfigurationChanged]).
  */
 class ScreenShareService : Service() {
     private var projection: MediaProjection? = null
     private var codec: MediaCodec? = null
     private var display: VirtualDisplay? = null
     private var pump: Thread? = null
+    /** A sharing session is running (from consent until [finish]). */
     @Volatile private var active = false
+    /** The current encoder's drain loop should keep going; cleared to swap encoders. */
+    @Volatile private var pumping = false
+    private var encoding: CaptureSize? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -78,8 +85,40 @@ class ScreenShareService : Service() {
     }
 
     private fun begin(projection: MediaProjection) {
-        val (width, height, dpi) = captureSize()
-        val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
+        val size = captureSize()
+        val surface = startEncoder(size)
+        display = projection.createVirtualDisplay(
+            "FuseOS", size.width, size.height, size.dpi,
+            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, surface, null, null,
+        )
+        active = true
+        running = this
+        ServiceLocator.screenShare.send(ScreenControl.Action.START)
+    }
+
+    /**
+     * A rotation: the same display, resized, drawing into a new encoder at the new size.
+     * Android 14 allows one virtual display per projection, so the display is resized
+     * rather than recreated. The new encoder's first frame carries the new SPS, which is
+     * how the Mac learns the new shape.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val display = display ?: return
+        val size = captureSize()
+        if (!active || size == encoding) return
+        stopEncoder()
+        val surface = runCatching { startEncoder(size) }.getOrElse {
+            finish(notifyMac = true)
+            return
+        }
+        display.resize(size.width, size.height, size.dpi)
+        display.surface = surface
+    }
+
+    /** A fresh encoder at [size], with its drain thread running. Returns its input surface. */
+    private fun startEncoder(size: CaptureSize): Surface {
+        val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, size.width, size.height).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
             setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE)
             setInteger(MediaFormat.KEY_FRAME_RATE, FPS)
@@ -95,13 +134,19 @@ class ScreenShareService : Service() {
         val surface = codec.createInputSurface()
         codec.start()
         this.codec = codec
-        display = projection.createVirtualDisplay(
-            "FuseOS", width, height, dpi, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, surface, null, null,
-        )
-        active = true
-        running = this
-        ServiceLocator.screenShare.send(ScreenControl.Action.START)
-        pump = thread(name = "fuse-screen") { drain(codec, width, height) }
+        encoding = size
+        pumping = true
+        pump = thread(name = "fuse-screen") { drain(codec, size.width, size.height) }
+        return surface
+    }
+
+    private fun stopEncoder() {
+        pumping = false
+        pump?.join(500)
+        pump = null
+        codec?.let { runCatching { it.stop() }; it.release() }
+        codec = null
+        encoding = null
     }
 
     /** Encoder output → the wire, until [active] drops. Runs on its own thread. */
@@ -109,7 +154,7 @@ class ScreenShareService : Service() {
         val info = MediaCodec.BufferInfo()
         val transport = ServiceLocator.lanTransport
         try {
-            while (active) {
+            while (pumping) {
                 val index = codec.dequeueOutputBuffer(info, 100_000)
                 if (index < 0) continue
                 val buffer = codec.getOutputBuffer(index)
@@ -144,12 +189,9 @@ class ScreenShareService : Service() {
         val wasActive = active || projection != null
         active = false
         if (running === this) running = null
-        pump?.join(500)
-        pump = null
+        stopEncoder()
         display?.release()
         display = null
-        codec?.let { runCatching { it.stop() }; it.release() }
-        codec = null
         projection?.let { p -> projection = null; runCatching { p.stop() } }
         if (notifyMac && wasActive) {
             runCatching { ServiceLocator.screenShare.send(ScreenControl.Action.STOP) }
@@ -163,20 +205,20 @@ class ScreenShareService : Service() {
         super.onDestroy()
     }
 
+    private data class CaptureSize(val width: Int, val height: Int, val dpi: Int)
+
     /**
-     * The screen's real size, scaled so its long side is at most [MAX_LONG_SIDE] and both
-     * sides are multiples of 16 — what hardware encoders reliably accept.
-     *
-     * ponytail: sized once, in the orientation it starts in; a rotated phone is letterboxed
-     * into that frame. Recreate the display on a configuration change if that matters.
+     * The screen's real size in its current orientation, scaled so its long side is at
+     * most [MAX_LONG_SIDE] and both sides are multiples of 16 — what hardware encoders
+     * reliably accept.
      */
-    private fun captureSize(): Triple<Int, Int, Int> {
+    private fun captureSize(): CaptureSize {
         val metrics = DisplayMetrics()
         @Suppress("DEPRECATION")
         getSystemService(WindowManager::class.java).defaultDisplay.getRealMetrics(metrics)
         val scale = minOf(1f, MAX_LONG_SIDE.toFloat() / maxOf(metrics.widthPixels, metrics.heightPixels))
         fun even16(v: Float) = (v.toInt() / 16) * 16
-        return Triple(even16(metrics.widthPixels * scale), even16(metrics.heightPixels * scale), metrics.densityDpi)
+        return CaptureSize(even16(metrics.widthPixels * scale), even16(metrics.heightPixels * scale), metrics.densityDpi)
     }
 
     private fun startInForeground() {
