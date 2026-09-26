@@ -159,6 +159,33 @@
                 android:resource="@xml/remote_control" />
         </service>
 
+        <!-- Continuity Camera: opens the phone's camera for a photo the Mac asked for. -->
+        <activity
+            android:name=".actions.CameraCaptureActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.FuseOS.Transparent" />
+
+        <!-- Handoff for links: "Open on Mac" in the Share sheet. -->
+        <activity
+            android:name=".actions.OpenOnMacActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="Open on Mac"
+            android:noHistory="true"
+            android:theme="@style/Theme.FuseOS.Transparent">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <receiver
+            android:name=".actions.StopRingReceiver"
+            android:exported="false" />
+
         <!-- Hosts Android's screen-capture consent dialog and finishes. -->
         <activity
             android:name=".screen.ScreenConsentActivity"

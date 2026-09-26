@@ -80,6 +80,8 @@ message Envelope {
 | `NOTIFICATION_DISMISS` | either | a mirrored notification went away (§10) |
 | `SCREEN_CONTROL` | either | start / stop / keyframe for screen mirroring (§11) |
 | `SCREEN_FRAME` | phone → Mac | one H.264 access unit of the phone's screen (§11) |
+| `PHONE_COMMAND` | Mac → phone | ring the phone, stop ringing, or open its camera for a photo (§12) |
+| `OPEN_LINK` | either | open an http(s) link on the other device (§12) |
 | `REMOTE_INPUT` | Mac → phone | a tap, swipe, long-press, Back/Home/Recents, text or key for the phone to perform (§11) |
 
 ## 4. Loop-prevention invariant (critical)
@@ -226,3 +228,13 @@ Phone → Mac, with remote control when the user allows it.
 **Remote control.** With the phone's *FuseOS remote control* accessibility service on (Settings → Accessibility; a Profile row links there), the phone's `SCREEN_CONTROL START` carries `remote_control = true` and the Mac turns its mirror interactive: a click is a `TAP`, a hold over 0.5 s a `LONG_PRESS`, a drag a `SWIPE` (its real duration, clamped to 60 ms–2 s), wheel/trackpad scrolling a `SWIPE` gathered over 80 ms, typing `TEXT` into the focused field, Delete and Return `KEY` 67/66, and Esc `BACK`; buttons send `BACK`, `HOME` and `RECENTS`. Positions are 0–1 of the mirrored image, top-left origin — the aspect-fit mirror keeps that equal to the phone's screen. The phone performs them with `dispatchGesture`, global actions, and `ACTION_SET_TEXT` on the focused editable node — the one piece of other apps' UI it reads. **The phone drops every `REMOTE_INPUT` unless it is sharing its screen at that moment**, so control never outlives the consent the user gave to be seen. The service is possible because FuseOS ships as an APK, not through Google Play.
 
 Sharing the channel means a burst of video can delay a clipboard frame behind it on the same TCP stream. At these bitrates on a LAN that is milliseconds; a separate channel is the fix if measurement ever says otherwise.
+
+## 12. Phone actions and Handoff
+
+Small commands, each one message on the LAN channel; none touches the server.
+
+- **Ring** (`PHONE_COMMAND RING`) — the phone plays its alarm sound on the alarm stream at full volume, so silent mode does not mute it, and shows an ongoing notification with Stop. It stops on `STOP_RING`, on that Stop, or after 30 s, and puts the alarm volume back.
+- **Take photo** (`PHONE_COMMAND TAKE_PHOTO`) — Continuity Camera. The phone opens its own camera (asking for the camera permission first if needed). The photo is scaled to a 2560 px long side, JPEG-compressed until it fits one clip frame (3 MB), and sent as a `CLIP_IMAGE` — so it lands on the Mac's clipboard and in history, ready to paste.
+- **Open a link** (`OPEN_LINK`) — Handoff. Phone → Mac through *Open on Mac* in the Android Share sheet; Mac → phone through *Open Link on Phone with FuseOS* in the Services menu or *Open copied link* on Home. The receiver opens **http and https only**; any other scheme is dropped, so a peer cannot make the other device launch arbitrary intents or URL handlers.
+
+Anything the phone must show while FuseOS is in the background (the camera, a link) opens directly when FuseOS holds the overlay permission, which exempts it from Android's background-activity-launch block, and through a tap-to-open notification otherwise.

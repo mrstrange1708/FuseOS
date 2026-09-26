@@ -53,6 +53,12 @@ final class ClipIsland {
         scheduleDismiss(after: Self.notificationSeconds)
     }
 
+    /// A one-line event with no payload of its own: a link arriving, a ring starting.
+    func present(symbol: String, title: String, detail: String) {
+        show(.message(symbol: symbol, title: title, detail: detail), peerName: nil, restart: true)
+        scheduleDismiss(after: Self.visibleSeconds)
+    }
+
     /// A notification from the phone: the app, and what it said.
     func present(_ notification: PhoneNotification) {
         show(.notification(notification), peerName: nil, restart: true)
@@ -164,6 +170,7 @@ private final class IslandModel: ObservableObject {
         case transfer(TransferProgress)
         case notification(PhoneNotification)
         case offer(ClipOffer)
+        case message(symbol: String, title: String, detail: String)
     }
 
     @Published var content: Content?
@@ -271,6 +278,8 @@ private struct IslandView: View {
                 .buttonStyle(.plain)
                 .fixedSize()
             }
+        case let .message(symbol, title, detail):
+            row(icon: symbol, title: title, detail: detail, thumbnail: nil, incoming: true)
         case let .notification(n):
             row(
                 icon: "bell.fill",

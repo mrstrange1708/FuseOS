@@ -9,6 +9,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import com.fuseos.app.R
+import com.fuseos.app.core.BackgroundLaunch
 import com.fuseos.app.net.LanTransport
 import com.fuseos.proto.Envelope
 import com.fuseos.proto.ScreenControl
@@ -77,36 +78,15 @@ class ScreenShare(
      * permission (the island's) exempts an app from the background-activity-launch block,
      * so with it the dialog opens straight away; without it a notification is the way in.
      */
-    private fun askForConsent() {
-        val intent = Intent(appContext, ScreenConsentActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        if (Settings.canDrawOverlays(appContext) && runCatching { appContext.startActivity(intent) }.isSuccess) {
-            return
-        }
-        val manager = appContext.getSystemService(NotificationManager::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.createNotificationChannel(
-                NotificationChannel(REQUEST_CHANNEL, "Screen sharing requests", NotificationManager.IMPORTANCE_HIGH),
-            )
-        }
-        val tap = PendingIntent.getActivity(
-            appContext, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-        manager.notify(
-            REQUEST_ID,
-            NotificationCompat.Builder(appContext, REQUEST_CHANNEL)
-                .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("Your Mac wants to see your screen")
-                .setContentText("Tap to choose whether to share it")
-                .setContentIntent(tap)
-                .setAutoCancel(true)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .build(),
-        )
-    }
+    private fun askForConsent() = BackgroundLaunch.start(
+        appContext,
+        Intent(appContext, ScreenConsentActivity::class.java),
+        title = "Your Mac wants to see your screen",
+        text = "Tap to choose whether to share it",
+        notificationId = REQUEST_ID,
+    )
 
     private companion object {
-        const val REQUEST_CHANNEL = "fuseos_screen_request"
         const val REQUEST_ID = 42
     }
 }
