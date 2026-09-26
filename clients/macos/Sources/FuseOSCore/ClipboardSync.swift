@@ -15,7 +15,23 @@ public struct ClipEntry: Identifiable, Equatable {
 
     public var isImage: Bool { imageData != nil }
 
+    public init(id: Int, text: String?, imageData: Data?, mime: String?, fromSelf: Bool, at: Date) {
+        self.id = id
+        self.text = text
+        self.imageData = imageData
+        self.mime = mime
+        self.fromSelf = fromSelf
+        self.at = at
+    }
+
     public static func == (a: ClipEntry, b: ClipEntry) -> Bool { a.id == b.id }
+}
+
+/// A local copy that has not been sent yet. Calling `send` records and broadcasts it.
+public struct ClipOffer {
+    public let text: String?
+    public let imageData: Data?
+    public let send: () -> Void
 }
 
 /// Mirrors the clipboard to paired devices over the LAN data plane.
@@ -50,6 +66,17 @@ public final class ClipboardSync {
     /// Separate from `onHistoryChanged` because that also fires on eviction and on
     /// sign-out clearing, neither of which is an event worth showing anyone.
     public var onClipEvent: ((ClipEntry) -> Void)?
+
+    /// Each clip's round trip as it is acknowledged (see `SyncLatency`).
+    public var onLatency: ((SyncLatency) -> Void)?
+    private var latency = LatencyWindow()
+    /// Clips sent and not yet acknowledged: seq → when they went, monotonic nanoseconds.
+    private var awaitingAck: [UInt64: UInt64] = [:]
+
+    /// Set, and a local copy is offered instead of sent: the handler decides, and calls
+    /// `send` if the user says yes. Unset — the default — every copy goes at once, because
+    /// latency is the product and a prompt is a click in front of every sync.
+    public var onLocalCopy: ((ClipOffer) -> Void)?
 
     private var nextId = 0
     private let store = ClipHistoryStore()
@@ -115,10 +142,13 @@ public final class ClipboardSync {
         )
         nextId += 1
         onClipEvent?(entry)
+        commit([entry] + history)
+    }
 
-        var trimmed = Array(([entry] + history).prefix(Self.maxEntries))
+    /// Trims a new history to the caps, publishes it, and persists it.
+    private func commit(_ entries: [ClipEntry]) {
         var bytes = 0
-        trimmed = trimmed.prefix {
+        let trimmed = entries.prefix(Self.maxEntries).prefix {
             bytes += $0.imageData?.count ?? $0.text?.count ?? 0
             return bytes <= Self.maxHistoryBytes
         }
@@ -130,6 +160,62 @@ public final class ClipboardSync {
         let snapshot = history
         let store = store
         Task.detached(priority: .utility) { store.save(snapshot) }
+    }
+
+    /// Sends our recent history to peers that just connected (`HistorySync` in the proto),
+    /// newest first, stopping short of the channel's frame cap. Images too big for what is
+    /// left of the budget are skipped rather than ending the list.
+    public func sendHistory() {
+        var budget = Self.maxHistorySyncBytes
+        var sync = FuseHistorySync()
+        for entry in history {
+            let size = entry.imageData?.count ?? entry.text?.utf8.count ?? 0
+            guard size <= budget else { continue }
+            budget -= size
+            sync.items.append(FuseHistoryItem.with {
+                if let data = entry.imageData {
+                    $0.imageData = data
+                    $0.imageMime = entry.mime ?? "image/png"
+                } else {
+                    $0.text = entry.text ?? ""
+                }
+                $0.atUnixMs = Int64(entry.at.timeIntervalSince1970 * 1000)
+            })
+        }
+        guard !sync.items.isEmpty else { return }
+        var envelope = transport.newEnvelope()
+        envelope.historySync = sync
+        transport.broadcast(envelope)
+    }
+
+    /// Folds a peer's history into ours: the entries we lack, at the time they were first
+    /// copied. History only — the clipboard is not touched, the island stays quiet, and
+    /// nothing is sent back, which is what keeps this from looping.
+    func merge(_ sync: FuseHistorySync) {
+        var known = Set(history.compactMap(Self.contentHash))
+        var added: [ClipEntry] = []
+        for item in sync.items {
+            let isImage = !item.imageData.isEmpty
+            guard isImage || !item.text.isEmpty else { continue }
+            let hash = isImage ? LoopGuard.hash(item.imageData) : LoopGuard.hash(item.text)
+            guard known.insert(hash).inserted else { continue }
+            added.append(ClipEntry(
+                id: nextId,
+                text: isImage ? nil : item.text,
+                imageData: isImage ? item.imageData : nil,
+                mime: isImage ? item.imageMime : nil,
+                fromSelf: false,
+                at: Date(timeIntervalSince1970: Double(item.atUnixMs) / 1000),
+            ))
+            nextId += 1
+        }
+        guard !added.isEmpty else { return }
+        commit((history + added).sorted { $0.at > $1.at })
+    }
+
+    private static func contentHash(_ entry: ClipEntry) -> String? {
+        if let data = entry.imageData { return LoopGuard.hash(data) }
+        return entry.text.map { LoopGuard.hash($0) }
     }
 
     /// Put a history entry back on this device's clipboard — the point of a history.
@@ -204,8 +290,22 @@ public final class ClipboardSync {
         guard_ = loopGuard // shouldEmit consumes the one-shot suppression
         guard allowed else { return }
 
-        record(text: entry.text, imageData: entry.image, mime: entry.mime, fromSelf: true)
-        transport.broadcast(body(transport.newEnvelope()))
+        let send = { [weak self] in
+            guard let self else { return }
+            self.record(text: entry.text, imageData: entry.image, mime: entry.mime, fromSelf: true)
+            let envelope = body(self.transport.newEnvelope())
+            self.awaitingAck[envelope.seq] = DispatchTime.now().uptimeNanoseconds
+            // Bounded: a peer that never acks (an older build) must not grow this forever.
+            if self.awaitingAck.count > 64, let oldest = self.awaitingAck.keys.min() {
+                self.awaitingAck.removeValue(forKey: oldest)
+            }
+            self.transport.broadcast(envelope)
+        }
+        if let offer = onLocalCopy {
+            offer(ClipOffer(text: entry.text, imageData: entry.image, send: send))
+        } else {
+            send()
+        }
     }
 
     func apply(_ envelope: FuseEnvelope) {
@@ -215,6 +315,14 @@ public final class ClipboardSync {
         let hash: String
         let entry: (text: String?, image: Data?, mime: String?)
         switch envelope.body {
+        case .historySync(let sync):
+            merge(sync)
+            return
+        case .ack(let ack):
+            guard let sentAt = awaitingAck.removeValue(forKey: ack.refSeq) else { return }
+            let ms = Int((DispatchTime.now().uptimeNanoseconds - sentAt) / 1_000_000)
+            onLatency?(latency.record(ms))
+            return
         case .clipText:
             let text = envelope.clipText.text
             guard !text.isEmpty else { return }
@@ -259,6 +367,10 @@ public final class ClipboardSync {
 
         record(text: entry.text, imageData: entry.image, mime: entry.mime, fromSelf: false)
         write()
+        // Tell the sender it landed, so it can time the round trip.
+        var ack = transport.newEnvelope()
+        ack.ack = FuseAck.with { $0.refSeq = envelope.seq }
+        transport.broadcast(ack)
         // Deliberately do NOT absorb the bumped changeCount here. Letting the next poll
         // see the change is what delivers the echo to `checkForLocalChange`, where the
         // one-shot hash suppression consumes it. Absorbing it instead leaves that
@@ -293,4 +405,6 @@ public final class ClipboardSync {
 
     private static let maxEntries = 50
     private static let maxHistoryBytes = 24 * 1024 * 1024
+    /// One `HistorySync` frame, with headroom under `LanChannel`'s 4 MB frame cap.
+    private static let maxHistorySyncBytes = 3 * 1024 * 1024
 }

@@ -1,11 +1,13 @@
 import AppKit
+import Combine
 import Foundation
 import FuseOSCore
 
 @MainActor
 final class DashboardViewModel: ObservableObject {
     @Published var selfDevice: DeviceItem?
-    @Published var peers: [DeviceItem] = []
+    /// Every other device on the account, as the server lists them.
+    @Published var allPeers: [DeviceItem] = []
     @Published var presence: [String: PeerPresence] = [:]
     /// Peers reachable over a direct LAN channel, not merely online.
     @Published var connected: Set<String> = []
@@ -25,15 +27,51 @@ final class DashboardViewModel: ObservableObject {
     private lazy var files = FileTransfer(transport: transport)
     /// Where each received file was saved, so its row can reveal it in Finder.
     private var receivedURLs: [String: URL] = [:]
+    /// How fast clips have been crossing, once any has been acknowledged.
+    @Published var syncLatency: SyncLatency?
+    /// Screen mirroring's state, for the Screen pane.
+    @Published var screenState: ScreenReceiver.State = .idle
+    /// The phone's screen. Created up front: it registers the transport's screen hook.
+    lazy var screen = ScreenReceiver(transport: transport)
+    private lazy var notifications = NotificationMirror(transport: transport)
+    private let notifier = PhoneNotifier()
     /// The notch HUD. Owned here because this is where clip events already arrive.
     private let island = ClipIsland()
     private var started = false
+    private var sessionWatch: AnyCancellable?
+
+    init() {
+        // Sign-out and an expired session both end in the token going. Either way sync
+        // stops, and the next sign-in starts it afresh (ShellView calls start()).
+        sessionWatch = SessionStore.shared.$token
+            .removeDuplicates()
+            .sink { [weak self] token in
+                guard token == nil else { return }
+                Task { @MainActor in self?.sessionEnded() }
+            }
+    }
+
+    private func sessionEnded() {
+        guard started else { return }
+        stop()
+        started = false
+        startTask = nil
+        allPeers = []
+        presence = [:]
+        connected = []
+    }
     /// In flight or finished registration. Cleared on failure so the next action retries.
     private var startTask: Task<String, Error>?
+
+    static let askBeforeSendKey = "askBeforeSend"
 
     func start() {
         guard !started else { return }
         started = true
+        if DemoMode.isOn {
+            DemoMode.fill(self)
+            return
+        }
         signal.lanAddressProvider = { [weak self] in self?.transport.lanAddress() }
         signal.onPresenceChanged = { [weak self] presence in
             guard let self else { return }
@@ -44,11 +82,20 @@ final class DashboardViewModel: ObservableObject {
             // exists in the REST roster — which holds the names the UI draws. This is how
             // a second device shows up with no pairing step, so it has to self-heal.
             if presence.keys.contains(where: { id in
-                id != self.selfDevice?.id && !self.peers.contains { $0.id == id }
+                id != self.selfDevice?.id && !self.allPeers.contains { $0.id == id }
             }) {
                 Task { await self.refresh() }
             }
         }
+        // Both ends send their history on every new channel, and each merges what it lacks.
+        transport.onPeersJoined = { [weak self] _ in self?.clipboard.sendHistory() }
+        notifications.onPosted = { [weak self] n in
+            self?.island.present(n)
+            self?.notifier.post(n)
+        }
+        notifications.onRemoved = { [weak self] key in self?.notifier.remove(key: key) }
+        notifier.onUserDismissed = { [weak self] key in self?.notifications.dismiss(key: key) }
+        screen.onStateChanged = { [weak self] state in self?.screenState = state }
         transport.onConnectedPeersChanged = { [weak self] peers in
             self?.connected = peers
             self?.files.peersChanged(peers)
@@ -71,6 +118,17 @@ final class DashboardViewModel: ObservableObject {
             // Files get the island too: it swells out of the notch and fills as bytes move.
             self.island.present(progress, peerName: self.peerName)
         }
+        // Asking is opt-in (Account → "Ask before sending copies"); read per copy so the
+        // toggle applies at once. With nothing linked there is no one to ask about.
+        clipboard.onLocalCopy = { [weak self] offer in
+            guard let self else { return }
+            if UserDefaults.standard.bool(forKey: Self.askBeforeSendKey), !self.connected.isEmpty {
+                self.island.offer(offer, peerName: self.peerName)
+            } else {
+                offer.send()
+            }
+        }
+        clipboard.onLatency = { [weak self] latency in self?.syncLatency = latency }
         clipboard.onClipEvent = { [weak self] entry in
             guard let self else { return }
             // Named after whichever peer is actually reachable — with one other device
@@ -83,14 +141,19 @@ final class DashboardViewModel: ObservableObject {
 
     func stop() {
         island.dismiss()
+        screen.stop()
         signal.stop()
         files.stop()
         clipboard.stop()
         transport.stop()
     }
 
-    /// Sign-out, as distinct from `stop()`: the stored history goes too.
+    /// Sign-out, as distinct from `stop()`: the stored history goes too, and the session
+    /// ends on the server as well as here.
     func signOut() {
+        if let token = SessionStore.shared.token {
+            Task.detached { await AuthAPI.signOut(token: token) }
+        }
         island.dismiss()
         signal.stop()
         files.stop()
@@ -147,7 +210,7 @@ final class DashboardViewModel: ObservableObject {
             }
             let all = try await ControlPlane.listDevices(selfId: try await ensureStarted())
             selfDevice = all.first { $0.isSelf }
-            peers = all.filter { !$0.isSelf }
+            allPeers = all.filter { !$0.isSelf }
             errorMessage = nil
         } catch {
             errorMessage = (error as? AuthError)?.message ?? error.localizedDescription
@@ -167,6 +230,26 @@ final class DashboardViewModel: ObservableObject {
         await refresh()
     }
 
+    /// The devices worth showing. A reinstall mints a new key and so a new device record,
+    /// leaving the old one on the account forever offline under the same name; showing both
+    /// reads as "your phone is offline" right next to "linked". Per name and platform, the
+    /// connected record wins, then the online one.
+    ///
+    /// ponytail: hides stale records rather than deleting them; a "Remove device" action on
+    /// the server is the real fix when the account screen grows one.
+    var peers: [DeviceItem] {
+        func rank(_ d: DeviceItem) -> Int {
+            connected.contains(d.id) ? 0 : onlineState(for: d).online ? 1 : 2
+        }
+        var best: [String: DeviceItem] = [:]
+        for d in allPeers {
+            let key = "\(d.platform)|\(d.name)"
+            if let current = best[key], rank(current) <= rank(d) { continue }
+            best[key] = d
+        }
+        return allPeers.filter { best["\($0.platform)|\($0.name)"]?.id == $0.id }
+    }
+
     /// Live presence merged over the last REST snapshot for display.
     func onlineState(for device: DeviceItem) -> PeerPresence {
         if let live = presence[device.id] { return live }
@@ -179,6 +262,25 @@ final class DashboardViewModel: ObservableObject {
     /// one there is. Used wherever the UI would otherwise say "your phone".
     var peerName: String? {
         (peers.first { connected.contains($0.id) } ?? peers.first)?.name
+    }
+
+    /// Removes a stale (offline) device from the account, then reloads the list.
+    func removeDevice(_ device: DeviceItem) async {
+        do {
+            try await ControlPlane.removeDevice(id: device.id)
+            await refresh()
+        } catch {
+            errorMessage = (error as? AuthError)?.message ?? error.localizedDescription
+        }
+    }
+
+    /// Every other device, the connected first, then online, then the rest — the Devices
+    /// pane's order, which shows stale records so they can be removed.
+    var devicesByStanding: [DeviceItem] {
+        let rank = Dictionary(uniqueKeysWithValues: allPeers.map { d in
+            (d.id, isConnected(d) ? 0 : onlineState(for: d).online ? 1 : 2)
+        })
+        return allPeers.sorted { rank[$0.id, default: 2] < rank[$1.id, default: 2] }
     }
 
     /// True when there is a live encrypted LAN channel to this device.

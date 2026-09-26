@@ -25,11 +25,12 @@ The result is constant friction: to move a link, a snippet, a screenshot, or a s
 - **File transfer** both directions.
 - **Share-sheet** integration: "Send to my Mac / my phone."
 - Feel **instant** on a shared local network.
+- **Notification sync**, phone → Mac, and **view-only screen mirroring**, phone → Mac — pulled into v1 by the owner on 2026-09-26 (`docs/protocol.md` §10–§11).
 
 ### Non-goals (v1, explicitly deferred)
-- Screen mirroring (either direction).
-- Remote control of one device from another.
-- Phone-call answering and SMS/notification relay.
+- Mirroring the Mac onto the phone.
+- Remote control of one device from another (proven feasible on Android through an AccessibilityService on 2026-09-26; not in v1 unless the owner pulls it in).
+- Phone-call answering and SMS relay.
 - Cloud clipboard history or storage of user payloads.
 - Cross-network sync when devices are **not** on the same LAN (a future relay fallback is noted, not built).
 - Windows / iOS / Linux clients (later platforms).
@@ -120,8 +121,8 @@ Full detail: [HLD](HLD.md) · [LLD](LLD.md) · [schema](schema.md) · [API](api.
 
 ## 10. Roadmap (post-v1)
 
-1. Screen mirroring (phone → Mac first).
-2. Remote control / interact with the phone from the Mac.
-3. Call and SMS/notification relay (subject to OS constraints).
+1. ~~Screen mirroring (phone → Mac)~~ — in v1, view only.
+2. Remote control / interact with the phone from the Mac — feasible (AccessibilityService gestures, verified on an emulator 2026-09-26).
+3. Call and SMS relay (subject to OS constraints). ~~Notification relay~~ — in v1.
 4. Off-LAN operation via an encrypted relay fallback.
 5. Additional platforms (iOS, Windows).

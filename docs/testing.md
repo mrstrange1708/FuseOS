@@ -77,9 +77,9 @@ Some things are only real on hardware. These are listed in [flows/slice-02-clipb
 
 | Suite | Tests | Notes |
 | --- | --- | --- |
-| `server/` | 79 across 9 files | includes `/signal` driven by a real listening socket |
-| `clients/android/` | 61 across 5 files | JVM only, no Robolectric or device needed |
-| `clients/macos/` | 96 across 8 files | `FuseOSCore`; the app target has no tests by design |
+| `server/` | 81 across 9 files | includes `/signal` driven by a real listening socket, and Better Auth against real Postgres |
+| `clients/android/` | 97 across 9 files | JVM only, no Robolectric or device needed |
+| `clients/macos/` | 130 across 11 files | `FuseOSCore`; the app target has no tests by design. Needs Xcode (XCTest) to run |
 
 Started from 12 server tests, 12 Android tests, and no macOS tests at all.
 

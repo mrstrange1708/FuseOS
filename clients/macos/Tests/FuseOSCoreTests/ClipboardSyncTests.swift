@@ -177,4 +177,95 @@ final class ClipboardSyncTests: XCTestCase {
         )!
         return image.representation(using: .png, properties: [:])!
     }
+
+    // MARK: - Latency
+
+    func testApplyingAClipAcknowledgesItOnce() {
+        let sent = envelopesSent { sync.apply(inbound(text: "ack me", from: "peer", seq: 7, at: 100)) }
+        XCTAssertEqual(sent, 1, "one Ack, and nothing else, goes back for an applied clip")
+    }
+
+    func testAnAckForASentClipReportsItsRoundTrip() {
+        var reported: SyncLatency?
+        sync.onLatency = { reported = $0 }
+        copyText("timed")
+        sync.checkForLocalChange()
+        let seq = transport.newEnvelope().seq - 1 // the clip was the envelope before this probe
+        var ack = FuseEnvelope()
+        ack.sourceDeviceID = "peer"
+        ack.ack = FuseAck.with { $0.refSeq = seq }
+        sync.apply(ack)
+        XCTAssertEqual(reported?.samples, 1)
+        XCTAssertNotNil(reported.map { $0.lastMs >= 0 })
+    }
+
+    // MARK: - Ask before sending
+
+    func testAnOfferedCopyWaitsForSend() {
+        var offered: ClipOffer?
+        sync.onLocalCopy = { offered = $0 }
+        copyText("wait for me")
+        let before = envelopesSent { sync.checkForLocalChange() }
+        XCTAssertEqual(before, 0, "an offer must not leave the device on its own")
+        XCTAssertEqual(offered?.text, "wait for me")
+        let after = envelopesSent { offered?.send() }
+        XCTAssertEqual(after, 1)
+        XCTAssertEqual(sync.history.first?.text, "wait for me")
+    }
+
+    // MARK: - History sync
+
+    private func historySync(_ texts: [(String, Int64)]) -> FuseEnvelope {
+        var envelope = FuseEnvelope()
+        envelope.sourceDeviceID = "peer"
+        envelope.historySync = FuseHistorySync.with { sync in
+            sync.items = texts.map { text, at in FuseHistoryItem.with { $0.text = text; $0.atUnixMs = at } }
+        }
+        return envelope
+    }
+
+    func testHistorySyncAddsWhatWeLackInTimeOrder() {
+        let changeCount = pasteboard.changeCount
+        let sent = envelopesSent {
+            sync.apply(historySync([("older", 1_000), ("newer", 2_000)]))
+        }
+        XCTAssertEqual(sync.history.prefix(2).map(\.text), ["newer", "older"])
+        XCTAssertTrue(sync.history.prefix(2).allSatisfy { !$0.fromSelf })
+        // History only: the clipboard is untouched and nothing is answered.
+        XCTAssertEqual(pasteboard.changeCount, changeCount)
+        XCTAssertEqual(sent, 0)
+    }
+
+    func testHistorySyncSkipsWhatWeAlreadyHave() {
+        sync.apply(historySync([("same", 1_000)]))
+        let count = sync.history.count
+        sync.apply(historySync([("same", 5_000)]))
+        XCTAssertEqual(sync.history.count, count)
+    }
+}
+
+final class LatencyWindowTests: XCTestCase {
+    func testP95IsTheNearestRankAndTheWindowIsBounded() {
+        var window = LatencyWindow(capacity: 20)
+        var last: SyncLatency?
+        for ms in 1...40 { last = window.record(ms) }
+        // Only 21...40 remain; the 95th percentile of 20 samples is the 19th.
+        XCTAssertEqual(last, SyncLatency(lastMs: 40, p95Ms: 39, samples: 20))
+    }
+}
+
+final class ScreenReceiverFramingTests: XCTestCase {
+    func testSplitsAnnexBOnThreeAndFourByteStartCodes() {
+        let data = Data([0, 0, 0, 1, 0x67, 0xAA, 0, 0, 1, 0x68, 0xBB, 0, 0, 0, 1, 0x65, 0xCC, 0xDD])
+        XCTAssertEqual(ScreenReceiver.nalUnits(in: data), [
+            Data([0x67, 0xAA]), Data([0x68, 0xBB]), Data([0x65, 0xCC, 0xDD]),
+        ])
+    }
+
+    func testAvccPrefixesEachUnitWithItsBigEndianLength() {
+        XCTAssertEqual(
+            ScreenReceiver.avcc([Data([0x65, 0x01]), Data([0x41])]),
+            Data([0, 0, 0, 2, 0x65, 0x01, 0, 0, 0, 1, 0x41]),
+        )
+    }
 }

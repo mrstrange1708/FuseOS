@@ -25,6 +25,10 @@
          from the app, never at launch, and the app degrades to a toast if refused. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <!-- Screen mirroring to the Mac. The user consents in Android's own dialog every
+         session; this only lets the service hold the capture while it runs. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+
     <application
         android:name=".FuseApp"
         android:allowBackup="true"
@@ -122,6 +126,31 @@
                 android:name="android.view.im"
                 android:resource="@xml/method" />
         </service>
+
+        <!-- Notification sync. Does nothing until the user turns FuseOS on under
+             Settings → Notification access. -->
+        <service
+            android:name=".notify.FuseNotificationListener"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".screen.ScreenShareService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+
+        <!-- Hosts Android's screen-capture consent dialog and finishes. -->
+        <activity
+            android:name=".screen.ScreenConsentActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.FuseOS.Transparent" />
 
         <!-- An image can only reach the clipboard as a content URI, so received images
              are staged in the cache and handed out from here. -->

@@ -149,16 +149,59 @@ describe.skipIf(!process.env.DATABASE_URL)('device registry', () => {
     }
   });
 
+  it('removes an offline device, and it leaves the list', async () => {
+    const stale = await registerDevice(app, user.token, 'Old phone', 'android');
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/devices/${stale.id}`,
+      headers: auth(user.token),
+    });
+    expect(res.statusCode).toBe(204);
+    const list = await app.inject({ method: 'GET', url: '/devices', headers: auth(user.token) });
+    expect(list.json().devices.map((d: { id: string }) => d.id)).not.toContain(stale.id);
+  });
+
+  it("never removes another account's device", async () => {
+    const other = await signUp(app);
+    try {
+      const theirs = await registerDevice(app, other.token, 'Not yours', 'macos');
+      const res = await app.inject({
+        method: 'DELETE',
+        url: `/devices/${theirs.id}`,
+        headers: auth(user.token),
+      });
+      expect(res.statusCode).toBe(404);
+      const list = await app.inject({ method: 'GET', url: '/devices', headers: auth(other.token) });
+      expect(list.json().devices.map((d: { id: string }) => d.id)).toContain(theirs.id);
+    } finally {
+      await deleteUsers(other.userId);
+    }
+  });
+
+  it('rejects a non-uuid device id on removal', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/devices/nope',
+      headers: auth(user.token),
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it.each([
     ['POST', '/devices', { name: 'x', platform: 'macos', publicKey: 'k' }],
     ['GET', '/devices', undefined],
+    ['DELETE', '/devices/00000000-0000-0000-0000-000000000000', undefined],
   ])('requires a bearer token: %s %s', async (method, url, payload) => {
-    const anonymous = await app.inject({ method: method as 'GET' | 'POST', url, payload });
+    const anonymous = await app.inject({
+      method: method as 'GET' | 'POST' | 'DELETE',
+      url,
+      payload,
+    });
     expect(anonymous.statusCode).toBe(401);
     expect(anonymous.json().error.code).toBe('unauthorized');
 
     const bogus = await app.inject({
-      method: method as 'GET' | 'POST',
+      method: method as 'GET' | 'POST' | 'DELETE',
       url,
       headers: auth('not-a-real-session-token'),
       payload,
@@ -166,7 +209,7 @@ describe.skipIf(!process.env.DATABASE_URL)('device registry', () => {
     expect(bogus.statusCode).toBe(401);
 
     const malformed = await app.inject({
-      method: method as 'GET' | 'POST',
+      method: method as 'GET' | 'POST' | 'DELETE',
       url,
       headers: { authorization: user.token }, // missing the "Bearer " scheme
       payload,

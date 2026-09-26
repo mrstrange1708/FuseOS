@@ -6,8 +6,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// System UI face for app text (native feel); monospace reserved for the
-// wordmark, labels, and codes (the "OS / firmware" character).
+// System UI face for all app text (native feel); monospace only for the wordmark and
+// pairing codes, where the "OS / firmware" character is the point.
 val FuseTypography = Typography(
     headlineMedium = TextStyle(
         fontFamily = FontFamily.Default,
@@ -33,9 +33,9 @@ val FuseTypography = Typography(
         fontSize = 14.sp,
     ),
     labelSmall = TextStyle(
-        fontFamily = FontFamily.Monospace,
+        fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
-        letterSpacing = 1.2.sp,
+        letterSpacing = 0.2.sp,
     ),
 )

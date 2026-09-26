@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import com.fuseos.app.data.ServiceLocator
 import com.fuseos.app.service.FuseConnectionService
 import com.fuseos.app.ui.AppRoot
+import com.fuseos.app.ui.DemoMode
 import com.fuseos.app.ui.theme.FuseOSTheme
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -30,6 +31,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        DemoMode.enableFrom(intent)
         askForNotificationsIfNeeded()
 
         // Signing in starts the background connection, signing out ends it. Tying it to the

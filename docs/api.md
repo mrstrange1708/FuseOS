@@ -1,28 +1,31 @@
 # FuseOS — Control-Plane API
 
-**Server:** Node 22 + TypeScript + Fastify · **Auth:** Better Auth (JWT) · **Real-time:** `ws` at `/signal` · **Jobs:** Inngest
+**Server:** Node 22 + TypeScript + Fastify · **Auth:** Better Auth (bearer session tokens) · **Real-time:** `ws` at `/signal` · **Jobs:** Inngest
 
 This is the **control plane only**: identity, device registry, presence, and LAN signaling. **No clipboard or file payloads pass through these endpoints** — that traffic is device-to-device (see [protocol.md](protocol.md)).
 
 Conventions:
 - All bodies are JSON; all input is **Zod-validated** at the boundary before any DB access.
-- All non-auth endpoints and the WebSocket require a valid **JWT** (`Authorization: Bearer <jwt>`), issued by Better Auth.
+- All non-auth endpoints and the WebSocket require a valid **session token** (`Authorization: Bearer <token>`), issued by Better Auth at sign-up or sign-in.
 - Errors are typed: `{ "error": { "code": string, "message": string } }` with an appropriate HTTP status.
 
 ---
 
 ## Auth (Better Auth)
 
-Better Auth mounts its own routes (email/password sign-up, sign-in, session, refresh, sign-out) and issues a **JWT** via its JWT plugin. The JWT authorizes both REST calls and the `/signal` WebSocket.
+Better Auth (`server/src/auth/auth.ts`) serves these routes behind a thin adapter (`auth/routes.ts`). The adapter Zod-validates the body first, and it reshapes Better Auth's `{ code, message }` errors into this API's error shape. So the routes, response bodies and error codes are the same as the dev stand-in's were, and neither client changed.
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| POST | `/auth/sign-up/email` | Create account (email + password) |
-| POST | `/auth/sign-in/email` | Sign in → session + JWT |
-| POST | `/auth/token` | Obtain / refresh JWT |
-| POST | `/auth/sign-out` | Invalidate session |
+| Method | Path | Body | Success |
+| --- | --- | --- | --- |
+| POST | `/auth/sign-up/email` | `{ email, password (8–200), name (1–100) }` | `201 { token, user: { id, email, name, … } }` |
+| POST | `/auth/sign-in/email` | `{ email, password }` | `200 { token, user }` |
+| POST | `/auth/sign-out` | — (bearer token) | `200`; the token stops working at once |
 
-> Exact route shapes follow Better Auth's mounted handler; treat the above as the logical surface. Email verification is sent via an Inngest job.
+Errors: `400 invalid_request` (failed validation), `409 email_taken`, `401 invalid_credentials` (unknown email and wrong password answer the same), anything else Better Auth reports as its own code, lower-cased.
+
+**Tokens are opaque session tokens (the bearer plugin), not JWTs.** Each request costs one indexed lookup in `session`. JWTs would save that lookup, but REST is off the clipboard hot path, and a session token can be revoked at once, which a JWT cannot. Sessions last 90 days and are extended at most once a day while the device uses them. A continuity app that signs you out weekly is not worth having.
+
+> Email verification is sent via an Inngest job (not yet wired; `requireEmailVerification` is off).
 
 ## Devices
 
@@ -30,7 +33,7 @@ Better Auth mounts its own routes (email/password sign-up, sign-in, session, ref
 | --- | --- | --- |
 | POST | `/devices` | Register this device (name, platform, public_key) |
 | GET | `/devices` | List the caller's devices |
-| DELETE | `/devices/:id` | **Not implemented.** Revoke/remove a device (cascades trust) — lands when device management becomes a screen |
+| DELETE | `/devices/:id` | Remove one of the caller's **offline** devices (the stale record a reinstall leaves behind) |
 
 **`POST /devices`**
 ```jsonc
@@ -50,6 +53,8 @@ Validation: `platform ∈ {android, macos}`, `name` length 1–100, `publicKey` 
 ] }
 ```
 `online` and `battery` reflect live `/signal` presence (falling back to the last persisted value).
+
+**`DELETE /devices/:id`** — `204` on success. `400 invalid_request` for a non-UUID id, `404 device_not_found` when it is not the caller's (another account's device reads the same as a missing one), and `409 device_online` for a device with a live `/signal` socket: a live device is signed out on the device itself, not removed from afar. Both clients offer it on offline devices in their device lists.
 
 ## Trust
 
@@ -110,7 +115,7 @@ exists elsewhere is not the caller's business.
 
 ## WebSocket — `/signal`
 
-Authenticated by a **first `hello` frame carrying the bearer token** (dev stand-in; a JWT via `Sec-WebSocket-Protocol` under Better Auth). Carries **presence and LAN-address signaling only — never payloads.** A socket that doesn't authenticate within 5s is closed.
+Authenticated by a **first `hello` frame carrying the session token**, checked against Better Auth's `session` table once per connection. Carries **presence and LAN-address signaling only — never payloads.** A socket that doesn't authenticate within 5s is closed.
 
 Client → server:
 ```jsonc

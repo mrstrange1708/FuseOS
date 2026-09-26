@@ -18,6 +18,10 @@ const schema = z.object({
   // Control-plane data store (source of truth for identity). Optional until wired.
   DATABASE_URL: z.string().url().optional(),
 
+  // Signs Better Auth's session tokens. Required in production; in development Better
+  // Auth falls back to a built-in dev secret and warns.
+  BETTER_AUTH_SECRET: z.string().min(32).optional(),
+
   // Error tracking (Sentry) — optional; disabled if absent.
   SENTRY_DSN: z.string().url().optional(),
 
@@ -28,4 +32,9 @@ const schema = z.object({
 
 export type Env = z.infer<typeof schema>;
 
-export const env: Env = schema.parse(process.env);
+export const env: Env = schema
+  .refine((e) => e.NODE_ENV !== 'production' || e.BETTER_AUTH_SECRET !== undefined, {
+    message: 'BETTER_AUTH_SECRET is required in production',
+    path: ['BETTER_AUTH_SECRET'],
+  })
+  .parse(process.env);

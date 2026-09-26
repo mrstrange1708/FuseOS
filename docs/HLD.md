@@ -49,7 +49,7 @@ flowchart LR
 - Provides a Share extension ("Send to my phone").
 
 ### 3.3 Server / control plane (Node 22 + TypeScript + Fastify)
-- **Auth** via Better Auth (email/password, sessions, JWT for REST + WebSocket).
+- **Auth** via Better Auth (email/password; one bearer session token for REST + WebSocket).
 - **Device registry** in PostgreSQL (Drizzle ORM). Trust is derived from it, not stored separately.
 - **WebSocket `/signal`**: presence + LAN-address signaling.
 - **Inngest** for durable async work (presence-timeout sweeps, email verification).
@@ -61,7 +61,7 @@ flowchart LR
 
 ## 4. Authentication & identity
 
-- **User auth:** one FuseOS account; Better Auth issues a session and a JWT. The JWT authorizes both REST calls and the `/signal` WebSocket. Each device authenticates independently.
+- **User auth:** one FuseOS account; Better Auth issues a session whose token authorizes both REST calls and the `/signal` WebSocket. Each device authenticates independently.
 - **Device identity:** on registration each device is assigned a unique device id and generates a device key pair. The public key is stored in the registry; the private key never leaves the device. Device identity is persistent and bound to the user account.
 
 ## 5. Trust
@@ -115,7 +115,7 @@ appearing as a peer, and the data-plane connection is torn down.
 ## 11. Security
 
 - End-to-end encryption on the LAN channel (TLS/DTLS); session keys per connection.
-- JWT auth on every control-plane request and WebSocket connection.
+- Session-token auth on every control-plane request and WebSocket connection.
 - Message authentication / integrity on data-plane messages.
 - Payloads never persisted server-side → minimal data exposure.
 

@@ -26,6 +26,9 @@ struct DeviceItem: Decodable, Identifiable {
     let isSelf: Bool
 }
 
+/// A 204: nothing to decode.
+struct EmptyResponse: Decodable {}
+
 struct DeviceListResponse: Decodable {
     let devices: [DeviceItem]
 }
@@ -98,6 +101,13 @@ struct ControlPlane {
         return response.devices
     }
 
+    /// Removes a stale device from the account (offline ones only; see docs/api.md).
+    static func removeDevice(id: String) async throws {
+        let _: EmptyResponse = try await send(
+            path: "/devices/\(id)", method: "DELETE", body: Optional<DeviceRegisterRequest>.none,
+        )
+    }
+
     // Manual linking — the safety net behind automatic linking. Claiming a code does not
     // grant trust (same account already does); it forces the peer-card exchange that
     // `/signal` normally delivers on its own. See docs/api.md.
@@ -134,7 +144,13 @@ struct ControlPlane {
             throw AuthError(message: "No response from the FuseOS server.")
         }
         if (200 ..< 300).contains(http.statusCode) {
+            if data.isEmpty, let empty = EmptyResponse() as? Response { return empty }
             return try JSONDecoder().decode(Response.self, from: data)
+        }
+        // The session is over (expired or revoked): back to sign-in rather than an error
+        // the user can do nothing about. The dashboard stops syncing when the token goes.
+        if http.statusCode == 401 {
+            await SessionStore.shared.expire()
         }
         if let apiError = try? JSONDecoder().decode(APIError.self, from: data) {
             throw AuthError(message: apiError.error.message, code: apiError.error.code)

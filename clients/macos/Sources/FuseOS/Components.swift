@@ -154,3 +154,50 @@ struct SwitchRow: View {
         }
     }
 }
+
+/// The one card surface: solid, a hairline edge, continuous corners. Glass is reserved for
+/// the floating bar — the one place with content underneath worth showing through.
+extension View {
+    func panelSurface(radius: CGFloat = 16) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        return background(shape.fill(FuseColor.surface))
+            .overlay(shape.stroke(FuseColor.outline.opacity(0.55), lineWidth: 1))
+    }
+}
+
+/// A small rounded tile holding a symbol — the leading mark of every list row.
+struct IconTile: View {
+    let symbol: String
+    var tint: Color = FuseColor.accent
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 14, weight: .medium))
+            .foregroundStyle(tint)
+            .frame(width: 34, height: 34)
+            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(tint.opacity(0.12)))
+    }
+}
+
+/// The app's button: a capsule, ember-filled when it is the thing to press.
+struct CapsuleButtonStyle: ButtonStyle {
+    var prominent = false
+    var destructive = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        let tint = destructive ? FuseColor.error : FuseColor.accent
+        return configuration.label
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(prominent ? Color.white : (destructive ? FuseColor.error : FuseColor.ink))
+            .padding(.horizontal, 14)
+            .frame(height: 28)
+            .background(
+                Capsule().fill(prominent ? tint : FuseColor.surfaceAlt),
+            )
+            .overlay(Capsule().stroke(prominent ? Color.clear : FuseColor.outline.opacity(0.7), lineWidth: 1))
+            .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.45)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}

@@ -1,6 +1,9 @@
 package com.fuseos.app.ui.shell
 
+import com.fuseos.app.ui.components.glassCard
 import androidx.compose.foundation.background
+import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -26,7 +29,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fuseos.app.ui.dashboard.DashboardViewModel
@@ -55,6 +57,10 @@ fun ProfileScreen(
     selfBattery: Int?,
     onRename: (String) -> Unit,
     onBatterySettings: () -> Unit,
+    notificationAccess: Boolean,
+    notificationsOn: Boolean,
+    onNotifications: () -> Unit,
+    onRemoveDevice: (String) -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -62,9 +68,10 @@ fun ProfileScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp),
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
             Box(
                 Modifier
                     .size(52.dp)
@@ -88,124 +95,118 @@ fun ProfileScreen(
                 Text(
                     "${state.peers.size + 1} device${if (state.peers.isEmpty()) "" else "s"} · " +
                         "${state.connected.size} linked",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
 
-        Spacer(Modifier.height(24.dp))
         // Renaming has to be reachable, or the name is a one-time decision made before
         // you have seen how it reads on the other device.
         var draft by remember(deviceName) { mutableStateOf(deviceName.orEmpty()) }
-        Text("This phone's name", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
-        FuseTextField(value = draft, onValueChange = { draft = it }, label = "Device name")
-        Spacer(Modifier.height(8.dp))
-        SettingRow("Save name", "Your Mac shows this name.") {
-            draft.trim().takeIf { it.isNotEmpty() }?.let(onRename)
+        Panel(title = "This phone") {
+            FuseTextField(value = draft, onValueChange = { draft = it }, label = "Device name")
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp, start = 4.dp)) {
+                Text(
+                    "Your Mac shows this name.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                Button(
+                    onClick = { draft.trim().takeIf { it.isNotEmpty() }?.let(onRename) },
+                    enabled = draft.trim().isNotEmpty() && draft.trim() != deviceName,
+                    shape = CircleShape,
+                ) { Text("Save") }
+            }
         }
 
-        Spacer(Modifier.height(26.dp))
-        Text("Your devices", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(10.dp))
-
-        DeviceCard(
-            name = state.selfDevice?.name ?: "This phone",
-            subtitle = "This device",
-            platform = "android",
-            online = true,
-            battery = selfBattery,
-        )
-        state.peers.forEach { device ->
-            Spacer(Modifier.height(10.dp))
+        Panel(title = "Your devices") {
             DeviceCard(
-                name = device.name,
-                subtitle = if (device.id in state.connected) "connected · direct" else "not connected",
-                platform = device.platform,
-                online = device.id in state.connected,
-                battery = peerBattery(device.id),
+                name = state.selfDevice?.name ?: "This phone",
+                subtitle = "This phone",
+                platform = "android",
+                online = true,
+                battery = selfBattery,
             )
+            // Every record, stale ones included, so an old one can be removed here.
+            state.allPeers.sortedBy { if (it.id in state.connected) 0 else 1 }.forEach { device ->
+                val linked = device.id in state.connected
+                val online = linked || state.presence[device.id]?.online == true
+                DeviceCard(
+                    name = device.name,
+                    subtitle = when {
+                        linked -> "Linked · direct"
+                        online -> "Online"
+                        else -> "Offline"
+                    },
+                    platform = device.platform,
+                    online = online,
+                    battery = peerBattery(device.id),
+                    onRemove = if (online) null else ({ onRemoveDevice(device.id) }),
+                )
+            }
         }
 
-        Spacer(Modifier.height(14.dp))
-        Spacer(Modifier.height(10.dp))
-        SettingRow(
-            "Link manually",
-            "Devices on this account link themselves. Use a code only if one didn't show up.",
-            onLinkManually,
-        )
-        Spacer(Modifier.height(10.dp))
-        SettingRow(
-            if (islandEnabled) "Island · on" else "Turn on the island",
-            if (islandEnabled) {
-                "Copies show up over whatever app you're in. Tap the island to send."
-            } else {
-                "Allow FuseOS to draw over other apps, so a copy can be sent without " +
-                    "leaving the app you're in."
-            },
-            onEnableIsland,
-        )
-        Spacer(Modifier.height(10.dp))
-        SettingRow(
-            if (keyboardActive) "Auto-capture · on" else "Turn on auto-capture",
-            if (keyboardActive) {
-                "FuseOS is your keyboard, so copying anywhere brings up the island by itself."
-            } else {
+        Panel(title = "On this phone") {
+            SettingItem(
+                "Notification sync",
+                if (notificationAccess) "This phone's notifications show up on your Mac."
+                else "Allow notification access to see this phone's notifications on your Mac.",
+                onNotifications,
+                trailing = when {
+                    !notificationAccess -> "Set up"
+                    notificationsOn -> "On"
+                    else -> "Off"
+                },
+                trailingLit = notificationAccess && notificationsOn,
+            )
+            SettingItem(
+                "Island",
+                if (islandEnabled) "Copies show up over whatever app you're in. Tap to send."
+                else "Let FuseOS draw over other apps, so a copy can go without leaving the app you're in.",
+                onEnableIsland,
+                trailing = if (islandEnabled) "On" else "Set up",
+                trailingLit = islandEnabled,
+            )
+            SettingItem(
+                "Auto-capture",
                 // Naming the real reason, because "install a keyboard to sync your
                 // clipboard" is otherwise a bizarre thing to be asked.
-                "Android only lets your keyboard read the clipboard in the background. " +
-                    "Make FuseOS your keyboard and a copy in any app pops the island on " +
-                    "its own — no tile, no tap to reach it."
-            },
-            onKeyboardSetup,
-        )
-
-        // Null below Android 13, where there is no API to offer this and the user has to
-        // edit the shade themselves. Showing a row that cannot do anything is worse than
-        // not showing one.
-        onAddTile?.let { addTile ->
-            Spacer(Modifier.height(10.dp))
-            SettingRow(
-                "Add the Quick Settings tile",
-                "Puts \"Send clipboard\" in your shade, so a copy is one pull and one tap " +
-                    "away from any app.",
-                addTile,
+                if (keyboardActive) "FuseOS is your keyboard, so a copy anywhere brings up the island."
+                else "Android only lets your keyboard read the clipboard in the background.",
+                onKeyboardSetup,
+                trailing = if (keyboardActive) "On" else "Off",
+                trailingLit = keyboardActive,
+            )
+            // Null below Android 13, where there is no API to offer this. A row that
+            // cannot do anything is worse than no row.
+            onAddTile?.let { addTile ->
+                SettingItem(
+                    "Quick Settings tile",
+                    "Puts \"Send clipboard\" in your shade: one pull and one tap from any app.",
+                    addTile,
+                )
+            }
+            SettingItem(
+                "Background activity",
+                // Naming the real cause: on these phones the OS, not the app, is what stops
+                // sync when the screen goes off.
+                "Some phones freeze apps when the screen is off. Allow it to keep the link up.",
+                onBatterySettings,
             )
         }
-        Spacer(Modifier.height(10.dp))
-        SettingRow(
-            "Background permission",
-            // Naming the real cause: on these phones the OS, not the app, is what stops
-            // sync when the screen goes off.
-            "Some phones freeze apps when the screen is off. Allow background activity to keep the link up.",
-            onBatterySettings,
-        )
-        Spacer(Modifier.height(10.dp))
-        SettingRow("Sign out", "Clears this device's session and clipboard history", onSignOut)
 
-        Spacer(Modifier.height(120.dp))
+        Panel(title = "Account") {
+            SettingItem(
+                "Link with a code",
+                "Devices on this account link themselves. Use a code only if one didn't show up.",
+                onLinkManually,
+            )
+            SettingItem("Sign out", "Clears this phone's session and clipboard history.", onSignOut, destructive = true)
+        }
+
+        Spacer(Modifier.height(110.dp))
     }
 }
 
-@Composable
-private fun SettingRow(title: String, detail: String, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-            .padding(16.dp),
-    ) {
-        Text(title, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(3.dp))
-        Text(
-            detail,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}

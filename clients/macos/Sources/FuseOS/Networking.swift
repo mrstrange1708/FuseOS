@@ -52,6 +52,17 @@ struct AuthAPI {
         try await post(path: "/auth/sign-up/email", body: SignUpRequest(email: email, password: password, name: name))
     }
 
+    /// Ends this session on the server, so the token stops working everywhere at once.
+    /// Best effort: signing out locally must not wait on, or fail with, the network.
+    static func signOut(token: String) async {
+        guard let url = URL(string: Config.baseURL.absoluteString + "/auth/sign-out") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 5
+        _ = try? await URLSession.shared.data(for: request)
+    }
+
     private func post<Body: Encodable>(path: String, body: Body) async throws -> AuthResponse {
         guard let url = URL(string: Config.baseURL.absoluteString + path) else {
             throw AuthError(message: "Invalid server URL.")

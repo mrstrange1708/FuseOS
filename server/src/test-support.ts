@@ -2,13 +2,13 @@ import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from './app.js';
 import { getDb } from './db/client.js';
-import { devAuthUsers } from './db/schema.js';
+import { user } from './db/schema.js';
 
 /**
  * TEST-ONLY helpers.
  *
  * The suites run against the shared dev Postgres, so every account they create is
- * torn down again — deleting the `dev_auth_users` row cascades to its sessions,
+ * torn down again — deleting the `user` row cascades to its sessions, accounts,
  * devices and everything keyed to them (see db/schema.ts).
  */
 
@@ -68,7 +68,7 @@ export async function registerDevice(
 /** Deletes the accounts a test created; everything else cascades. */
 export async function deleteUsers(...userIds: string[]): Promise<void> {
   for (const id of userIds) {
-    await getDb().delete(devAuthUsers).where(eq(devAuthUsers.id, id));
+    await getDb().delete(user).where(eq(user.id, id));
   }
 }
 

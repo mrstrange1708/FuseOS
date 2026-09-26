@@ -125,6 +125,11 @@ class Transfers(
         return SendResult.Started
     }
 
+    /** Debug demo mode only (see [com.fuseos.app.ui.DemoMode]). */
+    internal fun showForDemo(list: List<TransferProgress>) {
+        _list.value = list
+    }
+
     fun cancel(transferId: String) {
         scope.launch(Dispatchers.IO) { transfer.cancel(transferId) }
     }

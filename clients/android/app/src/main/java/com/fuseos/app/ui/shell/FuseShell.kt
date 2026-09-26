@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -27,13 +25,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fuseos.app.data.ServiceLocator
+import com.fuseos.app.screen.ScreenConsentActivity
+import com.fuseos.app.screen.ScreenShareService
 import com.fuseos.app.file.Transfers
 import com.fuseos.app.ui.components.ErrorBanner
 import com.fuseos.app.ui.components.FuseWordmark
+import com.fuseos.app.ui.components.fuseBackground
 import com.fuseos.app.ui.dashboard.DashboardViewModel
 import com.fuseos.app.service.ClipTile
 import com.fuseos.app.ui.island.ClipIsland
@@ -54,6 +58,7 @@ fun FuseShell() {
     val deviceName by ServiceLocator.session.deviceNameFlow.collectAsState(initial = null)
     val context = LocalContext.current
     val transfers by ServiceLocator.transfers.list.collectAsState()
+    val latency by ServiceLocator.clipboardSync.latency.collectAsState()
     // The system picker, not a file browser of our own: it reaches Drive, Downloads and
     // every other provider with no storage permission at all.
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -75,6 +80,8 @@ fun FuseShell() {
         return
     }
     val linked = state.connected.isNotEmpty()
+    val sharing by ScreenShareService.sharing.collectAsState()
+    val notificationsOn by ServiceLocator.notificationSync.enabled.collectAsState()
     // With one other device this is always the right name; with several, the connected
     // one is the only device a clip can have come from.
     val peerName = state.peers.firstOrNull { it.id in state.connected }?.name
@@ -83,7 +90,7 @@ fun FuseShell() {
     Box(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fuseBackground()
             .systemBarsPadding(),
     ) {
         Column(Modifier.fillMaxSize()) {
@@ -107,6 +114,7 @@ fun FuseShell() {
                         transfers = transfers,
                         onSendFile = { pickFile.launch(arrayOf("*/*")) },
                         onCancelTransfer = ServiceLocator.transfers::cancel,
+                        latency = latency,
                         onOpenTransfer = { id ->
                             if (!ServiceLocator.transfers.open(id)) {
                                 Toast.makeText(context, "That file has moved or been deleted.", Toast.LENGTH_SHORT).show()
@@ -114,10 +122,14 @@ fun FuseShell() {
                         },
                     )
 
-                    FuseTab.Screen -> ComingSoonScreen(
-                        title = "Screen sharing",
-                        detail = "See and control your Mac from here.",
-                        icon = Icons.Filled.ScreenShare,
+                    FuseTab.Screen -> ScreenShareScreen(
+                        linked = linked,
+                        sharing = sharing,
+                        peerName = peerName,
+                        onStart = {
+                            context.startActivity(Intent(context, ScreenConsentActivity::class.java))
+                        },
+                        onStop = { ScreenShareService.stop(context) },
                     )
 
                     // Never selected: the centre button is an action, and tapping it
@@ -163,12 +175,35 @@ fun FuseShell() {
                                 )
                             }
                         },
+                        notificationAccess = ServiceLocator.notificationSync.hasAccess(),
+                        notificationsOn = notificationsOn,
+                        onNotifications = {
+                            val sync = ServiceLocator.notificationSync
+                            if (sync.hasAccess()) {
+                                sync.setEnabled(!notificationsOn)
+                            } else {
+                                runCatching { context.startActivity(sync.accessSettingsIntent()) }
+                            }
+                        },
+                        onRemoveDevice = viewModel::removeDevice,
                         onSignOut = viewModel::signOut,
                     )
                 }
             }
         }
 
+        // Content fades out before it reaches the bar, rather than running into it.
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(120.dp)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color.Transparent, MaterialTheme.colorScheme.background),
+                    ),
+                ),
+        )
         FuseNavBar(
             selected = tab,
             onSelect = { tab = it },

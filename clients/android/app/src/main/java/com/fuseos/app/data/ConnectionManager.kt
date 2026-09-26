@@ -57,11 +57,13 @@ class ConnectionManager(
         id
     }
 
-    /** Tears the stack down on sign-out; the next [ensureStarted] rebuilds it. */
-    suspend fun stop() = lock.withLock {
+    /**
+     * Tears the stack down; the next [ensureStarted] rebuilds it. Sign-out forgets the
+     * history from disk too; an expired session keeps it ([keepHistory]).
+     */
+    suspend fun stop(keepHistory: Boolean = false) = lock.withLock {
         signal.stop()
-        // Sign-out, so the history goes from disk too — not merely from the screen.
-        clipboard.forget()
+        if (keepHistory) clipboard.stop() else clipboard.forget()
         transport.stop()
         deviceId = null
     }

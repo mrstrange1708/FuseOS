@@ -1,5 +1,6 @@
 package com.fuseos.app.ui.shell
 
+import com.fuseos.app.ui.components.glassCard
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -63,14 +64,15 @@ fun HistoryScreen(
         Text(
             "Clipboard history",
             style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(horizontal = 24.dp),
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 20.dp),
         )
         Spacer(Modifier.height(14.dp))
 
         Row(
             modifier = Modifier
                 .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             HistoryWindow.entries.forEach { option ->
@@ -83,12 +85,31 @@ fun HistoryScreen(
             EmptyHistory(hasAny = entries.isNotEmpty(), window = window)
         } else {
             LazyColumn(
-                contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 110.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 110.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                items(shown, key = { it.id }) { entry -> HistoryCard(entry, peerName, onCopy) }
+                items(days(shown), key = { it.first }) { (title, group) ->
+                    Panel(title = title) {
+                        group.forEach { entry -> ClipListRow(entry, peerName, onCopy) }
+                    }
+                }
             }
         }
+    }
+}
+
+/** Entries (already newest first) split into Today / Yesterday / dated groups. */
+private fun days(entries: List<ClipEntry>): List<Pair<String, List<ClipEntry>>> {
+    val day = SimpleDateFormat("yyyyMMdd", Locale.getDefault())
+    val today = day.format(Date())
+    val yesterday = day.format(Date(System.currentTimeMillis() - 86_400_000))
+    return entries.groupBy { day.format(Date(it.atUnixMs)) }.map { (key, group) ->
+        val title = when (key) {
+            today -> "Today"
+            yesterday -> "Yesterday"
+            else -> SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date(group.first().atUnixMs))
+        }
+        title to group
     }
 }
 
@@ -135,61 +156,5 @@ private fun EmptyHistory(hasAny: Boolean, window: HistoryWindow) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 32.dp, vertical = 40.dp),
         )
-    }
-}
-
-@Composable
-private fun HistoryCard(entry: ClipEntry, peerName: String?, onCopy: (ClipEntry) -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
-            .clickable { onCopy(entry) }
-            .padding(14.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                if (entry.fromSelf) "Copied here" else "From ${peerName ?: "your Mac"}",
-                style = MaterialTheme.typography.labelSmall,
-                fontFamily = FontFamily.Monospace,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.weight(1f))
-            Text(
-                SimpleDateFormat("d MMM · h:mm a", Locale.getDefault()).format(Date(entry.atUnixMs)),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-
-        val bytes = entry.imageBytes
-        if (bytes != null) {
-            val bitmap = remember(entry.id) {
-                runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }.getOrNull()
-            }
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "Copied image",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(150.dp)
-                        .clip(RoundedCornerShape(10.dp)),
-                )
-            } else {
-                Text("Image", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        } else {
-            Text(
-                entry.text.orEmpty(),
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
     }
 }

@@ -16,16 +16,16 @@ import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-/** One device, with presence and battery. Shared by home, profile and the connect space. */
+/** One device as a row, with presence and battery. Sits inside a [com.fuseos.app.ui.shell.Panel]. */
 @Composable
 internal fun DeviceCard(
     name: String,
@@ -33,14 +33,13 @@ internal fun DeviceCard(
     platform: String,
     online: Boolean,
     battery: Int?,
+    /** Offered for offline devices: the stale record a reinstall leaves behind. */
+    onRemove: (() -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
-            .padding(16.dp),
+            .padding(horizontal = 4.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -58,18 +57,31 @@ internal fun DeviceCard(
         }
         Spacer(Modifier.size(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(name, fontWeight = FontWeight.SemiBold)
-            Text(
-                subtitle,
-                fontFamily = FontFamily.Monospace,
-                style = MaterialTheme.typography.labelSmall,
-                color = if (online) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text(name, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(if (online) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant),
+                )
+                Spacer(Modifier.size(6.dp))
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = if (online) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
-        if (battery != null) {
+        if (onRemove != null) {
+            TextButton(onClick = onRemove) {
+                Text("Remove", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
+            }
+        } else if (battery != null) {
             Text(
                 "$battery%",
-                fontFamily = FontFamily.Monospace,
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Medium,
                 color = if (battery <= 20) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
             )

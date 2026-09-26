@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import com.fuseos.app.ui.components.glassCard
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -73,23 +74,13 @@ fun FuseNavBar(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
                 .height(64.dp)
-                .clip(RoundedCornerShape(28.dp))
                 // Glass: a translucent wash over the background plus a hairline edge. A
                 // flat opaque bar reads as a separate slab; this keeps the content
                 // visible under it and the bar attached to the page.
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                        ),
-                    ),
-                )
-                .border(
-                    1.dp,
-                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
-                    RoundedCornerShape(28.dp),
-                ),
+                // Near-solid: text scrolling under a see-through bar read as clutter. The
+                // fade behind it (FuseShell) does the "floating" instead.
+                .glassCard(28.dp)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
@@ -117,6 +108,11 @@ private fun NavItem(
         if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         label = "nav-tint",
     )
+    // The open tab's icon sits in an ember pill — the same mark the Mac's glass bar uses.
+    val pill by animateColorAsState(
+        if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent,
+        label = "nav-pill",
+    )
     Column(
         modifier = modifier
             .clickable(
@@ -124,14 +120,22 @@ private fun NavItem(
                 indication = null,
                 onClick = { onSelect(tab) },
             )
-            .padding(vertical = 8.dp),
+            .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(tab.icon, contentDescription = tab.label, tint = tint, modifier = Modifier.size(22.dp))
+        Box(
+            Modifier
+                .size(width = 52.dp, height = 28.dp)
+                .clip(CircleShape)
+                .background(pill),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(tab.icon, contentDescription = tab.label, tint = tint, modifier = Modifier.size(21.dp))
+        }
         Text(
             tab.label,
-            fontSize = 10.sp,
+            fontSize = 10.5.sp,
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
             color = tint,
         )
