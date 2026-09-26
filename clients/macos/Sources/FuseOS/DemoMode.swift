@@ -28,6 +28,7 @@ enum DemoMode {
         vm.allPeers = [phone]
         vm.presence = [phone.id: PeerPresence(online: true, battery: 76, publicKey: nil, lanAddress: nil)]
         vm.connected = [phone.id]
+        vm.syncLatency = SyncLatency(lastMs: 38, p95Ms: 64, samples: 50)
         let now = Date()
         vm.history = [
             ClipEntry(id: 6, text: "https://github.com/mrstrange1708/FuseOS/pull/3", imageData: nil, mime: nil, fromSelf: true, at: now.addingTimeInterval(-40)),

@@ -27,6 +27,8 @@ final class DashboardViewModel: ObservableObject {
     private lazy var files = FileTransfer(transport: transport)
     /// Where each received file was saved, so its row can reveal it in Finder.
     private var receivedURLs: [String: URL] = [:]
+    /// How fast clips have been crossing, once any has been acknowledged.
+    @Published var syncLatency: SyncLatency?
     /// Screen mirroring's state, for the Screen pane.
     @Published var screenState: ScreenReceiver.State = .idle
     /// The phone's screen. Created up front: it registers the transport's screen hook.
@@ -126,6 +128,7 @@ final class DashboardViewModel: ObservableObject {
                 offer.send()
             }
         }
+        clipboard.onLatency = { [weak self] latency in self?.syncLatency = latency }
         clipboard.onClipEvent = { [weak self] entry in
             guard let self else { return }
             // Named after whichever peer is actually reachable — with one other device

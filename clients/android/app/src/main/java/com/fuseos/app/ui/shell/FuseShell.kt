@@ -58,6 +58,7 @@ fun FuseShell() {
     val deviceName by ServiceLocator.session.deviceNameFlow.collectAsState(initial = null)
     val context = LocalContext.current
     val transfers by ServiceLocator.transfers.list.collectAsState()
+    val latency by ServiceLocator.clipboardSync.latency.collectAsState()
     // The system picker, not a file browser of our own: it reaches Drive, Downloads and
     // every other provider with no storage permission at all.
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -113,6 +114,7 @@ fun FuseShell() {
                         transfers = transfers,
                         onSendFile = { pickFile.launch(arrayOf("*/*")) },
                         onCancelTransfer = ServiceLocator.transfers::cancel,
+                        latency = latency,
                         onOpenTransfer = { id ->
                             if (!ServiceLocator.transfers.open(id)) {
                                 Toast.makeText(context, "That file has moved or been deleted.", Toast.LENGTH_SHORT).show()

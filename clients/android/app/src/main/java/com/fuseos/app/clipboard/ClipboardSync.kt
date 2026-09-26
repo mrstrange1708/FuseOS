@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.core.content.FileProvider
 import com.fuseos.app.net.LanTransport
+import com.fuseos.proto.Ack
 import com.fuseos.proto.ClipImage
 import com.fuseos.proto.ClipText
 import com.fuseos.proto.Envelope
@@ -88,6 +89,13 @@ class ClipboardSync(
     private var joinJob: Job? = null
 
     private val _history = MutableStateFlow<List<ClipEntry>>(emptyList())
+
+    private val latencyWindow = LatencyWindow()
+    private val _latency = MutableStateFlow<SyncLatency?>(null)
+    /** How fast clips have been crossing, once any has been acknowledged. */
+    val latency: StateFlow<SyncLatency?> = _latency.asStateFlow()
+    /** Clips sent and not yet acknowledged: seq → when they went (elapsed nanos). */
+    private val awaitingAck = java.util.concurrent.ConcurrentHashMap<Long, Long>()
 
     // Buffered and non-suspending: a clip must never block the clipboard listener or a
     // socket read waiting on whoever is drawing the island.
@@ -350,13 +358,25 @@ class ClipboardSync(
     /** The listener fires on the main thread; socket writes must not. */
     private fun broadcast(body: (Envelope.Builder) -> Envelope.Builder) {
         scope.launch(Dispatchers.IO) {
-            transport.broadcast(body(transport.newEnvelope()).build())
+            val envelope = body(transport.newEnvelope()).build()
+            if (envelope.hasClipText() || envelope.hasClipImage()) {
+                awaitingAck[envelope.seq] = System.nanoTime()
+                // Bounded: a peer that never acks (an older build) must not grow this.
+                if (awaitingAck.size > 64) awaitingAck.keys.minOrNull()?.let { awaitingAck.remove(it) }
+            }
+            transport.broadcast(envelope)
         }
     }
 
     private suspend fun apply(guard: LoopGuard, envelope: Envelope) {
         if (envelope.bodyCase == Envelope.BodyCase.HISTORY_SYNC) {
             merge(envelope.historySync)
+            return
+        }
+        // An ack without a transfer id acknowledges one of our clips: time the round trip.
+        if (envelope.bodyCase == Envelope.BodyCase.ACK && envelope.ack.refTransferId.isEmpty()) {
+            val sentAt = awaitingAck.remove(envelope.ack.refSeq) ?: return
+            _latency.value = latencyWindow.record(((System.nanoTime() - sentAt) / 1_000_000).toInt())
             return
         }
         val content = when (envelope.bodyCase) {
@@ -393,6 +413,12 @@ class ClipboardSync(
             else -> return
         }
         withContext(Dispatchers.Main) { clipboard.setPrimaryClip(clip) }
+        // Tell the sender it landed, so it can time the round trip.
+        withContext(Dispatchers.IO) {
+            transport.broadcast(
+                transport.newEnvelope().setAck(Ack.newBuilder().setRefSeq(envelope.seq)).build(),
+            )
+        }
     }
 
     /**

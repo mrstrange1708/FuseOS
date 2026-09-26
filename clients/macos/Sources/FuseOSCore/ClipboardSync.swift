@@ -67,6 +67,12 @@ public final class ClipboardSync {
     /// sign-out clearing, neither of which is an event worth showing anyone.
     public var onClipEvent: ((ClipEntry) -> Void)?
 
+    /// Each clip's round trip as it is acknowledged (see `SyncLatency`).
+    public var onLatency: ((SyncLatency) -> Void)?
+    private var latency = LatencyWindow()
+    /// Clips sent and not yet acknowledged: seq → when they went, monotonic nanoseconds.
+    private var awaitingAck: [UInt64: UInt64] = [:]
+
     /// Set, and a local copy is offered instead of sent: the handler decides, and calls
     /// `send` if the user says yes. Unset — the default — every copy goes at once, because
     /// latency is the product and a prompt is a click in front of every sync.
@@ -287,7 +293,13 @@ public final class ClipboardSync {
         let send = { [weak self] in
             guard let self else { return }
             self.record(text: entry.text, imageData: entry.image, mime: entry.mime, fromSelf: true)
-            self.transport.broadcast(body(self.transport.newEnvelope()))
+            let envelope = body(self.transport.newEnvelope())
+            self.awaitingAck[envelope.seq] = DispatchTime.now().uptimeNanoseconds
+            // Bounded: a peer that never acks (an older build) must not grow this forever.
+            if self.awaitingAck.count > 64, let oldest = self.awaitingAck.keys.min() {
+                self.awaitingAck.removeValue(forKey: oldest)
+            }
+            self.transport.broadcast(envelope)
         }
         if let offer = onLocalCopy {
             offer(ClipOffer(text: entry.text, imageData: entry.image, send: send))
@@ -305,6 +317,11 @@ public final class ClipboardSync {
         switch envelope.body {
         case .historySync(let sync):
             merge(sync)
+            return
+        case .ack(let ack):
+            guard let sentAt = awaitingAck.removeValue(forKey: ack.refSeq) else { return }
+            let ms = Int((DispatchTime.now().uptimeNanoseconds - sentAt) / 1_000_000)
+            onLatency?(latency.record(ms))
             return
         case .clipText:
             let text = envelope.clipText.text
@@ -350,6 +367,10 @@ public final class ClipboardSync {
 
         record(text: entry.text, imageData: entry.image, mime: entry.mime, fromSelf: false)
         write()
+        // Tell the sender it landed, so it can time the round trip.
+        var ack = transport.newEnvelope()
+        ack.ack = FuseAck.with { $0.refSeq = envelope.seq }
+        transport.broadcast(ack)
         // Deliberately do NOT absorb the bumped changeCount here. Letting the next poll
         // see the change is what delivers the echo to `checkForLocalChange`, where the
         // one-shot hash suppression consumes it. Absorbing it instead leaves that

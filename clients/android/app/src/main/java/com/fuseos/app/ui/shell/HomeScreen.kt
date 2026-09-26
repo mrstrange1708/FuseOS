@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fuseos.app.clipboard.ClipEntry
+import com.fuseos.app.clipboard.SyncLatency
 import com.fuseos.app.core.ConnectStage
 import com.fuseos.app.file.TransferProgress
 import com.fuseos.app.ui.dashboard.DashboardViewModel
@@ -72,6 +73,7 @@ fun HomeScreen(
     onSendFile: () -> Unit,
     onCancelTransfer: (String) -> Unit,
     onOpenTransfer: (String) -> Unit,
+    latency: SyncLatency? = null,
     modifier: Modifier = Modifier,
 ) {
     val connect = state.connect
@@ -90,6 +92,7 @@ fun HomeScreen(
             peerName = peer?.name ?: state.peers.firstOrNull()?.name,
             stage = connect.stage,
             peerBattery = peer?.let { peerBattery(it.id) },
+            latency = latency,
         )
 
         Panel(title = "Files") {
@@ -160,7 +163,13 @@ fun HomeScreen(
  * open the app to ask, so it is the one showy thing here.
  */
 @Composable
-private fun LinkHero(selfName: String, peerName: String?, stage: ConnectStage, peerBattery: Int?) {
+private fun LinkHero(
+    selfName: String,
+    peerName: String?,
+    stage: ConnectStage,
+    peerBattery: Int?,
+    latency: SyncLatency?,
+) {
     val linked = stage == ConnectStage.Connected
     val pill = when (stage) {
         ConnectStage.Connected -> "Linked · direct"
@@ -205,10 +214,15 @@ private fun LinkHero(selfName: String, peerName: String?, stage: ConnectStage, p
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
-        if (peerBattery != null) {
+        val facts = listOfNotNull(
+            peerBattery?.let { "Battery $it%" },
+            // The PRD's yardstick — p95 under 300 ms — shown where people look.
+            latency?.takeIf { linked }?.let { "Sync ${it.lastMs} ms · p95 ${it.p95Ms} ms" },
+        )
+        if (facts.isNotEmpty()) {
             Spacer(Modifier.height(6.dp))
             Text(
-                "Battery $peerBattery%",
+                facts.joinToString("  ·  "),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

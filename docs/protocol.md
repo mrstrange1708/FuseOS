@@ -105,6 +105,8 @@ User copies on A
                                                         B emits Envelope{ Ack } ──► A
 ```
 
+**The ack is how sync speed is measured.** B sends `ACK` with `ref_seq = n` (and no `ref_transfer_id`) once it has applied a clip — never for one the loop guard refused. A keeps the send time of each unacknowledged clip (monotonic clock, at most 64 outstanding) and, on the ack, records the round trip in a window of the last 50: `SyncLatency { lastMs, p95Ms }`, shown on both apps' link card. A round trip, because the two devices' clocks cannot be trusted to agree to the millisecond; it bounds copy-to-available from above, so a round-trip p95 under the PRD's 300 ms meets the target. An ack is not a clip and is never re-emitted, so it cannot loop; a build that predates it ignores an ack whose transfer id it does not know.
+
 Images take the same path as text: a `ClipImage` inline in one frame, up to **3 MB**. The `.proto` comment anticipates chunking large images through `FileChunk`, but a single frame is both simpler and lower-latency on a LAN, and `LanChannel` already caps a frame at 4 MB — which comfortably covers the 1–2 MB screenshot that is the common case. Images above 3 MB are not synced yet; they get picked up when file transfer lands and brings chunk reassembly with it.
 
 Both platforms normalise to PNG on the wire. macOS converts a TIFF pasteboard (what a Finder copy yields) before sending, so neither device has to understand the other's native format. Android can only *put* an image on the clipboard as a content URI, so received images are staged in the cache and served through a `FileProvider`.

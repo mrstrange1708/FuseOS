@@ -178,6 +178,27 @@ final class ClipboardSyncTests: XCTestCase {
         return image.representation(using: .png, properties: [:])!
     }
 
+    // MARK: - Latency
+
+    func testApplyingAClipAcknowledgesItOnce() {
+        let sent = envelopesSent { sync.apply(inbound(text: "ack me", from: "peer", seq: 7, at: 100)) }
+        XCTAssertEqual(sent, 1, "one Ack, and nothing else, goes back for an applied clip")
+    }
+
+    func testAnAckForASentClipReportsItsRoundTrip() {
+        var reported: SyncLatency?
+        sync.onLatency = { reported = $0 }
+        copyText("timed")
+        sync.checkForLocalChange()
+        let seq = transport.newEnvelope().seq - 1 // the clip was the envelope before this probe
+        var ack = FuseEnvelope()
+        ack.sourceDeviceID = "peer"
+        ack.ack = FuseAck.with { $0.refSeq = seq }
+        sync.apply(ack)
+        XCTAssertEqual(reported?.samples, 1)
+        XCTAssertNotNil(reported.map { $0.lastMs >= 0 })
+    }
+
     // MARK: - Ask before sending
 
     func testAnOfferedCopyWaitsForSend() {
@@ -220,6 +241,16 @@ final class ClipboardSyncTests: XCTestCase {
         let count = sync.history.count
         sync.apply(historySync([("same", 5_000)]))
         XCTAssertEqual(sync.history.count, count)
+    }
+}
+
+final class LatencyWindowTests: XCTestCase {
+    func testP95IsTheNearestRankAndTheWindowIsBounded() {
+        var window = LatencyWindow(capacity: 20)
+        var last: SyncLatency?
+        for ms in 1...40 { last = window.record(ms) }
+        // Only 21...40 remain; the 95th percentile of 20 samples is the 19th.
+        XCTAssertEqual(last, SyncLatency(lastMs: 40, p95Ms: 39, samples: 20))
     }
 }
 

@@ -253,6 +253,9 @@ public final class LanTransport {
                 switch envelope.body {
                 case .some(.heartbeat), .none:
                     break // liveness only; nothing above the transport cares
+                // An ack with a transfer id is a file's; one without acknowledges a clip.
+                case .some(.ack(let ack)) where ack.refTransferID.isEmpty:
+                    onEnvelope?(envelope)
                 case .some(.fileMeta), .some(.fileChunk), .some(.ack), .some(.fileCancel):
                     onFileEnvelope?(envelope)
                 case .some(.clipText), .some(.clipImage), .some(.historySync):

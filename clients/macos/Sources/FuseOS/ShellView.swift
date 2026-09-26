@@ -290,6 +290,14 @@ private struct LinkHero: View {
                     if let peer, let battery = viewModel.onlineState(for: peer).battery {
                         BatteryBadge(percent: battery)
                     }
+                    if linked, let latency = viewModel.syncLatency {
+                        // The PRD's own yardstick: p95 under 300 ms, shown where people look.
+                        Label("\(latency.lastMs) ms · p95 \(latency.p95Ms) ms", systemImage: "bolt.fill")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(latency.p95Ms < 300 ? FuseColor.muted : FuseColor.error)
+                            .monospacedDigit()
+                            .help("Round trip of the last clip, and the 95th percentile of the last \(latency.samples)")
+                    }
                     Spacer(minLength: 0)
                     Button(action: onMirror) {
                         Label("Mirror screen", systemImage: "rectangle.on.rectangle")
