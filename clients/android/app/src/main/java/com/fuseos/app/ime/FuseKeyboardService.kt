@@ -4,6 +4,9 @@ import android.inputmethodservice.InputMethodService
 import android.view.KeyEvent
 import android.view.View
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.fuseos.app.data.ServiceLocator
 import com.fuseos.app.ui.island.OverlayHost
 import com.fuseos.app.ui.theme.FuseOSTheme
 
@@ -41,15 +44,21 @@ class FuseKeyboardService : InputMethodService() {
         val view = ComposeView(this).apply {
             setContent {
                 FuseOSTheme {
+                    val clips by ServiceLocator.clipboardSync.history.collectAsState()
                     FuseKeyboard(
                         onKey = ::commit,
                         onBackspace = ::backspace,
                         onEnter = ::enter,
+                        clips = clips,
+                        // The keyboard is the one place that may read the clipboard at any
+                        // time, so "send what I copied" works from inside any app.
+                        onSendClipboard = { ServiceLocator.clipboardSync.sendCurrent() },
                     )
                 }
             }
         }
-        host.attach(view)
+        // The IME window's root, not only the view: see OverlayHost.attach.
+        host.attach(view, window?.window?.decorView)
         return view
     }
 
