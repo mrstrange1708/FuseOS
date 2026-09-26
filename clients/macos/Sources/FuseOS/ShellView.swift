@@ -259,6 +259,7 @@ private struct AccountPane: View {
 
     @State private var draftName = ""
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
+    @AppStorage(DockIcon.key) private var showInDock = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -303,6 +304,16 @@ private struct AccountPane: View {
             ))
             .toggleStyle(.checkbox)
             .font(.system(size: 12))
+
+            Toggle("Show in Dock", isOn: $showInDock)
+                .toggleStyle(.checkbox)
+                .font(.system(size: 12))
+                .onChange(of: showInDock) { shown in
+                    DockIcon.apply(shown)
+                    // Leaving the Dock deactivates the app; keep this window in front of
+                    // the user who is still looking at it.
+                    DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
+                }
 
             Button("Link manually", action: onLinkManually)
             Button("Sign out") {
