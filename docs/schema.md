@@ -12,12 +12,27 @@ Design goals: deliberate up-front modeling, additive/backward-compatible migrati
 
 ```mermaid
 erDiagram
-    users ||--o{ devices : owns
+    user ||--o{ devices : owns
+    user ||--o{ account : "signs in with"
+    user ||--o{ session : "is signed in as"
 
-    users {
+    user {
         uuid id PK
         text email UK
+        text name
         timestamptz created_at
+    }
+    account {
+        uuid id PK
+        uuid user_id FK
+        text provider_id
+        text password
+    }
+    session {
+        uuid id PK
+        uuid user_id FK
+        text token UK
+        timestamptz expires_at
     }
     devices {
         uuid id PK
@@ -31,26 +46,17 @@ erDiagram
 
 ## Tables
 
-### `users` (+ Better Auth tables)
-User identity is owned by **Better Auth**, which manages its own tables in our Postgres (typically `user`, `account`, `session`, `verification`). We do **not** hand-roll password storage — Better Auth owns credentials, sessions, and JWT issuance. FuseOS-specific tables below reference the Better Auth user id.
+### Identity — `user`, `account`, `session`, `verification` (Better Auth)
+Identity is owned by **Better Auth** (`server/src/auth/auth.ts`) through its Drizzle adapter; the tables are declared in `server/src/db/schema.ts` with Better Auth's column names, UUID ids (`generateId: 'uuid'`), and the constraints below added by us. We do **not** hand-roll password storage — Better Auth owns credentials and sessions. FuseOS tables reference `user.id`.
 
-| Column | Type | Constraints |
+| Table | Holds | Constraints we add |
 | --- | --- | --- |
-| `id` | uuid | PK |
-| `email` | text | NOT NULL, UNIQUE |
-| `created_at` | timestamptz | NOT NULL, default `now()` |
+| `user` | `id`, `name`, `email`, `email_verified`, `image`, timestamps | `email` UNIQUE and lower-case (CHECK), `name` 1–100 chars (CHECK) |
+| `account` | one row per sign-in method; email/password is `provider_id = 'credential'` with the hash in `password` | FK `user_id → user(id)` ON DELETE CASCADE, indexed |
+| `session` | one row per signed-in device: opaque `token`, `expires_at` (90 days, extended daily with use) | `token` UNIQUE, FK `user_id → user(id)` ON DELETE CASCADE, indexed |
+| `verification` | short-lived values (email verification, password reset) | — |
 
-> **Dev stand-in — `dev_auth_users` / `dev_auth_sessions`.** Until Better Auth is
-> wired, the dev-auth login (`server/src/auth/dev-auth.ts`) persists accounts in a
-> `dev_auth_users` table (`id`, `email` UNIQUE, `name` NOT NULL + length CHECK,
-> `password_salt`, `password_hash`, `created_at`) and issues opaque bearer tokens
-> stored in `dev_auth_sessions` (`token` PK → `user_id`). Both are defined in
-> `server/src/db/schema.ts` and are **temporary** — dropped once Better Auth owns
-> credentials, sessions, and JWTs.
->
-> For the same reason, the `devices` table below currently FKs to
-> `dev_auth_users(id)` (not a real `users` table yet); the FK target moves to the
-> Better Auth user id when it lands.
+**Migrated accounts.** Accounts from the dev-auth stand-in were carried over in migration `0003` with their ids, so their devices stayed attached. Their scrypt hash moved into `account.password` as `legacy-scrypt:<salt>:<hash>`, which `verifyAnyPassword` still accepts; it is replaced by Better Auth's own format the next time the password changes. Their sessions were not carried — each device signed in once more. `0004` dropped `dev_auth_users` and `dev_auth_sessions`.
 
 ### `devices`
 One row per registered device. A user has 2–3 in v1.

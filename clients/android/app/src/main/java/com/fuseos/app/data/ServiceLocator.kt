@@ -85,7 +85,20 @@ object ServiceLocator {
         session = sessionStore
         authRepository = AuthRepository(AuthApi(httpClient, Config.BASE_URL), sessionStore)
 
-        val controlPlaneApi = ControlPlaneApi(httpClient, Config.BASE_URL) { sessionStore.currentToken() }
+        val controlPlaneApi = ControlPlaneApi(
+            httpClient,
+            Config.BASE_URL,
+            tokenProvider = { sessionStore.currentToken() },
+            // The same exit as signing out, minus the history: the token going is what
+            // sends the UI back to sign-in and stops the foreground service. Launched, not
+            // awaited: this can fire inside ensureStarted, which holds the lock stop() needs.
+            onUnauthorized = {
+                appScope.launch {
+                    connectionManager.stop(keepHistory = true)
+                    sessionStore.expire()
+                }
+            },
+        )
         deviceRepository = DeviceRepository(controlPlaneApi, sessionStore, deviceInfo)
 
         val transport = LanTransport(appScope, sessionStore)

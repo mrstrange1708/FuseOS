@@ -136,6 +136,11 @@ struct ControlPlane {
         if (200 ..< 300).contains(http.statusCode) {
             return try JSONDecoder().decode(Response.self, from: data)
         }
+        // The session is over (expired or revoked): back to sign-in rather than an error
+        // the user can do nothing about. The dashboard stops syncing when the token goes.
+        if http.statusCode == 401 {
+            await SessionStore.shared.expire()
+        }
         if let apiError = try? JSONDecoder().decode(APIError.self, from: data) {
             throw AuthError(message: apiError.error.message, code: apiError.error.code)
         }

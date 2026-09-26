@@ -111,14 +111,14 @@ relay, cross-network relay) starts only after v1 ships.
 | 1 | Sep 21 | File transfer UI: macOS drop zone + open panel, Android SAF picker, progress, cancel both ways (`FileCancel`), files land in Downloads | ✅ done — needs a two-device run |
 | 2 | Sep 22 | Share for files both ways: Android `ACTION_SEND`/`SEND_MULTIPLE` of any type (done); Mac via Finder Services + drop on the menu bar item — a real Share extension needs a sandbox + App Group signed with a paid Team ID | ✅ done 2026-09-22 — needs a two-device run |
 | — | Sep 26 | Pulled forward by the user: Mac glass redesign (floating nav, link hero, Dock reopen + "Show in Dock", "Ask before sending copies"), Android glass redesign, stale device records hidden, history catch-up (`HistorySync`), notification sync, view-only screen mirroring with rotation (`docs/protocol.md` §9–§11) | ✅ done — needs a two-device run |
-| 3–4 | Sep 23–24 | Real auth: Better Auth on the canonical schema, replacing `server/src/auth/dev-auth.ts` | ⬜ next |
-| 5 | Sep 25 | Inngest (presence sweep, verification email) + instrument and measure the clipboard hot path | ⬜ |
+| 3–4 | Sep 23–24 | Real auth: Better Auth on the canonical schema, replacing the dev stand-in | ✅ done 2026-09-26 — bearer session tokens (90 days, rolling), dev accounts migrated with their ids and passwords (0003), dev tables dropped (0004), both clients return to sign-in on a 401 |
+| 5 | Sep 25 | Inngest (presence sweep, verification email) + instrument and measure the clipboard hot path | ⬜ next |
 | 6 | Sep 26 | Hosting: server on an always-on free VM + Neon Postgres + TLS; release builds default to the hosted `https`/`wss` URL | ⬜ |
 | 7 | Sep 27 | Release pipeline: signed release APK + DMG (self-signed cert, no notarization) on GitHub Releases | ⬜ |
 | 8–9 | Sep 28–29 | Two-device soak against `docs/testing.md`, fix what it finds | ⬜ |
 | 10 | Sep 30 | Docs pass, tag v1.0.0 | ⬜ |
 
-Already working: auth (dev stand-in), device linking, presence/`/signal`, clipboard text and
+Already working: auth (Better Auth, email + password), device linking, presence/`/signal`, clipboard text and
 images both ways with history (caught up on connect) and reboot survival, Android Share-sheet send
 (text/images), file transfer both ways with progress and cancel, phone notifications on the Mac,
 and the phone's screen mirrored to the Mac.

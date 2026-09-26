@@ -1,7 +1,5 @@
-import { eq } from 'drizzle-orm';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { getDb } from '../db/client.js';
-import { devAuthSessions } from '../db/schema.js';
+import { getAuth } from './auth.js';
 
 // The authenticated user id, attached by `authenticate` for downstream handlers.
 declare module 'fastify' {
@@ -10,14 +8,9 @@ declare module 'fastify' {
   }
 }
 
-/** Resolves a bearer token to its user id, or null if unknown. Dev stand-in for JWT verify. */
+/** Resolves a bearer token to its user id, or null if unknown or expired. */
 export async function userIdForToken(token: string): Promise<string | null> {
-  const [row] = await getDb()
-    .select({ userId: devAuthSessions.userId })
-    .from(devAuthSessions)
-    .where(eq(devAuthSessions.token, token))
-    .limit(1);
-  return row?.userId ?? null;
+  return getAuth().userIdForToken(token);
 }
 
 function bearerToken(request: FastifyRequest): string | null {

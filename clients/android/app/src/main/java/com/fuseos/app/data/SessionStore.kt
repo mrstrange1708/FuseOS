@@ -119,6 +119,12 @@ class SessionStore(private val context: Context) {
         Unit
     }
 
+    /** The server no longer accepts our token (expired or revoked). Only the token goes:
+     *  the device name and id still hold, so signing back in picks up where it was. */
+    suspend fun expire() {
+        context.authDataStore.edit { it.remove(Keys.TOKEN) }
+    }
+
     /** Signs out. Keeps the device keypair (the physical device identity) but drops the
      *  session and the per-account server device id. */
     suspend fun clear() {

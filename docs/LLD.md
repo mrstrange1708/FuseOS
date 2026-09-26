@@ -13,7 +13,7 @@ This document describes *how* FuseOS is implemented. It points into the contract
 
 | Concern | Where | Notes |
 | --- | --- | --- |
-| Identity, sessions, JWT | `server/` (Better Auth) | source of truth in Postgres |
+| Identity, sessions | `server/` (Better Auth) | source of truth in Postgres |
 | Device registry (and the trust derived from it) | `server/` (Fastify + Drizzle) | Postgres, constraint-enforced |
 | Presence & LAN signaling | `server/` `/signal` WebSocket (`ws`) | no payloads |
 | Durable async jobs | `server/` (Inngest) | expiry, sweeps, notifications |
@@ -24,7 +24,7 @@ This document describes *how* FuseOS is implemented. It points into the contract
 
 ```
 UNREGISTERED
-   │  register (JWT + device pubkey) → server
+   │  register (session token + device pubkey) → server
    ▼
 REGISTERED
    │  (trusted with every other device on the account — nothing to do)
@@ -42,7 +42,7 @@ OFFLINE ──── connect to /signal ────► ONLINE
 
 ## 3. Control-plane request handling
 
-- Every request/socket carries a Better Auth **JWT**; Fastify validates it before any handler runs.
+- Every request/socket carries a Better Auth **session token** (`Authorization: Bearer`); Fastify validates it before any handler runs.
 - Input is validated with **Zod** at the boundary; only validated, typed data reaches a Drizzle query.
 - Multi-row writes run in a **transaction**.
 - Errors are typed and returned explicitly (fail loud on the control plane).
@@ -68,7 +68,7 @@ a fresh identity and retry, which is what both apps do.
 
 ## 5. Presence & signaling (`/signal`)
 
-- On connect (JWT-authenticated), the device is marked online and `last_seen` is updated; its trusted peers are notified.
+- On connect (session-token authenticated), the device is marked online and `last_seen` is updated; its trusted peers are notified.
 - The device publishes its current **LAN address**; the server relays it to trusted, online peers so they can open a direct connection (signaling only — no payloads).
 - Heartbeats keep the socket alive; a missed-heartbeat threshold marks the device offline. An **Inngest** presence-timeout sweep self-heals stale "online" rows if a socket dies uncleanly.
 

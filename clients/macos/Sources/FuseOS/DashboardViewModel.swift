@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 import FuseOSCore
 
@@ -35,6 +36,28 @@ final class DashboardViewModel: ObservableObject {
     /// The notch HUD. Owned here because this is where clip events already arrive.
     private let island = ClipIsland()
     private var started = false
+    private var sessionWatch: AnyCancellable?
+
+    init() {
+        // Sign-out and an expired session both end in the token going. Either way sync
+        // stops, and the next sign-in starts it afresh (ShellView calls start()).
+        sessionWatch = SessionStore.shared.$token
+            .removeDuplicates()
+            .sink { [weak self] token in
+                guard token == nil else { return }
+                Task { @MainActor in self?.sessionEnded() }
+            }
+    }
+
+    private func sessionEnded() {
+        guard started else { return }
+        stop()
+        started = false
+        startTask = nil
+        allPeers = []
+        presence = [:]
+        connected = []
+    }
     /// In flight or finished registration. Cleared on failure so the next action retries.
     private var startTask: Task<String, Error>?
 

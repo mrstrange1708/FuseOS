@@ -60,6 +60,13 @@ final class SessionStore: ObservableObject {
         defaults.set(id, forKey: deviceIdKey)
     }
 
+    /// The server no longer accepts our token (it expired, or was revoked). Only the token
+    /// goes: the device name and id still hold, so signing back in picks up where it was.
+    func expire() {
+        token = nil
+        defaults.removeObject(forKey: tokenKey)
+    }
+
     /// Signs out. Keeps the Keychain keypair (it identifies the physical device) but
     /// drops the per-account server device id, re-established on the next login.
     func clear() {

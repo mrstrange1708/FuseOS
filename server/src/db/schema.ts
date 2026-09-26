@@ -1,37 +1,87 @@
 import { sql } from 'drizzle-orm';
-import { check, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  check,
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 /**
- * DEV-ONLY credentials store for the `dev-auth` stand-in (see auth/dev-auth.ts).
- *
- * The real identity schema is owned by Better Auth (tables `user`, `account`,
- * `session`, …) — see docs/schema.md. These `dev_auth_*` tables exist only so the
- * dev login persists across server restarts while Better Auth is not yet wired,
- * and are meant to be dropped when it lands. The `devices` table below
- * follows docs/schema.md but references `dev_auth_users` for the same reason; its
- * FK target moves to the Better Auth user id later. Integrity is enforced in the
- * schema itself (NOT NULL, UNIQUE, CHECK) per the "never let bad data in" rule.
+ * Identity, owned by Better Auth (see auth/auth.ts and docs/schema.md). Column names and
+ * nullability follow Better Auth's core schema; ids are UUIDs (`generateId: 'uuid'`) so
+ * the migrated dev accounts keep theirs. We add the constraints Better Auth does not
+ * declare itself — the "never let bad data in" rule applies to its tables too.
  */
-export const devAuthUsers = pgTable(
-  'dev_auth_users',
+export const user = pgTable(
+  'user',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    email: text('email').notNull().unique(),
     name: text('name').notNull(),
-    passwordSalt: text('password_salt').notNull(),
-    passwordHash: text('password_hash').notNull(),
+    email: text('email').notNull().unique(),
+    emailVerified: boolean('email_verified').notNull().default(false),
+    image: text('image'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [check('dev_auth_users_name_len', sql`length(${table.name}) between 1 and 100`)],
+  (table) => [
+    check('user_name_len', sql`length(${table.name}) between 1 and 100`),
+    // Better Auth lower-cases emails; a mixed-case row would be a second account.
+    check('user_email_lower', sql`${table.email} = lower(${table.email})`),
+  ],
 );
 
-/** Opaque bearer tokens issued at sign-in, mapped to a user. Dev stand-in for JWT. */
-export const devAuthSessions = pgTable('dev_auth_sessions', {
-  token: text('token').primaryKey(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => devAuthUsers.id, { onDelete: 'cascade' }),
+export const session = pgTable(
+  'session',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    token: text('token').notNull().unique(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('session_user_id_idx').on(table.userId)],
+);
+
+/** Credentials. For email/password, `provider_id = 'credential'` and `password` is the hash. */
+export const account = pgTable(
+  'account',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    accountId: text('account_id').notNull(),
+    providerId: text('provider_id').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    accessToken: text('access_token'),
+    refreshToken: text('refresh_token'),
+    idToken: text('id_token'),
+    accessTokenExpiresAt: timestamp('access_token_expires_at', { withTimezone: true }),
+    refreshTokenExpiresAt: timestamp('refresh_token_expires_at', { withTimezone: true }),
+    scope: text('scope'),
+    password: text('password'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('account_user_id_idx').on(table.userId)],
+);
+
+/** Short-lived values (email verification, password reset). */
+export const verification = pgTable('verification', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  identifier: text('identifier').notNull(),
+  value: text('value').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 /** One row per registered device. `battery`/`last_seen` are updated over `/signal`. */
@@ -41,7 +91,7 @@ export const devices = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     userId: uuid('user_id')
       .notNull()
-      .references(() => devAuthUsers.id, { onDelete: 'cascade' }),
+      .references(() => user.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     platform: text('platform').notNull(),
     publicKey: text('public_key').notNull().unique(),
@@ -67,5 +117,4 @@ export const devices = pgTable(
  * migration 0002 along with the code-entry flow they existed for.
  */
 
-export type DevAuthUser = typeof devAuthUsers.$inferSelect;
 export type Device = typeof devices.$inferSelect;
