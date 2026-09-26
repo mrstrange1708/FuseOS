@@ -82,6 +82,8 @@ message Envelope {
 | `SCREEN_FRAME` | phone → Mac | one H.264 access unit of the phone's screen (§11) |
 | `PHONE_COMMAND` | Mac → phone | ring the phone, stop ringing, or open its camera for a photo (§12) |
 | `OPEN_LINK` | either | open an http(s) link on the other device (§12) |
+| `MEDIA_STATE` | phone → Mac | what the phone is playing (§13) |
+| `MEDIA_COMMAND` | Mac → phone | play/pause, next, previous, seek (§13) |
 | `REMOTE_INPUT` | Mac → phone | a tap, swipe, long-press, Back/Home/Recents, text or key for the phone to perform (§11) |
 
 ## 4. Loop-prevention invariant (critical)
@@ -238,3 +240,8 @@ Small commands, each one message on the LAN channel; none touches the server.
 - **Open a link** (`OPEN_LINK`) — Handoff. Phone → Mac through *Open on Mac* in the Android Share sheet; Mac → phone through *Open Link on Phone with FuseOS* in the Services menu or *Open copied link* on Home. The receiver opens **http and https only**; any other scheme is dropped, so a peer cannot make the other device launch arbitrary intents or URL handlers.
 
 Anything the phone must show while FuseOS is in the background (the camera, a link) opens directly when FuseOS holds the overlay permission, which exempts it from Android's background-activity-launch block, and through a tap-to-open notification otherwise.
+
+## 13. Now Playing
+
+- **Phone** (`notify/MediaSync.kt`) — other apps' media sessions are readable only by an enabled notification listener, which FuseOS already is for notification sync, so Now Playing starts when that listener connects. It follows the session that is playing, else the most recent, and sends `MEDIA_STATE` when its track or play state changes and whenever a Mac connects; `active = false` when nothing is playing. Position is carried to the send time (`position_ms` at `position_at_unix_ms`), and artwork (a 256 px JPEG) only with a new track.
+- **Mac** (`MediaRemote`, `NowPlaying`) — shows a Now Playing panel on Home and advances the bar itself from the wall clock while playing, so position-only updates never cross the wire. Its buttons send `MEDIA_COMMAND` (`PLAY_PAUSE`, `NEXT`, `PREVIOUS`, `SEEK`), which the phone applies to the session's transport controls. The panel goes when the phone does.

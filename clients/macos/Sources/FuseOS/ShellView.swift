@@ -205,10 +205,15 @@ private struct HomePane: View {
                 LinkHero(viewModel: viewModel, onMirror: onMirror)
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .top, spacing: 18) {
-                        clipboard.frame(minWidth: 420)
+                        VStack(spacing: 18) {
+                            nowPlaying
+                            clipboard
+                        }
+                        .frame(minWidth: 420)
                         files.frame(width: 340)
                     }
                     VStack(spacing: 18) {
+                        nowPlaying
                         clipboard
                         files
                     }
@@ -219,6 +224,12 @@ private struct HomePane: View {
             .padding(.bottom, 28)
             .frame(maxWidth: 1040)
             .frame(maxWidth: .infinity)
+        }
+    }
+
+    @ViewBuilder private var nowPlaying: some View {
+        if let track = viewModel.nowPlaying {
+            NowPlayingPanel(track: track, remote: viewModel.media)
         }
     }
 
@@ -260,6 +271,79 @@ private struct HomePane: View {
                 }
             }
         }
+    }
+}
+
+/// What the phone is playing: artwork, track, a bar that advances by itself, and the
+/// three controls anyone reaches for.
+private struct NowPlayingPanel: View {
+    let track: NowPlaying
+    let remote: MediaRemote
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Group {
+                if let data = track.artwork, let image = NSImage(data: data) {
+                    Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+                } else {
+                    Image(systemName: "music.note")
+                        .font(.system(size: 24, weight: .light))
+                        .foregroundStyle(FuseColor.accent)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(FuseColor.accent.opacity(0.12))
+                }
+            }
+            .frame(width: 64, height: 64)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(track.title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(FuseColor.ink)
+                    .lineLimit(1)
+                Text([track.artist, track.appName].filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.system(size: 12))
+                    .foregroundStyle(FuseColor.muted)
+                    .lineLimit(1)
+                if track.durationMs > 0 {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        let position = track.position(at: context.date)
+                        HStack(spacing: 8) {
+                            Text(Self.clock(position)).monospacedDigit()
+                            ProgressBar(fraction: Double(position) / Double(track.durationMs))
+                            Text(Self.clock(track.durationMs)).monospacedDigit()
+                        }
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(FuseColor.muted)
+                    }
+                    .padding(.top, 2)
+                }
+            }
+            Spacer(minLength: 8)
+            HStack(spacing: 6) {
+                control("backward.fill", action: remote.previous)
+                control(track.playing ? "pause.fill" : "play.fill", large: true, action: remote.playPause)
+                control("forward.fill", action: remote.next)
+            }
+        }
+        .padding(16)
+        .panelSurface(radius: 18)
+    }
+
+    private func control(_ symbol: String, large: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: large ? 15 : 12, weight: .semibold))
+                .foregroundStyle(large ? Color.white : FuseColor.ink)
+                .frame(width: large ? 40 : 32, height: large ? 40 : 32)
+                .background(Circle().fill(large ? FuseColor.accent : FuseColor.surfaceAlt))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private static func clock(_ ms: Int64) -> String {
+        let seconds = Int(ms / 1000)
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 }
 

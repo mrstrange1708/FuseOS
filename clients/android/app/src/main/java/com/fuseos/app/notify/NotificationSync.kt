@@ -161,10 +161,13 @@ class NotificationSync(
 class FuseNotificationListener : NotificationListenerService() {
     override fun onListenerConnected() {
         instance = this
+        // Media sessions are readable only through an enabled listener: start with it.
+        com.fuseos.app.data.ServiceLocator.mediaSync.start()
     }
 
     override fun onListenerDisconnected() {
         if (instance === this) instance = null
+        com.fuseos.app.data.ServiceLocator.mediaSync.stop()
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
