@@ -33,6 +33,9 @@ public final class LanTransport {
     /// Screen mirroring: control messages and video frames.
     var onScreenEnvelope: ((FuseEnvelope) -> Void)?
 
+    /// Now Playing: `MediaState`, `MediaCommand`.
+    var onMediaEnvelope: ((FuseEnvelope) -> Void)?
+
     /// Phone actions and links: `PhoneCommand`, `OpenLink`.
     var onActionEnvelope: ((FuseEnvelope) -> Void)?
 
@@ -269,6 +272,8 @@ public final class LanTransport {
                     onScreenEnvelope?(envelope)
                 case .some(.phoneCommand), .some(.openLink):
                     onActionEnvelope?(envelope)
+                case .some(.mediaState), .some(.mediaCommand):
+                    onMediaEnvelope?(envelope)
                 }
             } catch {
                 return

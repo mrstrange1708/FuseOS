@@ -44,6 +44,8 @@ message Envelope {
     RemoteInput remote_input = 22;
     PhoneCommand phone_command = 23;
     OpenLink open_link = 24;
+    MediaState media_state = 25;
+    MediaCommand media_command = 26;
   }
 }
 
@@ -192,4 +194,32 @@ message PhoneCommand {
 // receiver opens only http and https, never another scheme.
 message OpenLink {
   string url = 1;
+}
+
+// Phone -> Mac: what the phone is playing (Now Playing), sent when it changes and when a
+// Mac connects. active = false means nothing is playing any more.
+message MediaState {
+  bool   active       = 1;
+  string app_name     = 2;
+  string title        = 3;
+  string artist       = 4;
+  string album        = 5;
+  bool   playing      = 6;
+  int64  position_ms  = 7; // at position_at_unix_ms; the Mac advances it while playing
+  int64  duration_ms  = 8; // 0 when unknown (a live stream)
+  bytes  artwork_jpeg = 9; // small; may be empty
+  int64  position_at_unix_ms = 10;
+}
+
+// Mac -> phone: control what the phone is playing.
+message MediaCommand {
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+    PLAY_PAUSE         = 1;
+    NEXT               = 2;
+    PREVIOUS           = 3;
+    SEEK               = 4; // to position_ms
+  }
+  Action action      = 1;
+  int64  position_ms = 2;
 }

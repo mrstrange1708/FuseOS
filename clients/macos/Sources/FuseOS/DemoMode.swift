@@ -28,8 +28,12 @@ enum DemoMode {
         vm.allPeers = [phone]
         vm.presence = [phone.id: PeerPresence(online: true, battery: 76, publicKey: nil, lanAddress: nil)]
         vm.connected = [phone.id]
-        vm.syncLatency = SyncLatency(lastMs: 38, p95Ms: 64, samples: 50)
         let now = Date()
+        vm.syncLatency = SyncLatency(lastMs: 38, p95Ms: 64, samples: 50)
+        vm.nowPlaying = NowPlaying(
+            appName: "Spotify", title: "Midnight City", artist: "M83", playing: true,
+            positionMs: 95_000, positionAt: now, durationMs: 243_000, artwork: sampleImage(),
+        )
         vm.history = [
             ClipEntry(id: 6, text: "https://github.com/mrstrange1708/FuseOS/pull/3", imageData: nil, mime: nil, fromSelf: true, at: now.addingTimeInterval(-40)),
             ClipEntry(id: 5, text: "Meet at the café on 5th at 7 — I'll grab a table by the window.", imageData: nil, mime: nil, fromSelf: false, at: now.addingTimeInterval(-600)),

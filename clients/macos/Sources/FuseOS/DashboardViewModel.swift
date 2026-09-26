@@ -38,6 +38,9 @@ final class DashboardViewModel: ObservableObject {
     private lazy var notifications = NotificationMirror(transport: transport)
     /// Ring the phone, ask it for a photo, hand links across.
     lazy var phone = PhoneCommands(transport: transport)
+    /// What the phone is playing, and the controls for it.
+    lazy var media = MediaRemote(transport: transport)
+    @Published var nowPlaying: NowPlaying?
     private let notifier = PhoneNotifier()
     /// The notch HUD. Owned here because this is where clip events already arrive.
     private let island = ClipIsland()
@@ -101,12 +104,14 @@ final class DashboardViewModel: ObservableObject {
         notifier.onUserDismissed = { [weak self] key in self?.notifications.dismiss(key: key) }
         screen.onStateChanged = { [weak self] state in self?.screenState = state }
         screen.onCanControlChanged = { [weak self] can in self?.canControlPhone = can }
+        media.onChange = { [weak self] playing in self?.nowPlaying = playing }
         phone.onOpenLink = { [weak self] url in
             NSWorkspace.shared.open(url)
             self?.island.present(symbol: "safari", title: "Opened from \(self?.peerName ?? "your phone")", detail: url.host ?? url.absoluteString)
         }
         transport.onConnectedPeersChanged = { [weak self] peers in
             self?.connected = peers
+            if peers.isEmpty { self?.media.peerGone() }
             self?.files.peersChanged(peers)
         }
         clipboard.onHistoryChanged = { [weak self] entries in
