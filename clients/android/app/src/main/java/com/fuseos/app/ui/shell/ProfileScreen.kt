@@ -55,6 +55,9 @@ fun ProfileScreen(
     selfBattery: Int?,
     onRename: (String) -> Unit,
     onBatterySettings: () -> Unit,
+    notificationAccess: Boolean,
+    notificationsOn: Boolean,
+    onNotifications: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -160,6 +163,23 @@ fun ProfileScreen(
                     "its own — no tile, no tap to reach it."
             },
             onKeyboardSetup,
+        )
+
+        Spacer(Modifier.height(10.dp))
+        SettingRow(
+            when {
+                !notificationAccess -> "Turn on notification sync"
+                notificationsOn -> "Notification sync · on"
+                else -> "Notification sync · off"
+            },
+            when {
+                !notificationAccess ->
+                    "Allow FuseOS notification access, and this phone's notifications show up " +
+                        "on your Mac while they're linked."
+                notificationsOn -> "Your notifications show up on your Mac. Tap to pause."
+                else -> "Paused. Tap to show this phone's notifications on your Mac again."
+            },
+            onNotifications,
         )
 
         // Null below Android 13, where there is no API to offer this and the user has to

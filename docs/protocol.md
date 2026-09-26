@@ -75,6 +75,11 @@ message Envelope {
 | `ACK` | receiver → sender | acknowledges an applied event / completed transfer |
 | `HEARTBEAT` | either | liveness |
 | `FILE_CANCEL` | either | this end of a transfer gave up; the other stops and discards |
+| `HISTORY_SYNC` | either | recent clipboard history, sent once per new channel (§9) |
+| `PHONE_NOTIFICATION` | phone → Mac | a notification posted on the phone (§10) |
+| `NOTIFICATION_DISMISS` | either | a mirrored notification went away (§10) |
+| `SCREEN_CONTROL` | either | start / stop / keyframe for screen mirroring (§11) |
+| `SCREEN_FRAME` | phone → Mac | one H.264 access unit of the phone's screen (§11) |
 
 ## 4. Loop-prevention invariant (critical)
 
@@ -184,3 +189,34 @@ Both clients implement this in `FileTransfer` (`FuseOSCore/FileTransfer.swift`, 
 - A dropped frame or lost peer degrades gracefully: the channel reconnects with backoff; the app never crashes on data-plane errors.
 - No indefinite queuing of clipboard events — if a peer is offline, the copy simply isn't delivered (the clipboard is not a durable outbox in v1).
 - Heartbeats detect half-open connections and trigger reconnect.
+
+## 9. History catch-up
+
+A copy made while the devices were apart never reaches the other side, and on Android a copy is only recorded once the user sends it — so without this the two history lists drift apart.
+
+1. Whenever a channel comes up (reconnects included), **each end** sends `HISTORY_SYNC` with its recent history, newest first, up to **3 MB** so one frame stays under `LanChannel`'s 4 MB cap. An image too large for what is left of the budget is skipped, not the rest of the list.
+2. The receiver adds each entry it does not already hold — matched by the same content hash `LoopGuard` uses — at its original `at_unix_ms`, re-sorts, and trims to its usual caps.
+3. **History only.** The clipboard is not written, the island stays quiet, and a `HISTORY_SYNC` is never answered with another one. That is why it cannot loop, and why it does not pass through `LoopGuard`.
+
+Both clients: `ClipboardSync.sendHistory()` / `merge()`.
+
+## 10. Notification sync
+
+Phone → Mac, while linked.
+
+- **Android** (`notify/NotificationSync.kt`) listens through a `NotificationListenerService` the user enables under *Settings → Notification access*, with an on/off switch in Profile. It forwards a posted notification only when the switch is on and a Mac is linked, and never FuseOS's own, ongoing ones (media, navigation, downloads), group summaries, or ones with no title or text (`NotificationSync.shouldForward`, pinned by a unit test). Nothing is queued: a notification from while the Mac was away is not delivered late. Text is capped at 1,000 characters; the app icon rides along as a 64 px PNG.
+- **`key`** is Android's `StatusBarNotification` key. Posting again with the same key replaces the earlier one on the Mac (a chat's next message).
+- **macOS** (`NotificationMirror`, `PhoneNotifier`) shows it in the island and files it in Notification Center (list only — the island is the banner), with the key as the request id.
+- **Dismissal runs both ways.** The phone sends `NOTIFICATION_DISMISS` when one is removed there; the Mac removes it. Clearing or clicking one on the Mac sends `NOTIFICATION_DISMISS` back and the phone cancels it. The phone remembers keys the Mac cleared, so the removal that causes is not reported back. The phone is the only origin of notifications, so nothing here can loop.
+- Notification text is user payload: LAN-only and encrypted like the clipboard, never logged, never in analytics.
+
+## 11. Screen mirroring
+
+Phone → Mac, view only. Remote control would need an AccessibilityService, which is off the table (`CLAUDE.md`).
+
+1. Either end starts it. The Mac sends `SCREEN_CONTROL START`; the phone opens Android's capture-consent dialog (directly when it holds the overlay permission, which exempts it from the background-activity-launch block; otherwise through a notification). Or the user taps *Share screen* on the phone. Android asks for consent every session.
+2. On consent the phone starts a `mediaProjection` foreground service, sends `SCREEN_CONTROL START`, and streams: a virtual display draws into a hardware H.264 encoder's input surface, and each encoded access unit goes out as a `SCREEN_FRAME` (Annex-B) on the **same encrypted channel** as everything else. Realtime priority, 30 fps, 6 Mbit/s, long side ≤ 1600 px, a keyframe every 2 s with SPS/PPS prepended, and the last frame repeated after 100 ms of stillness so the Mac never waits on a static screen.
+3. The Mac reframes Annex-B to AVCC, builds the format from the SPS/PPS, and enqueues each sample on an `AVSampleBufferDisplayLayer` marked *display immediately* — hardware decode, no decoder session of our own. A decode failure flushes the layer and sends `SCREEN_CONTROL KEYFRAME`.
+4. `SCREEN_CONTROL STOP` from either end ends it; the phone also stops when its user ends it from the system chip or notification, or when no Mac is linked any more. A refused consent sends `STOP`, so the Mac does not wait forever.
+
+Sharing the channel means a burst of video can delay a clipboard frame behind it on the same TCP stream. At these bitrates on a LAN that is milliseconds; a separate channel is the fix if measurement ever says otherwise.

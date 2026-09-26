@@ -19,7 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.fuseos.app.ui.components.FusePrimaryButton
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -293,19 +294,19 @@ private fun percent(transfer: TransferProgress): Int =
     if (transfer.total <= 0) 0 else (transfer.bytes * 100 / transfer.total).toInt().coerceIn(0, 100)
 
 /**
- * A destination that exists in the bar but not yet in the product.
- *
- * Screen mirroring and remote control are out of scope for v1 (see CLAUDE.md) — they would
- * change the transport design, and clipboard and files come first. The slot is here so the
- * bar's shape is final and does not shift under people later.
+ * Sharing this phone's screen to the Mac. The Mac can ask for it too; either way Android's
+ * own consent dialog decides, every session. View only — the Mac cannot tap anything.
  */
 @Composable
-fun ComingSoonScreen(
-    title: String,
-    detail: String,
-    icon: ImageVector,
+fun ScreenShareScreen(
+    linked: Boolean,
+    sharing: Boolean,
+    peerName: String?,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val mac = peerName ?: "your Mac"
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -315,36 +316,43 @@ fun ComingSoonScreen(
     ) {
         Box(
             Modifier
-                .size(72.dp)
-                .clip(RoundedCornerShape(22.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .size(88.dp)
+                .clip(RoundedCornerShape(26.dp))
+                .background(
+                    if (sharing) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                    else MaterialTheme.colorScheme.surfaceVariant,
+                ),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(
+                Icons.Filled.ScreenShare,
+                contentDescription = null,
+                tint = if (sharing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(36.dp),
+            )
         }
-        Spacer(Modifier.height(18.dp))
-        Text(title, style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(20.dp))
+        Text(
+            if (sharing) "Sharing with $mac" else "Show this screen on $mac",
+            style = MaterialTheme.typography.titleLarge,
+        )
         Spacer(Modifier.height(8.dp))
         Text(
-            detail,
+            when {
+                sharing -> "Everything on this screen is visible on $mac. Stop any time from here or the notification."
+                linked -> "Live over your Wi-Fi, straight to $mac. Nothing goes through the internet."
+                else -> "Link your Mac first — sharing runs over the same direct connection."
+            },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
-        Spacer(Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Filled.Lock,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(14.dp),
-            )
-            Spacer(Modifier.size(6.dp))
-            Text(
-                "Coming after clipboard and files",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        Spacer(Modifier.height(24.dp))
+        FusePrimaryButton(
+            text = if (sharing) "Stop sharing" else "Share screen",
+            onClick = if (sharing) onStop else onStart,
+            enabled = sharing || linked,
+        )
         Spacer(Modifier.height(100.dp))
     }
 }

@@ -8,6 +8,8 @@ import com.fuseos.app.net.LanTransport
 import com.fuseos.proto.ClipImage
 import com.fuseos.proto.ClipText
 import com.fuseos.proto.Envelope
+import com.fuseos.proto.HistoryItem
+import com.fuseos.proto.HistorySync
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -83,6 +85,7 @@ class ClipboardSync(
     private var guard: LoopGuard? = null
     private var listener: ClipboardManager.OnPrimaryClipChangedListener? = null
     private var inboundJob: Job? = null
+    private var joinJob: Job? = null
 
     private val _history = MutableStateFlow<List<ClipEntry>>(emptyList())
 
@@ -115,6 +118,15 @@ class ClipboardSync(
         inboundJob = scope.launch {
             transport.incoming.collect { envelope -> apply(guard, envelope) }
         }
+        // Both ends send their history whenever a peer gains a channel; each merges what
+        // it lacks.
+        joinJob = scope.launch {
+            var previous = emptySet<String>()
+            transport.connectedPeers.collect { now ->
+                if ((now - previous).isNotEmpty()) sendHistory()
+                previous = now
+            }
+        }
     }
 
     fun stop() {
@@ -122,6 +134,8 @@ class ClipboardSync(
         listener = null
         inboundJob?.cancel()
         inboundJob = null
+        joinJob?.cancel()
+        joinJob = null
         guard = null
         // Backgrounding calls this too, so the list is only cleared from memory; what is
         // on disk is what a relaunch restores. `forget()` is the sign-out path.
@@ -149,19 +163,78 @@ class ClipboardSync(
             fromSelf = fromSelf,
             atUnixMs = System.currentTimeMillis(),
         )
+        commit { current -> listOf(entry) + current }
+        _events.tryEmit(entry)
+    }
+
+    /** Applies [change] to the history, trims it to the caps, and persists it. */
+    private fun commit(change: (List<ClipEntry>) -> List<ClipEntry>) {
         _history.update { current ->
-            val trimmed = (listOf(entry) + current).take(MAX_ENTRIES)
+            val trimmed = change(current).take(MAX_ENTRIES)
             var bytes = 0L
             trimmed.takeWhile {
                 bytes += it.imageBytes?.size ?: it.text?.length ?: 0
                 bytes <= MAX_HISTORY_BYTES
             }
         }
-        _events.tryEmit(entry)
         // Written on every change so an app the OS kills without warning — the norm on
         // Android — still has its history on the next launch.
         scope.launch(Dispatchers.IO) { store.save(_history.value) }
     }
+
+    /**
+     * Sends our recent history to peers (`HistorySync` in the proto), newest first,
+     * stopping short of the channel's frame cap. An image too big for what is left of the
+     * budget is skipped rather than ending the list.
+     */
+    private fun sendHistory() {
+        var budget = MAX_HISTORY_SYNC_BYTES
+        val items = _history.value.mapNotNull { entry ->
+            val size = entry.imageBytes?.size ?: entry.text?.toByteArray()?.size ?: 0
+            if (size > budget) return@mapNotNull null
+            budget -= size
+            HistoryItem.newBuilder().apply {
+                if (entry.imageBytes != null) {
+                    imageData = ByteString.copyFrom(entry.imageBytes)
+                    imageMime = entry.mime ?: "image/png"
+                } else {
+                    text = entry.text.orEmpty()
+                }
+                atUnixMs = entry.atUnixMs
+            }.build()
+        }
+        if (items.isEmpty()) return
+        broadcast { it.setHistorySync(HistorySync.newBuilder().addAllItems(items)) }
+    }
+
+    /**
+     * Folds a peer's history into ours: the entries we lack, at the time they were first
+     * copied. History only — the clipboard is not touched, the island stays quiet, and
+     * nothing is sent back, which is what keeps this from looping.
+     */
+    internal fun merge(sync: HistorySync) {
+        commit { current ->
+            val known = current.mapNotNull(::contentHash).toMutableSet()
+            val added = sync.itemsList.mapNotNull { item ->
+                val isImage = !item.imageData.isEmpty
+                if (!isImage && item.text.isEmpty()) return@mapNotNull null
+                val hash = if (isImage) LoopGuard.hash(item.imageData.toByteArray()) else LoopGuard.hash(item.text)
+                if (!known.add(hash)) return@mapNotNull null
+                ClipEntry(
+                    id = nextId++,
+                    text = item.text.takeIf { !isImage },
+                    imageBytes = item.imageData.toByteArray().takeIf { isImage },
+                    mime = item.imageMime.takeIf { isImage },
+                    fromSelf = false,
+                    atUnixMs = item.atUnixMs,
+                )
+            }
+            (current + added).sortedByDescending { it.atUnixMs }
+        }
+    }
+
+    private fun contentHash(entry: ClipEntry): String? =
+        entry.imageBytes?.let { LoopGuard.hash(it) } ?: entry.text?.let { LoopGuard.hash(it) }
 
     /** Put a history entry back on this device's clipboard — the point of a history. */
     fun copyToClipboard(entry: ClipEntry) {
@@ -282,6 +355,10 @@ class ClipboardSync(
     }
 
     private suspend fun apply(guard: LoopGuard, envelope: Envelope) {
+        if (envelope.bodyCase == Envelope.BodyCase.HISTORY_SYNC) {
+            merge(envelope.historySync)
+            return
+        }
         val content = when (envelope.bodyCase) {
             Envelope.BodyCase.CLIP_TEXT ->
                 envelope.clipText.text.takeIf { it.isNotEmpty() }?.let { it to LoopGuard.hash(it) }
@@ -370,5 +447,8 @@ class ClipboardSync(
 
         private const val MAX_ENTRIES = 50
         private const val MAX_HISTORY_BYTES = 24L * 1024 * 1024
+
+        /** One `HistorySync` frame, with headroom under `LanChannel`'s 4 MB frame cap. */
+        private const val MAX_HISTORY_SYNC_BYTES = 3 * 1024 * 1024
     }
 }

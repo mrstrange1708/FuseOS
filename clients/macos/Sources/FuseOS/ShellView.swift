@@ -60,6 +60,11 @@ struct ShellView: View {
             .sheet(isPresented: $showPairing) {
                 PairingView(viewModel: viewModel).environmentObject(session)
             }
+            // A share started on the phone should land in front of the user, not in a tab
+            // they would have to think to open.
+            .onChange(of: viewModel.screenState) { state in
+                if case .streaming = state { go(.screen) }
+            }
     }
 
     @ViewBuilder private var pane: some View {

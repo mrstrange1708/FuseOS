@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -31,6 +29,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fuseos.app.data.ServiceLocator
+import com.fuseos.app.screen.ScreenConsentActivity
+import com.fuseos.app.screen.ScreenShareService
 import com.fuseos.app.file.Transfers
 import com.fuseos.app.ui.components.ErrorBanner
 import com.fuseos.app.ui.components.FuseWordmark
@@ -75,6 +75,8 @@ fun FuseShell() {
         return
     }
     val linked = state.connected.isNotEmpty()
+    val sharing by ScreenShareService.sharing.collectAsState()
+    val notificationsOn by ServiceLocator.notificationSync.enabled.collectAsState()
     // With one other device this is always the right name; with several, the connected
     // one is the only device a clip can have come from.
     val peerName = state.peers.firstOrNull { it.id in state.connected }?.name
@@ -114,10 +116,14 @@ fun FuseShell() {
                         },
                     )
 
-                    FuseTab.Screen -> ComingSoonScreen(
-                        title = "Screen sharing",
-                        detail = "See and control your Mac from here.",
-                        icon = Icons.Filled.ScreenShare,
+                    FuseTab.Screen -> ScreenShareScreen(
+                        linked = linked,
+                        sharing = sharing,
+                        peerName = peerName,
+                        onStart = {
+                            context.startActivity(Intent(context, ScreenConsentActivity::class.java))
+                        },
+                        onStop = { ScreenShareService.stop(context) },
                     )
 
                     // Never selected: the centre button is an action, and tapping it
@@ -161,6 +167,16 @@ fun FuseShell() {
                                         Uri.parse("package:${context.packageName}"),
                                     ),
                                 )
+                            }
+                        },
+                        notificationAccess = ServiceLocator.notificationSync.hasAccess(),
+                        notificationsOn = notificationsOn,
+                        onNotifications = {
+                            val sync = ServiceLocator.notificationSync
+                            if (sync.hasAccess()) {
+                                sync.setEnabled(!notificationsOn)
+                            } else {
+                                runCatching { context.startActivity(sync.accessSettingsIntent()) }
                             }
                         },
                         onSignOut = viewModel::signOut,

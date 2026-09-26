@@ -8,6 +8,8 @@ import com.fuseos.app.file.FileTransfer
 import com.fuseos.app.file.TransferProgress
 import com.fuseos.app.file.Transfers
 import com.fuseos.app.net.LanTransport
+import com.fuseos.app.notify.NotificationSync
+import com.fuseos.app.screen.ScreenShare
 import com.fuseos.app.ui.island.ClipIsland
 import com.fuseos.app.ui.island.IslandIcon
 import io.ktor.client.HttpClient
@@ -45,6 +47,10 @@ object ServiceLocator {
     lateinit var clipIsland: ClipIsland
         private set
     lateinit var transfers: Transfers
+        private set
+    lateinit var notificationSync: NotificationSync
+        private set
+    lateinit var screenShare: ScreenShare
         private set
 
     /** Outlives every screen and every service, so work that must not die with an
@@ -85,6 +91,8 @@ object ServiceLocator {
         val transport = LanTransport(appScope, sessionStore)
         lanTransport = transport
         clipboardSync = ClipboardSync(appContext, transport, appScope)
+        notificationSync = NotificationSync(appContext, transport, appScope)
+        screenShare = ScreenShare(appContext, transport, appScope)
         signalClient = SignalClient(
             client = httpClient,
             signalUrl = Config.SIGNAL_URL,

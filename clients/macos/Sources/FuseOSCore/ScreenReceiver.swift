@@ -53,8 +53,10 @@ public final class ScreenReceiver {
         switch envelope.body {
         case .screenControl(let control):
             switch control.action {
-            case .stop: reset(to: .ended)
-            case .start: if state != .idle { state = .requesting }
+            // The phone echoes our own stop; only a stop we did not ask for is news.
+            case .stop: if state != .idle { reset(to: .ended) }
+            // The phone is about to stream — whether we asked or its user started it there.
+            case .start: if case .streaming = state {} else { state = .requesting }
             default: break
             }
         case .screenFrame(let frame):
