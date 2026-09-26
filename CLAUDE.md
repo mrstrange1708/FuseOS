@@ -48,7 +48,7 @@ Clipboard sync is a broadcast, so it can loop. The rule (see `docs/protocol.md`)
 
 ## Scope discipline (v1)
 
-v1 is **foundation only**: auth, device linking, clipboard sync (text + images), file transfer, and Share-sheet send. **Screen mirroring, remote control, and call/SMS relay are explicitly out of scope for v1** — don't build toward them yet; they're a later phase and would change the transport design.
+v1 is auth, device linking, clipboard sync (text + images, with history catch-up), file transfer, Share-sheet send, and — pulled into v1 by the user on 2026-09-26 — notification sync and **view-only** screen mirroring, both phone → Mac over the existing LAN channel (`docs/protocol.md` §9–§11). **Remote control and call/SMS relay are still out of scope for v1** — remote control needs an AccessibilityService (off the table, Play Store), and relay would change the transport design.
 
 ## Commands
 
@@ -99,8 +99,10 @@ session that ends mid-plan leaves nothing else behind. When a day lands, tick it
 same commit as the work, and add what the next session needs to know.
 
 v1 is being finished against a plan agreed on 2026-08-20 (days 1–2) and replanned on 2026-09-21
-into ten days that end with v1 released and hosted. v2 (mirroring, remote control, call/SMS relay,
-cross-network relay) starts only after v1 ships.
+into ten days that end with v1 released and hosted. On 2026-09-26 the user pulled notification
+sync and view-only screen mirroring into v1 and spent that day on them, so days 3–10 below have
+not started and their dates slip — replan them with the user. v2 (remote control, call/SMS
+relay, cross-network relay) starts only after v1 ships.
 
 | Day | Date | Work | State |
 | --- | --- | --- | --- |
@@ -108,6 +110,7 @@ cross-network relay) starts only after v1 ships.
 | — | Aug 21 | File transfer core, no UI: `FileTransfer` on both clients, 64 KB chunks, sha-256 verify, `Ack` | ✅ done |
 | 1 | Sep 21 | File transfer UI: macOS drop zone + open panel, Android SAF picker, progress, cancel both ways (`FileCancel`), files land in Downloads | ✅ done — needs a two-device run |
 | 2 | Sep 22 | Share for files both ways: Android `ACTION_SEND`/`SEND_MULTIPLE` of any type (done); Mac via Finder Services + drop on the menu bar item — a real Share extension needs a sandbox + App Group signed with a paid Team ID | ✅ done 2026-09-22 — needs a two-device run |
+| — | Sep 26 | Pulled forward by the user: Mac glass redesign (floating nav, link hero, Dock reopen + "Show in Dock", "Ask before sending copies"), Android glass redesign, stale device records hidden, history catch-up (`HistorySync`), notification sync, view-only screen mirroring with rotation (`docs/protocol.md` §9–§11) | ✅ done — needs a two-device run |
 | 3–4 | Sep 23–24 | Real auth: Better Auth on the canonical schema, replacing `server/src/auth/dev-auth.ts` | ⬜ next |
 | 5 | Sep 25 | Inngest (presence sweep, verification email) + instrument and measure the clipboard hot path | ⬜ |
 | 6 | Sep 26 | Hosting: server on an always-on free VM + Neon Postgres + TLS; release builds default to the hosted `https`/`wss` URL | ⬜ |
@@ -116,8 +119,9 @@ cross-network relay) starts only after v1 ships.
 | 10 | Sep 30 | Docs pass, tag v1.0.0 | ⬜ |
 
 Already working: auth (dev stand-in), device linking, presence/`/signal`, clipboard text and
-images both ways with history and reboot survival, Android Share-sheet send (text/images), file
-transfer both ways with progress and cancel.
+images both ways with history (caught up on connect) and reboot survival, Android Share-sheet send
+(text/images), file transfer both ways with progress and cancel, phone notifications on the Mac,
+and the phone's screen mirrored to the Mac.
 
 Two constraints worth knowing before proposing anything in this area:
 
