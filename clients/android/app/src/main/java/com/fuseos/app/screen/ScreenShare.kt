@@ -31,7 +31,19 @@ class ScreenShare(
     init {
         scope.launch {
             transport.incoming.collect { envelope ->
-                if (envelope.bodyCase != Envelope.BodyCase.SCREEN_CONTROL) return@collect
+                if (envelope.bodyCase != Envelope.BodyCase.SCREEN_CONTROL &&
+                    envelope.bodyCase != Envelope.BodyCase.REMOTE_INPUT
+                ) {
+                    return@collect
+                }
+                if (envelope.bodyCase == Envelope.BodyCase.REMOTE_INPUT) {
+                    // Only while this phone is showing its screen: the user consented to
+                    // the Mac seeing it, and control never outlives that consent.
+                    if (ScreenShareService.sharing.value) {
+                        RemoteControlService.instance?.perform(envelope.remoteInput)
+                    }
+                    return@collect
+                }
                 when (envelope.screenControl.action) {
                     ScreenControl.Action.START -> askForConsent()
                     ScreenControl.Action.STOP -> ScreenShareService.stop(appContext)
@@ -48,11 +60,17 @@ class ScreenShare(
     /** Safe from any thread: the socket write happens on IO. */
     fun send(action: ScreenControl.Action) {
         scope.launch(Dispatchers.IO) {
-            transport.broadcast(
-                transport.newEnvelope().setScreenControl(ScreenControl.newBuilder().setAction(action)).build(),
-            )
+            val control = ScreenControl.newBuilder()
+                .setAction(action)
+                // Tells the Mac whether a click on the mirror will do anything.
+                .setRemoteControl(RemoteControlService.instance != null)
+            transport.broadcast(transport.newEnvelope().setScreenControl(control).build())
         }
     }
+
+    /** Where the user turns remote control on: Settings → Accessibility. */
+    fun remoteControlSettingsIntent() =
+        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
     /**
      * Android's own consent dialog has to come from an activity. Holding the overlay

@@ -262,7 +262,7 @@ public final class LanTransport {
                     onEnvelope?(envelope)
                 case .some(.phoneNotification), .some(.notificationDismiss):
                     onNotificationEnvelope?(envelope)
-                case .some(.screenControl), .some(.screenFrame):
+                case .some(.screenControl), .some(.screenFrame), .some(.remoteInput):
                     onScreenEnvelope?(envelope)
                 }
             } catch {

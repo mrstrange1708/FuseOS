@@ -144,6 +144,21 @@
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
 
+        <!-- Remote control while mirroring. Off until the user enables it under
+             Settings → Accessibility; it performs gestures only (res/xml/remote_control). -->
+        <service
+            android:name=".screen.RemoteControlService"
+            android:exported="true"
+            android:label="FuseOS remote control"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/remote_control" />
+        </service>
+
         <!-- Hosts Android's screen-capture consent dialog and finishes. -->
         <activity
             android:name=".screen.ScreenConsentActivity"

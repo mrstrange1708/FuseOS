@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fuseos.app.data.ServiceLocator
 import com.fuseos.app.screen.ScreenConsentActivity
+import com.fuseos.app.screen.RemoteControlService
 import com.fuseos.app.screen.ScreenShareService
 import com.fuseos.app.file.Transfers
 import com.fuseos.app.ui.components.ErrorBanner
@@ -184,6 +185,10 @@ fun FuseShell() {
                             } else {
                                 runCatching { context.startActivity(sync.accessSettingsIntent()) }
                             }
+                        },
+                        remoteControlOn = RemoteControlService.instance != null,
+                        onRemoteControl = {
+                            runCatching { context.startActivity(ServiceLocator.screenShare.remoteControlSettingsIntent()) }
                         },
                         onRemoveDevice = viewModel::removeDevice,
                         onSignOut = viewModel::signOut,

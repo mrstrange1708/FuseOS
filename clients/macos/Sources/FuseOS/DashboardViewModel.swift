@@ -31,6 +31,8 @@ final class DashboardViewModel: ObservableObject {
     @Published var syncLatency: SyncLatency?
     /// Screen mirroring's state, for the Screen pane.
     @Published var screenState: ScreenReceiver.State = .idle
+    /// The phone will act on clicks and typing on its mirror (see `ScreenReceiver.canControl`).
+    @Published var canControlPhone = false
     /// The phone's screen. Created up front: it registers the transport's screen hook.
     lazy var screen = ScreenReceiver(transport: transport)
     private lazy var notifications = NotificationMirror(transport: transport)
@@ -96,6 +98,7 @@ final class DashboardViewModel: ObservableObject {
         notifications.onRemoved = { [weak self] key in self?.notifier.remove(key: key) }
         notifier.onUserDismissed = { [weak self] key in self?.notifications.dismiss(key: key) }
         screen.onStateChanged = { [weak self] state in self?.screenState = state }
+        screen.onCanControlChanged = { [weak self] can in self?.canControlPhone = can }
         transport.onConnectedPeersChanged = { [weak self] peers in
             self?.connected = peers
             self?.files.peersChanged(peers)

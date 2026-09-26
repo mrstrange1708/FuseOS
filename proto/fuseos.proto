@@ -41,6 +41,7 @@ message Envelope {
     HistorySync history_sync = 19;
     ScreenControl screen_control = 20;
     ScreenFrame screen_frame = 21;
+    RemoteInput remote_input = 22;
   }
 }
 
@@ -127,6 +128,9 @@ message ScreenControl {
     KEYFRAME           = 3;
   }
   Action action = 1;
+  // Phone -> Mac, with START: the phone will act on RemoteInput (its remote-control
+  // accessibility service is on). False means view only.
+  bool remote_control = 2;
 }
 
 // One H.264 access unit of the phone's screen, Annex-B framed. The codec config
@@ -139,4 +143,30 @@ message ScreenFrame {
   uint32 width    = 4;
   uint32 height   = 5;
   int64  pts_us   = 6;
+}
+
+// Mac -> phone while the phone's screen is mirrored: one input for the phone to perform
+// through its remote-control accessibility service. Positions are 0–1 of the mirrored
+// image, because that is all the Mac knows of the phone's screen. The phone ignores every
+// RemoteInput unless it is sharing its screen at that moment.
+message RemoteInput {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    TAP              = 1; // at (x, y)
+    SWIPE            = 2; // (x, y) -> (x2, y2) over duration_ms
+    LONG_PRESS       = 3; // at (x, y)
+    BACK             = 4;
+    HOME             = 5;
+    RECENTS          = 6;
+    TEXT             = 7; // text typed into the focused field
+    KEY              = 8; // key_code: an Android KeyEvent code (DEL = 67, ENTER = 66)
+  }
+  Kind   kind        = 1;
+  float  x           = 2;
+  float  y           = 3;
+  float  x2          = 4;
+  float  y2          = 5;
+  uint32 duration_ms = 6;
+  string text        = 7;
+  uint32 key_code    = 8;
 }
