@@ -35,12 +35,19 @@ internal class OverlayHost(context: Context) : LifecycleOwner, ViewModelStoreOwn
     lateinit var view: View
         private set
 
-    fun attach(view: View) {
+    /**
+     * [root] is the window's own root when the view is added to someone else's window —
+     * an input method's. Compose looks up its lifecycle from the *root* view, not the
+     * ComposeView, so owners on the view alone crash the keyboard the moment it opens.
+     */
+    fun attach(view: View, root: View? = null) {
         this.view = view
         savedState.performRestore(null)
-        view.setViewTreeLifecycleOwner(this)
-        view.setViewTreeViewModelStoreOwner(this)
-        view.setViewTreeSavedStateRegistryOwner(this)
+        for (target in listOfNotNull(view, root)) {
+            target.setViewTreeLifecycleOwner(this)
+            target.setViewTreeViewModelStoreOwner(this)
+            target.setViewTreeSavedStateRegistryOwner(this)
+        }
         registry.currentState = Lifecycle.State.RESUMED
     }
 
