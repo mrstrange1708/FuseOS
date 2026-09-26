@@ -53,6 +53,28 @@ final class ClipIsland {
         scheduleDismiss(after: Self.notificationSeconds)
     }
 
+    /// A phone call: stays up while it rings, with Answer and Decline; says who is on the
+    /// line once answered, with End; goes when the call does.
+    func present(_ call: PhoneCall, answer: @escaping () -> Void, decline: @escaping () -> Void, end: @escaping () -> Void) {
+        model.onCall = { button in
+            switch button {
+            case .answer: answer()
+            case .decline: decline()
+            case .end: end()
+            }
+        }
+        switch call.state {
+        case .ringing:
+            show(.call(call), peerName: nil, restart: true)
+            dismissTask?.cancel()
+        case .active:
+            show(.call(call), peerName: nil, restart: false)
+            scheduleDismiss(after: Self.notificationSeconds)
+        case .ended:
+            if case .call = model.content { dismiss() }
+        }
+    }
+
     /// A one-line event with no payload of its own: a link arriving, a ring starting.
     func present(symbol: String, title: String, detail: String) {
         show(.message(symbol: symbol, title: title, detail: detail), peerName: nil, restart: true)
@@ -171,12 +193,15 @@ private final class IslandModel: ObservableObject {
         case notification(PhoneNotification)
         case offer(ClipOffer)
         case message(symbol: String, title: String, detail: String)
+        case call(PhoneCall)
     }
 
     @Published var content: Content?
     @Published var peerName: String?
     @Published var expanded = false
     @Published var notch = CGSize(width: 180, height: 32)
+    enum CallButton { case answer, decline, end }
+    var onCall: ((CallButton) -> Void)?
 }
 
 /// A rectangle with a flat top and rounded bottom corners, plus the two small inverted
@@ -278,6 +303,23 @@ private struct IslandView: View {
                 .buttonStyle(.plain)
                 .fixedSize()
             }
+        case let .call(call):
+            HStack(spacing: 10) {
+                row(
+                    icon: "phone.fill",
+                    title: call.state == .ringing ? "Incoming call" : "On a call",
+                    detail: call.caller.isEmpty ? "Unknown caller" : call.caller,
+                    thumbnail: nil,
+                    incoming: true,
+                    trailing: "",
+                )
+                if call.state == .ringing {
+                    callButton("phone.down.fill", color: .red) { model.onCall?(.decline) }
+                    callButton("phone.fill", color: .green) { model.onCall?(.answer) }
+                } else {
+                    callButton("phone.down.fill", color: .red) { model.onCall?(.end) }
+                }
+            }
         case let .message(symbol, title, detail):
             row(icon: symbol, title: title, detail: detail, thumbnail: nil, incoming: true)
         case let .notification(n):
@@ -362,6 +404,17 @@ private struct IslandView: View {
                     .foregroundStyle(Color(red: 1, green: 0.48, blue: 0.27))
             }
         }
+    }
+
+    private func callButton(_ symbol: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(color))
+        }
+        .buttonStyle(.plain)
     }
 
     private func clipTitle(_ entry: ClipEntry) -> String {

@@ -10,6 +10,16 @@ public struct PhoneNotification: Identifiable, Equatable {
     public let text: String
     public let iconPNG: Data?
     public let postedAt: Date
+    /// The app offers an inline reply (a chat, an SMS), so the Mac can offer one too.
+    public let canReply: Bool
+}
+
+/// A phone call, as the phone's dialer notification describes it.
+public struct PhoneCall: Equatable {
+    public enum State: Equatable { case ringing, active, ended }
+    public let key: String
+    public let caller: String
+    public let state: State
 }
 
 /// The Mac end of notification sync (`PhoneNotification` in the proto).
@@ -20,6 +30,7 @@ public struct PhoneNotification: Identifiable, Equatable {
 public final class NotificationMirror {
     public var onPosted: ((PhoneNotification) -> Void)?
     public var onRemoved: ((String) -> Void)?
+    public var onCall: ((PhoneCall) -> Void)?
 
     private let transport: LanTransport
 
@@ -35,6 +46,27 @@ public final class NotificationMirror {
         transport.broadcast(envelope)
     }
 
+    /// Replies through the app's own inline-reply action on the phone.
+    public func reply(key: String, text: String) {
+        guard !text.isEmpty else { return }
+        var envelope = transport.newEnvelope()
+        envelope.notificationReply = FuseNotificationReply.with {
+            $0.key = key
+            $0.text = text
+        }
+        transport.broadcast(envelope)
+    }
+
+    public func answerCall() { callAction(.answer) }
+    public func declineCall() { callAction(.decline) }
+    public func endCall() { callAction(.end) }
+
+    private func callAction(_ action: FuseCallAction.Action) {
+        var envelope = transport.newEnvelope()
+        envelope.callAction = FuseCallAction.with { $0.action = action }
+        transport.broadcast(envelope)
+    }
+
     func receive(_ envelope: FuseEnvelope) {
         switch envelope.body {
         case .phoneNotification(let n):
@@ -46,7 +78,16 @@ public final class NotificationMirror {
                 text: n.text,
                 iconPNG: n.iconPng.isEmpty ? nil : n.iconPng,
                 postedAt: Date(timeIntervalSince1970: Double(n.postedAtUnixMs) / 1000),
+                canReply: n.canReply,
             ))
+        case .callState(let call):
+            let state: PhoneCall.State
+            switch call.state {
+            case .ringing: state = .ringing
+            case .active: state = .active
+            default: state = .ended
+            }
+            onCall?(PhoneCall(key: call.key, caller: call.caller, state: state))
         case .notificationDismiss(let d):
             onRemoved?(d.key)
         default:

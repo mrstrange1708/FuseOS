@@ -100,8 +100,15 @@ final class DashboardViewModel: ObservableObject {
         // Both ends send their history on every new channel, and each merges what it lacks.
         transport.onPeersJoined = { [weak self] _ in self?.clipboard.sendHistory() }
         notifications.onPosted = { [weak self] n in
-            self?.island.present(n)
+            // A replyable one is a banner (that is where Reply is); the rest use the island.
+            if !n.canReply { self?.island.present(n) }
             self?.notifier.post(n)
+        }
+        notifier.onUserReplied = { [weak self] key, text in self?.notifications.reply(key: key, text: text) }
+        notifications.onCall = { [weak self] call in
+            guard let self else { return }
+            self.island.present(call, answer: self.notifications.answerCall, decline: self.notifications.declineCall,
+                                end: self.notifications.endCall)
         }
         notifications.onRemoved = { [weak self] key in self?.notifier.remove(key: key) }
         notifier.onUserDismissed = { [weak self] key in self?.notifications.dismiss(key: key) }

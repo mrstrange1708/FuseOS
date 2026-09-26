@@ -78,6 +78,9 @@ message Envelope {
 | `HISTORY_SYNC` | either | recent clipboard history, sent once per new channel (§9) |
 | `PHONE_NOTIFICATION` | phone → Mac | a notification posted on the phone (§10) |
 | `NOTIFICATION_DISMISS` | either | a mirrored notification went away (§10) |
+| `NOTIFICATION_REPLY` | Mac → phone | reply to a mirrored chat or SMS notification (§10) |
+| `CALL_STATE` | phone → Mac | a call ringing, in progress, or ended (§10) |
+| `CALL_ACTION` | Mac → phone | answer, decline or end the call (§10) |
 | `SCREEN_CONTROL` | either | start / stop / keyframe for screen mirroring (§11) |
 | `SCREEN_FRAME` | phone → Mac | one H.264 access unit of the phone's screen (§11) |
 | `PHONE_COMMAND` | Mac → phone | ring the phone, stop ringing, or open its camera for a photo (§12) |
@@ -216,6 +219,8 @@ Phone → Mac, while linked.
 - **`key`** is Android's `StatusBarNotification` key. Posting again with the same key replaces the earlier one on the Mac (a chat's next message).
 - **macOS** (`NotificationMirror`, `PhoneNotifier`) shows it in the island and files it in Notification Center (list only — the island is the banner), with the key as the request id.
 - **Dismissal runs both ways.** The phone sends `NOTIFICATION_DISMISS` when one is removed there; the Mac removes it. Clearing or clicking one on the Mac sends `NOTIFICATION_DISMISS` back and the phone cancels it. The phone remembers keys the Mac cleared, so the removal that causes is not reported back. The phone is the only origin of notifications, so nothing here can loop.
+- **Replies.** A notification whose app offers an inline reply (chats, SMS) arrives with `can_reply`; on the Mac it shows as a banner with a Reply field instead of in the island. The typed text goes back as `NOTIFICATION_REPLY`, and the phone fills the app's own reply action with it, as if typed in the shade — so SMS replies need no SMS permission. The phone keeps the last 200 reply actions by key.
+- **Calls.** The dialer's call notification (`CATEGORY_CALL`) is mirrored as `CALL_STATE`, never as a notification: `RINGING`, `ACTIVE` once it shows a running timer, `ENDED` when it goes. The Mac's island shows it — Answer and Decline while ringing (and stays up), End once answered. `CALL_ACTION` is carried out through the telecom service when the user granted *Calls on your Mac* (`ANSWER_PHONE_CALLS`), else by pressing the call notification's own button whose label says answer/decline/end. Call audio stays on the phone — the Mac is not a Bluetooth headset — so answering from the Mac turns the phone's speaker on.
 - Notification text is user payload: LAN-only and encrypted like the clipboard, never logged, never in analytics.
 
 ## 11. Screen mirroring

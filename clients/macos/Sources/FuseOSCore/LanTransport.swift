@@ -269,7 +269,8 @@ public final class LanTransport {
                     onFileEnvelope?(envelope)
                 case .some(.clipText), .some(.clipImage), .some(.historySync):
                     onEnvelope?(envelope)
-                case .some(.phoneNotification), .some(.notificationDismiss):
+                case .some(.phoneNotification), .some(.notificationDismiss), .some(.notificationReply),
+                     .some(.callState), .some(.callAction):
                     onNotificationEnvelope?(envelope)
                 case .some(.screenControl), .some(.screenFrame), .some(.remoteInput):
                     onScreenEnvelope?(envelope)

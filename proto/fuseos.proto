@@ -47,6 +47,9 @@ message Envelope {
     MediaState media_state = 25;
     MediaCommand media_command = 26;
     PointerInput pointer_input = 27;
+    NotificationReply notification_reply = 28;
+    CallState call_state = 29;
+    CallAction call_action = 30;
   }
 }
 
@@ -100,6 +103,7 @@ message PhoneNotification {
   string text              = 5;
   bytes  icon_png          = 6; // the app's icon, small; may be empty
   int64  posted_at_unix_ms = 7;
+  bool   can_reply         = 8; // the app offers an inline reply (a chat, an SMS)
 }
 
 // A mirrored notification went away. The phone sends it when one is removed there; the
@@ -248,4 +252,37 @@ message PointerInput {
   string text      = 4;
   uint32 key_code  = 5;
   uint32 modifiers = 6; // bitmask: 1 command, 2 shift, 4 option, 8 control
+}
+
+// Mac -> phone: reply to a mirrored notification that can_reply. The phone fills the
+// app's own inline-reply action with this text, as if typed in the shade — which is how
+// SMS and chat replies work without FuseOS holding any SMS permission.
+message NotificationReply {
+  string key  = 1;
+  string text = 2;
+}
+
+// Phone -> Mac: a phone call's progress, read from the dialer's call notification.
+message CallState {
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    RINGING           = 1; // incoming, not yet answered
+    ACTIVE            = 2; // in progress (answered, or outgoing)
+    ENDED             = 3;
+  }
+  State  state  = 1;
+  string key    = 2; // the call notification's key; one call = one key
+  string caller = 3; // name, or number when the contact is unknown
+}
+
+// Mac -> phone: answer, decline or hang up. Call audio stays on the phone (the Mac is not
+// a Bluetooth headset), so answering from the Mac also turns the phone's speaker on.
+message CallAction {
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+    ANSWER             = 1;
+    DECLINE            = 2; // an incoming call
+    END                = 3; // an active call
+  }
+  Action action = 1;
 }

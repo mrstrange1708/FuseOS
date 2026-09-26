@@ -9,6 +9,7 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationManagerCompat
 import com.fuseos.app.net.LanTransport
+import com.fuseos.proto.CallState
 import com.fuseos.proto.Envelope
 import com.fuseos.proto.NotificationDismiss
 import com.fuseos.proto.PhoneNotification
@@ -60,16 +61,65 @@ class NotificationSync(
     fun accessSettingsIntent() = android.content.Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
         .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
 
+    /** Each replyable notification's inline-reply action, by key, for the Mac's replies. */
+    private val replyActions = object : LinkedHashMap<String, Notification.Action>() {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Notification.Action>) = size > 200
+    }
+    /** The call notification being mirrored, and its actions (the fallback for answering). */
+    @Volatile private var call: StatusBarNotification? = null
+    /** Declared before `init`: its collector may run before later properties exist. */
+    val calls = CallControl(appContext)
+
     init {
-        // The Mac clearing one of ours: clear it here too.
         scope.launch {
             transport.incoming.collect { envelope ->
-                if (envelope.bodyCase == Envelope.BodyCase.NOTIFICATION_DISMISS) {
-                    val key = envelope.notificationDismiss.key
-                    clearedByPeer += key
-                    FuseNotificationListener.instance?.runCatching { cancelNotification(key) }
+                when (envelope.bodyCase) {
+                    // The Mac clearing one of ours: clear it here too.
+                    Envelope.BodyCase.NOTIFICATION_DISMISS -> {
+                        val key = envelope.notificationDismiss.key
+                        clearedByPeer += key
+                        FuseNotificationListener.instance?.runCatching { cancelNotification(key) }
+                    }
+                    Envelope.BodyCase.NOTIFICATION_REPLY ->
+                        reply(envelope.notificationReply.key, envelope.notificationReply.text)
+                    Envelope.BodyCase.CALL_ACTION -> calls.perform(envelope.callAction.action, call)
+                    else -> Unit
                 }
             }
+        }
+    }
+
+    /**
+     * Fills the app's own inline-reply action, as if the user had typed in the shade. This
+     * is how an SMS or chat reply goes out with no SMS permission at all.
+     */
+    private fun reply(key: String, text: String) {
+        val action = synchronized(replyActions) { replyActions[key] } ?: return
+        val inputs = action.remoteInputs ?: return
+        if (text.isBlank()) return
+        runCatching {
+            val results = android.os.Bundle().apply { inputs.forEach { putCharSequence(it.resultKey, text) } }
+            val intent = android.content.Intent()
+            android.app.RemoteInput.addResultsToIntent(inputs, intent, results)
+            action.actionIntent.send(appContext, 0, intent)
+        }
+    }
+
+    /** A call notification (the dialer's): mirrored as a call, never as a notification. */
+    private fun postedCall(sbn: StatusBarNotification, caller: String) {
+        call = sbn
+        val active = sbn.notification.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER)
+        sendCall(if (active) CallState.State.ACTIVE else CallState.State.RINGING, sbn.key, caller)
+    }
+
+    private fun sendCall(state: CallState.State, key: String, caller: String) {
+        if (transport.connectedPeers.value.isEmpty()) return
+        scope.launch(Dispatchers.IO) {
+            transport.broadcast(
+                transport.newEnvelope()
+                    .setCallState(CallState.newBuilder().setState(state).setKey(key).setCaller(caller))
+                    .build(),
+            )
         }
     }
 
@@ -87,7 +137,13 @@ class NotificationSync(
             groupSummary = n.flags and Notification.FLAG_GROUP_SUMMARY != 0,
             hasContent = title.isNotBlank() || text.isNotBlank(),
         )
+        if (n.category == Notification.CATEGORY_CALL && sbn.packageName != appContext.packageName) {
+            if (_enabled.value) postedCall(sbn, title)
+            return
+        }
         if (!forward) return
+        val replyAction = n.actions?.firstOrNull { it.remoteInputs?.isNotEmpty() == true }
+        if (replyAction != null) synchronized(replyActions) { replyActions[sbn.key] = replyAction }
         scope.launch(Dispatchers.IO) {
             val message = PhoneNotification.newBuilder()
                 .setKey(sbn.key)
@@ -97,11 +153,18 @@ class NotificationSync(
                 .setText(text.take(MAX_TEXT))
                 .setIconPng(icon(sbn.packageName))
                 .setPostedAtUnixMs(sbn.postTime)
+                .setCanReply(replyAction != null)
             transport.broadcast(transport.newEnvelope().setPhoneNotification(message).build())
         }
     }
 
     fun removed(sbn: StatusBarNotification) {
+        if (call?.key == sbn.key) {
+            call = null
+            sendCall(CallState.State.ENDED, sbn.key, "")
+            return
+        }
+        synchronized(replyActions) { replyActions.remove(sbn.key) }
         if (clearedByPeer.remove(sbn.key)) return
         if (!_enabled.value || transport.connectedPeers.value.isEmpty()) return
         scope.launch(Dispatchers.IO) {
