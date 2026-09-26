@@ -178,6 +178,20 @@ final class ClipboardSyncTests: XCTestCase {
         return image.representation(using: .png, properties: [:])!
     }
 
+    // MARK: - Ask before sending
+
+    func testAnOfferedCopyWaitsForSend() {
+        var offered: ClipOffer?
+        sync.onLocalCopy = { offered = $0 }
+        copyText("wait for me")
+        let before = envelopesSent { sync.checkForLocalChange() }
+        XCTAssertEqual(before, 0, "an offer must not leave the device on its own")
+        XCTAssertEqual(offered?.text, "wait for me")
+        let after = envelopesSent { offered?.send() }
+        XCTAssertEqual(after, 1)
+        XCTAssertEqual(sync.history.first?.text, "wait for me")
+    }
+
     // MARK: - History sync
 
     private func historySync(_ texts: [(String, Int64)]) -> FuseEnvelope {

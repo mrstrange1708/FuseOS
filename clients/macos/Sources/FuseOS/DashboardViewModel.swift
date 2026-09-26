@@ -38,6 +38,8 @@ final class DashboardViewModel: ObservableObject {
     /// In flight or finished registration. Cleared on failure so the next action retries.
     private var startTask: Task<String, Error>?
 
+    static let askBeforeSendKey = "askBeforeSend"
+
     func start() {
         guard !started else { return }
         started = true
@@ -86,6 +88,16 @@ final class DashboardViewModel: ObservableObject {
             self.transfers = Array(([progress] + self.transfers.filter { $0.id != progress.id }).prefix(20))
             // Files get the island too: it swells out of the notch and fills as bytes move.
             self.island.present(progress, peerName: self.peerName)
+        }
+        // Asking is opt-in (Account → "Ask before sending copies"); read per copy so the
+        // toggle applies at once. With nothing linked there is no one to ask about.
+        clipboard.onLocalCopy = { [weak self] offer in
+            guard let self else { return }
+            if UserDefaults.standard.bool(forKey: Self.askBeforeSendKey), !self.connected.isEmpty {
+                self.island.offer(offer, peerName: self.peerName)
+            } else {
+                offer.send()
+            }
         }
         clipboard.onClipEvent = { [weak self] entry in
             guard let self else { return }

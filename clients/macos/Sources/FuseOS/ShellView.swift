@@ -431,6 +431,7 @@ private struct AccountPane: View {
     @State private var draftName = ""
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @AppStorage(DockIcon.key) private var showInDock = true
+    @AppStorage(DashboardViewModel.askBeforeSendKey) private var askBeforeSend = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -485,6 +486,11 @@ private struct AccountPane: View {
                     // the user who is still looking at it.
                     DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
                 }
+
+            Toggle("Ask before sending copies", isOn: $askBeforeSend)
+                .toggleStyle(.checkbox)
+                .font(.system(size: 12))
+                .help("Each copy waits in the island for you to click Send. Off, copies go instantly.")
 
             Button("Link manually", action: onLinkManually)
             Button("Sign out") {

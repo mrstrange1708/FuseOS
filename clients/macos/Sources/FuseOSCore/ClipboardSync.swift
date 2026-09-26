@@ -18,6 +18,13 @@ public struct ClipEntry: Identifiable, Equatable {
     public static func == (a: ClipEntry, b: ClipEntry) -> Bool { a.id == b.id }
 }
 
+/// A local copy that has not been sent yet. Calling `send` records and broadcasts it.
+public struct ClipOffer {
+    public let text: String?
+    public let imageData: Data?
+    public let send: () -> Void
+}
+
 /// Mirrors the clipboard to paired devices over the LAN data plane.
 ///
 /// **`NSPasteboard` has no change notification.** There is no observer, no delegate, no
@@ -50,6 +57,11 @@ public final class ClipboardSync {
     /// Separate from `onHistoryChanged` because that also fires on eviction and on
     /// sign-out clearing, neither of which is an event worth showing anyone.
     public var onClipEvent: ((ClipEntry) -> Void)?
+
+    /// Set, and a local copy is offered instead of sent: the handler decides, and calls
+    /// `send` if the user says yes. Unset — the default — every copy goes at once, because
+    /// latency is the product and a prompt is a click in front of every sync.
+    public var onLocalCopy: ((ClipOffer) -> Void)?
 
     private var nextId = 0
     private let store = ClipHistoryStore()
@@ -263,8 +275,16 @@ public final class ClipboardSync {
         guard_ = loopGuard // shouldEmit consumes the one-shot suppression
         guard allowed else { return }
 
-        record(text: entry.text, imageData: entry.image, mime: entry.mime, fromSelf: true)
-        transport.broadcast(body(transport.newEnvelope()))
+        let send = { [weak self] in
+            guard let self else { return }
+            self.record(text: entry.text, imageData: entry.image, mime: entry.mime, fromSelf: true)
+            self.transport.broadcast(body(self.transport.newEnvelope()))
+        }
+        if let offer = onLocalCopy {
+            offer(ClipOffer(text: entry.text, imageData: entry.image, send: send))
+        } else {
+            send()
+        }
     }
 
     func apply(_ envelope: FuseEnvelope) {
