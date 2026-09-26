@@ -8,6 +8,8 @@ struct DeviceRow: View {
     /// A direct encrypted LAN channel, which is stronger than merely being online:
     /// online means the server can see it, connected means we can talk to it.
     let isConnected: Bool
+    /// Offered for offline devices: the stale record a reinstall leaves behind.
+    var onRemove: (() -> Void)?
 
     var body: some View {
         DeviceCard(
@@ -16,6 +18,7 @@ struct DeviceRow: View {
             status: isConnected ? "Linked · direct" : (presence.online ? "Online" : "Offline"),
             lit: isConnected || presence.online,
             battery: presence.battery,
+            onRemove: isConnected || presence.online ? nil : onRemove,
         )
     }
 }
@@ -27,6 +30,7 @@ struct DeviceCard: View {
     let status: String
     let lit: Bool
     let battery: Int?
+    var onRemove: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 14) {
@@ -45,6 +49,11 @@ struct DeviceCard: View {
             }
             Spacer(minLength: 0)
             BatteryBadge(percent: battery)
+            if let onRemove {
+                Button("Remove", action: onRemove)
+                    .buttonStyle(CapsuleButtonStyle(prominent: false, destructive: true))
+                    .help("Remove this device from your account")
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity)

@@ -192,7 +192,20 @@ class DashboardViewModel(
         // MainActivity stops the foreground service when the token clears.
         viewModelScope.launch {
             connection.stop()
-            session.clear()
+            // Ends the session on the server too, so the token stops working at once.
+            ServiceLocator.authRepository.signOut()
+        }
+    }
+
+    /** Removes a stale (offline) device from the account, then reloads the list. */
+    fun removeDevice(id: String) {
+        viewModelScope.launch {
+            try {
+                repo.removeDevice(id)
+                refresh()
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.message) }
+            }
         }
     }
 

@@ -481,11 +481,13 @@ private struct DevicesPane: View {
                 PaneTitle("Devices", subtitle: "Everything signed in to this account links itself.")
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 14)], spacing: 14) {
                     SelfDeviceRow(name: viewModel.selfDevice?.name)
-                    ForEach(viewModel.peers) { peer in
+                    // Every record, stale ones included, so an old one can be removed here.
+                    ForEach(viewModel.devicesByStanding) { peer in
                         DeviceRow(
                             device: peer,
                             presence: viewModel.onlineState(for: peer),
                             isConnected: viewModel.isConnected(peer),
+                            onRemove: { Task { await viewModel.removeDevice(peer) } },
                         )
                     }
                 }

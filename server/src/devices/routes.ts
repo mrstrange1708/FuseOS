@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { authenticate } from '../auth/session.js';
@@ -12,6 +12,8 @@ const registerSchema = z.object({
   publicKey: z.string().trim().min(1).max(1000),
   battery: z.number().int().min(0).max(100).optional(),
 });
+
+const deviceParamsSchema = z.object({ id: z.string().uuid() });
 
 const listQuerySchema = z.object({
   // The caller's own device id, so we can flag which row is itself.
@@ -107,5 +109,37 @@ export function registerDeviceRoutes(app: FastifyInstance): void {
       };
     });
     return reply.send({ devices: list });
+  });
+
+  // Remove one of the caller's devices — the stale record a reinstall leaves behind.
+  // Only offline devices: a live one is signed out on the device itself, not from afar.
+  app.delete('/devices/:id', { preHandler: authenticate }, async (request, reply) => {
+    const userId = request.userId;
+    if (!userId) return;
+    const parsed = deviceParamsSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: { code: 'invalid_request', message: 'Invalid device id.' },
+      });
+    }
+    if (presence.isOnline(parsed.data.id)) {
+      return reply.status(409).send({
+        error: {
+          code: 'device_online',
+          message: 'That device is online. Sign out on it instead.',
+        },
+      });
+    }
+    const removed = await getDb()
+      .delete(devices)
+      .where(and(eq(devices.id, parsed.data.id), eq(devices.userId, userId)))
+      .returning({ id: devices.id });
+    // Another account's device reads as not found: whether it exists is not our business.
+    if (removed.length === 0) {
+      return reply.status(404).send({
+        error: { code: 'device_not_found', message: 'No such device on this account.' },
+      });
+    }
+    return reply.status(204).send();
   });
 }

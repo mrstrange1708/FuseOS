@@ -33,7 +33,7 @@ Errors: `400 invalid_request` (failed validation), `409 email_taken`, `401 inval
 | --- | --- | --- |
 | POST | `/devices` | Register this device (name, platform, public_key) |
 | GET | `/devices` | List the caller's devices |
-| DELETE | `/devices/:id` | **Not implemented.** Revoke/remove a device (cascades trust) — lands when device management becomes a screen |
+| DELETE | `/devices/:id` | Remove one of the caller's **offline** devices (the stale record a reinstall leaves behind) |
 
 **`POST /devices`**
 ```jsonc
@@ -53,6 +53,8 @@ Validation: `platform ∈ {android, macos}`, `name` length 1–100, `publicKey` 
 ] }
 ```
 `online` and `battery` reflect live `/signal` presence (falling back to the last persisted value).
+
+**`DELETE /devices/:id`** — `204` on success. `400 invalid_request` for a non-UUID id, `404 device_not_found` when it is not the caller's (another account's device reads the same as a missing one), and `409 device_online` for a device with a live `/signal` socket: a live device is signed out on the device itself, not removed from afar. Both clients offer it on offline devices in their device lists.
 
 ## Trust
 

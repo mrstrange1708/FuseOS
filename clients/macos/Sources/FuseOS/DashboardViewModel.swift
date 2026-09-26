@@ -145,8 +145,12 @@ final class DashboardViewModel: ObservableObject {
         transport.stop()
     }
 
-    /// Sign-out, as distinct from `stop()`: the stored history goes too.
+    /// Sign-out, as distinct from `stop()`: the stored history goes too, and the session
+    /// ends on the server as well as here.
     func signOut() {
+        if let token = SessionStore.shared.token {
+            Task.detached { await AuthAPI.signOut(token: token) }
+        }
         island.dismiss()
         signal.stop()
         files.stop()
@@ -255,6 +259,25 @@ final class DashboardViewModel: ObservableObject {
     /// one there is. Used wherever the UI would otherwise say "your phone".
     var peerName: String? {
         (peers.first { connected.contains($0.id) } ?? peers.first)?.name
+    }
+
+    /// Removes a stale (offline) device from the account, then reloads the list.
+    func removeDevice(_ device: DeviceItem) async {
+        do {
+            try await ControlPlane.removeDevice(id: device.id)
+            await refresh()
+        } catch {
+            errorMessage = (error as? AuthError)?.message ?? error.localizedDescription
+        }
+    }
+
+    /// Every other device, the connected first, then online, then the rest — the Devices
+    /// pane's order, which shows stale records so they can be removed.
+    var devicesByStanding: [DeviceItem] {
+        let rank = Dictionary(uniqueKeysWithValues: allPeers.map { d in
+            (d.id, isConnected(d) ? 0 : onlineState(for: d).online ? 1 : 2)
+        })
+        return allPeers.sorted { rank[$0.id, default: 2] < rank[$1.id, default: 2] }
     }
 
     /// True when there is a live encrypted LAN channel to this device.

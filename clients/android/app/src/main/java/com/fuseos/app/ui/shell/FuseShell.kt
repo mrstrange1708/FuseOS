@@ -183,6 +183,7 @@ fun FuseShell() {
                                 runCatching { context.startActivity(sync.accessSettingsIntent()) }
                             }
                         },
+                        onRemoveDevice = viewModel::removeDevice,
                         onSignOut = viewModel::signOut,
                     )
                 }

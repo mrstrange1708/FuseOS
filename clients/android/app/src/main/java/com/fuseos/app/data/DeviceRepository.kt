@@ -41,6 +41,8 @@ class DeviceRepository(
     suspend fun listDevices(selfId: String?): List<DeviceItem> =
         api.listDevices(selfId).devices
 
+    suspend fun removeDevice(id: String) = api.removeDevice(id)
+
     suspend fun initiatePairing(deviceId: String): PairInitiateResponse =
         api.initiatePairing(PairInitiateRequest(deviceId))
 

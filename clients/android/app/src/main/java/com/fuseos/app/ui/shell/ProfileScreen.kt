@@ -60,6 +60,7 @@ fun ProfileScreen(
     notificationAccess: Boolean,
     notificationsOn: Boolean,
     onNotifications: () -> Unit,
+    onRemoveDevice: (String) -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -128,13 +129,21 @@ fun ProfileScreen(
                 online = true,
                 battery = selfBattery,
             )
-            state.peers.forEach { device ->
+            // Every record, stale ones included, so an old one can be removed here.
+            state.allPeers.sortedBy { if (it.id in state.connected) 0 else 1 }.forEach { device ->
+                val linked = device.id in state.connected
+                val online = linked || state.presence[device.id]?.online == true
                 DeviceCard(
                     name = device.name,
-                    subtitle = if (device.id in state.connected) "Linked · direct" else "Not linked",
+                    subtitle = when {
+                        linked -> "Linked · direct"
+                        online -> "Online"
+                        else -> "Offline"
+                    },
                     platform = device.platform,
-                    online = device.id in state.connected,
+                    online = online,
                     battery = peerBattery(device.id),
+                    onRemove = if (online) null else ({ onRemoveDevice(device.id) }),
                 )
             }
         }

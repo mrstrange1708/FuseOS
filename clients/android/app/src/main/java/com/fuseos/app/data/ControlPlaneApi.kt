@@ -2,6 +2,7 @@ package com.fuseos.app.data
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -26,6 +27,16 @@ class ControlPlaneApi(
 
     suspend fun listDevices(selfId: String?): DeviceListResponse =
         get("/devices" + if (selfId != null) "?self=$selfId" else "")
+
+    /** Removes a stale (offline) device from the account. 204 on success. */
+    suspend fun removeDevice(id: String) {
+        val token = tokenProvider()
+        val response: HttpResponse = client.delete("$baseUrl/devices/$id") {
+            if (token != null) header(HttpHeaders.Authorization, "Bearer $token")
+        }
+        if (response.status.isSuccess()) return
+        decode<Unit>(response)
+    }
 
     suspend fun initiatePairing(request: PairInitiateRequest): PairInitiateResponse =
         post("/pairing/initiate", request)
