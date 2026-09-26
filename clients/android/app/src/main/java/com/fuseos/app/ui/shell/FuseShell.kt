@@ -131,6 +131,9 @@ fun FuseShell() {
                             context.startActivity(Intent(context, ScreenConsentActivity::class.java))
                         },
                         onStop = { ScreenShareService.stop(context) },
+                        onTrackpad = {
+                            context.startActivity(Intent(context, com.fuseos.app.actions.TrackpadActivity::class.java))
+                        },
                     )
 
                     // Never selected: the centre button is an action, and tapping it

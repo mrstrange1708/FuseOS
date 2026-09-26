@@ -167,6 +167,13 @@
             android:taskAffinity=""
             android:theme="@style/Theme.FuseOS.Transparent" />
 
+        <!-- The phone as the Mac's trackpad and keyboard. -->
+        <activity
+            android:name=".actions.TrackpadActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.FuseOS" />
+
         <!-- Handoff for links: "Open on Mac" in the Share sheet. -->
         <activity
             android:name=".actions.OpenOnMacActivity"

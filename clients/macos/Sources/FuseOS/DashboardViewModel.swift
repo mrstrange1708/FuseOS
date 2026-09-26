@@ -41,6 +41,9 @@ final class DashboardViewModel: ObservableObject {
     /// What the phone is playing, and the controls for it.
     lazy var media = MediaRemote(transport: transport)
     @Published var nowPlaying: NowPlaying?
+    /// The phone as this Mac's trackpad and keyboard, when the user allows it.
+    private lazy var pointer = PointerReceiver(transport: transport)
+    private let macPointer = MacPointer()
     private let notifier = PhoneNotifier()
     /// The notch HUD. Owned here because this is where clip events already arrive.
     private let island = ClipIsland()
@@ -105,6 +108,7 @@ final class DashboardViewModel: ObservableObject {
         screen.onStateChanged = { [weak self] state in self?.screenState = state }
         screen.onCanControlChanged = { [weak self] can in self?.canControlPhone = can }
         media.onChange = { [weak self] playing in self?.nowPlaying = playing }
+        pointer.onEvent = { [weak self] event in self?.macPointer.handle(event) }
         phone.onOpenLink = { [weak self] url in
             NSWorkspace.shared.open(url)
             self?.island.present(symbol: "safari", title: "Opened from \(self?.peerName ?? "your phone")", detail: url.host ?? url.absoluteString)

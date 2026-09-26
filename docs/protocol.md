@@ -84,6 +84,7 @@ message Envelope {
 | `OPEN_LINK` | either | open an http(s) link on the other device (§12) |
 | `MEDIA_STATE` | phone → Mac | what the phone is playing (§13) |
 | `MEDIA_COMMAND` | Mac → phone | play/pause, next, previous, seek (§13) |
+| `POINTER_INPUT` | phone → Mac | the phone as the Mac's trackpad and keyboard (§14) |
 | `REMOTE_INPUT` | Mac → phone | a tap, swipe, long-press, Back/Home/Recents, text or key for the phone to perform (§11) |
 
 ## 4. Loop-prevention invariant (critical)
@@ -245,3 +246,9 @@ Anything the phone must show while FuseOS is in the background (the camera, a li
 
 - **Phone** (`notify/MediaSync.kt`) — other apps' media sessions are readable only by an enabled notification listener, which FuseOS already is for notification sync, so Now Playing starts when that listener connects. It follows the session that is playing, else the most recent, and sends `MEDIA_STATE` when its track or play state changes and whenever a Mac connects; `active = false` when nothing is playing. Position is carried to the send time (`position_ms` at `position_at_unix_ms`), and artwork (a 256 px JPEG) only with a new track.
 - **Mac** (`MediaRemote`, `NowPlaying`) — shows a Now Playing panel on Home and advances the bar itself from the wall clock while playing, so position-only updates never cross the wire. Its buttons send `MEDIA_COMMAND` (`PLAY_PAUSE`, `NEXT`, `PREVIOUS`, `SEEK`), which the phone applies to the session's transport controls. The panel goes when the phone does.
+
+## 14. The phone as the Mac's trackpad and keyboard
+
+*Use as trackpad* on the phone's Screen tab opens a full-screen pad: one finger sends `MOVE` deltas (scaled 1.6×), a tap `CLICK`, a second tap within 320 ms `DOUBLE_CLICK`, a two-finger tap `RIGHT_CLICK`, two fingers `SCROLL`, and a still hold of 420 ms turns into `DRAG_START` … `DRAG_END`. A text field below types `TEXT` into whatever has focus on the Mac (it holds one sentinel space, so a backspace on an "empty" field still arrives, as `KEY` 51), and a key row sends Esc, Tab, the arrows and Return as Mac virtual key codes.
+
+The Mac acts on `POINTER_INPUT` only when **both** gates are open: the user's *Let your phone control this Mac* switch in Account (off by default), and macOS Accessibility access for FuseOS (turning the switch on asks macOS to show its prompt). It then posts real `CGEvent`s — mouse moves clamped to the screens, clicks with the right click count, pixel scroll-wheel events, and Unicode keyboard events for text.
