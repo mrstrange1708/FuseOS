@@ -30,6 +30,7 @@ fun AppRoot() {
     val connectDone by repository.connectDoneFlow.collectAsState(initial = true)
 
     val destination = when {
+        DemoMode.isOn -> RootDestination.Home
         token == null -> RootDestination.Auth
         deviceName == null -> RootDestination.DeviceName
         !connectDone -> RootDestination.Connect

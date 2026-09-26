@@ -1,5 +1,7 @@
 package com.fuseos.app.ui.dashboard
 
+import com.fuseos.app.ui.DemoMode
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -88,6 +90,16 @@ class DashboardViewModel(
     fun sendCurrentClipboard(): Boolean = clipboard.sendCurrent()
 
     init {
+        if (DemoMode.isOn) {
+            _state.value = DemoMode.state()
+            clipboard.merge(DemoMode.history())
+            ServiceLocator.transfers.showForDemo(DemoMode.transfers())
+        } else {
+            startLive()
+        }
+    }
+
+    private fun startLive() {
         viewModelScope.launch { bootstrap() }
         // lanAddress is re-read on every presence/channel change: it is null until the
         // listener binds, and it changes outright when the device switches network.

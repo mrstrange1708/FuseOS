@@ -25,6 +25,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -186,6 +189,18 @@ fun FuseShell() {
             }
         }
 
+        // Content fades out before it reaches the bar, rather than running into it.
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(120.dp)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color.Transparent, MaterialTheme.colorScheme.background),
+                    ),
+                ),
+        )
         FuseNavBar(
             selected = tab,
             onSelect = { tab = it },

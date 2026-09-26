@@ -1,6 +1,5 @@
 package com.fuseos.app.ui.dashboard
 
-import com.fuseos.app.ui.components.glassCard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -22,11 +21,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-/** One device, with presence and battery. Shared by home, profile and the connect space. */
+/** One device as a row, with presence and battery. Sits inside a [com.fuseos.app.ui.shell.Panel]. */
 @Composable
 internal fun DeviceCard(
     name: String,
@@ -38,8 +36,7 @@ internal fun DeviceCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .glassCard(16.dp)
-            .padding(16.dp),
+            .padding(horizontal = 4.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -57,18 +54,27 @@ internal fun DeviceCard(
         }
         Spacer(Modifier.size(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(name, fontWeight = FontWeight.SemiBold)
-            Text(
-                subtitle,
-                fontFamily = FontFamily.Monospace,
-                style = MaterialTheme.typography.labelSmall,
-                color = if (online) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text(name, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(if (online) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant),
+                )
+                Spacer(Modifier.size(6.dp))
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = if (online) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         if (battery != null) {
             Text(
                 "$battery%",
-                fontFamily = FontFamily.Monospace,
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Medium,
                 color = if (battery <= 20) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
             )

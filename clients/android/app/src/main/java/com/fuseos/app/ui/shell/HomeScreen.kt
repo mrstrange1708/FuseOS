@@ -34,11 +34,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,7 +44,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.fuseos.app.ui.components.FusePrimaryButton
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -80,14 +76,14 @@ fun HomeScreen(
 ) {
     val connect = state.connect
     val peer = state.peers.firstOrNull { it.id == connect.peerId }
-
     val linked = connect.stage == ConnectStage.Connected
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         LinkHero(
             selfName = state.selfDevice?.name ?: "This phone",
@@ -95,100 +91,88 @@ fun HomeScreen(
             stage = connect.stage,
             peerBattery = peer?.let { peerBattery(it.id) },
         )
-        Spacer(Modifier.height(22.dp))
 
-        Text("Files", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(10.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .glassCard(18.dp)
-                .clickable(enabled = linked, onClick = onSendFile)
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = if (linked) 0.16f else 0.07f)),
-                contentAlignment = Alignment.Center,
+        Panel(title = "Files") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = if (linked) 0.10f else 0.04f))
+                    .clickable(enabled = linked, onClick = onSendFile)
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
+                IconTile(
                     Icons.Filled.UploadFile,
-                    contentDescription = null,
                     tint = if (linked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.size(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (linked) "Send a file to ${peer?.name ?: "your Mac"}" else "Send a file",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        if (linked) "It lands in the Mac's Downloads." else "Link your Mac first.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
-            Spacer(Modifier.size(14.dp))
-            Column(Modifier.weight(1f)) {
+            transfers.take(4).forEach { transfer ->
+                TransferListRow(transfer, peerName, onCancelTransfer, onOpenTransfer)
+            }
+        }
+
+        Panel(
+            title = "Clipboard",
+            action = {
                 Text(
-                    if (linked) "Send a file to ${peer?.name ?: "your Mac"}" else "Send a file",
-                    fontWeight = FontWeight.SemiBold,
+                    "See all",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onSeeAll).padding(4.dp),
                 )
+            },
+        ) {
+            if (history.isEmpty()) {
                 Text(
-                    if (linked) "It lands in the Mac's Downloads." else "Link your Mac first.",
-                    style = MaterialTheme.typography.bodySmall,
+                    "Copy something on either device and it shows up here.",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(4.dp),
                 )
+            } else {
+                // Five proves sync is alive without turning Home into History.
+                history.take(5).forEach { entry -> ClipListRow(entry, peerName, onCopy) }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        transfers.forEach { transfer ->
-            TransferRow(transfer, peerName, onCancelTransfer, onOpenTransfer)
-            Spacer(Modifier.height(8.dp))
-        }
-
-        Spacer(Modifier.height(14.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Recent", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.weight(1f))
-            Text(
-                "See all",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable(onClick = onSeeAll),
-            )
-        }
-        Spacer(Modifier.height(10.dp))
-
-        if (history.isEmpty()) {
-            Text(
-                "Nothing yet. Copy something on either device.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            // Three is enough to prove sync is alive without turning home into the
-            // history tab; the rest is one tap away.
-            history.take(3).forEach { entry ->
-                RecentRow(entry, peerName, onCopy)
-                Spacer(Modifier.height(8.dp))
-            }
-        }
-        Spacer(Modifier.height(120.dp)) // clears the floating nav bar
+        Spacer(Modifier.height(110.dp)) // clears the floating nav bar
     }
 }
 
 /**
  * The top of Home: this phone and the Mac, joined by the filament a spark runs along while
  * they are linked. The same card leads the Mac's Home — it answers the only question people
- * open the app to ask.
+ * open the app to ask, so it is the one showy thing here.
  */
 @Composable
 private fun LinkHero(selfName: String, peerName: String?, stage: ConnectStage, peerBattery: Int?) {
     val linked = stage == ConnectStage.Connected
-    val title = when (stage) {
-        ConnectStage.Connected -> "Linked to ${peerName ?: "your Mac"}"
-        ConnectStage.Connecting -> "Connecting…"
+    val pill = when (stage) {
+        ConnectStage.Connected -> "Linked · direct"
+        ConnectStage.Connecting -> "Connecting"
         ConnectStage.DifferentNetwork -> "Different networks"
-        ConnectStage.PeerOffline -> "${peerName ?: "Your Mac"} is offline"
-        ConnectStage.Alone -> "No Mac yet"
+        ConnectStage.PeerOffline -> "Mac offline"
+        ConnectStage.Alone -> "Waiting for a Mac"
     }
     val detail = when (stage) {
-        ConnectStage.Connected -> "Clipboard, files and notifications move directly over your Wi-Fi."
-        ConnectStage.Connecting -> "Finding ${peerName ?: "your Mac"} on your Wi-Fi."
-        ConnectStage.DifferentNetwork -> "Join the same Wi-Fi as ${peerName ?: "your Mac"}."
+        ConnectStage.Connected -> "Clipboard, files and notifications move straight over your Wi-Fi."
+        ConnectStage.Connecting -> "Finding ${peerName ?: "your Mac"} on this Wi-Fi…"
+        ConnectStage.DifferentNetwork -> "Put both devices on the same Wi-Fi."
         ConnectStage.PeerOffline -> "Open FuseOS on ${peerName ?: "your Mac"} to link it."
         ConnectStage.Alone -> "Sign in on your Mac with this account."
     }
@@ -196,16 +180,24 @@ private fun LinkHero(selfName: String, peerName: String?, stage: ConnectStage, p
         modifier = Modifier
             .fillMaxWidth()
             .glassCard(24.dp)
-            .padding(horizontal = 20.dp, vertical = 22.dp),
+            .padding(horizontal = 18.dp, vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Endpoint(Icons.Filled.Smartphone, selfName, lit = true)
-            Filament(linked, Modifier.weight(1f).height(24.dp).padding(horizontal = 6.dp))
+            Filament(linked, Modifier.weight(1f).height(24.dp).padding(horizontal = 4.dp))
             Endpoint(Icons.Filled.Computer, peerName ?: "Your Mac", lit = linked)
         }
         Spacer(Modifier.height(16.dp))
-        Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+        StatusPill(pill, linked)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            peerName ?: "No Mac yet",
+            style = MaterialTheme.typography.titleLarge,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
         Spacer(Modifier.height(4.dp))
         Text(
             detail,
@@ -216,7 +208,7 @@ private fun LinkHero(selfName: String, peerName: String?, stage: ConnectStage, p
         if (peerBattery != null) {
             Spacer(Modifier.height(6.dp))
             Text(
-                "${peerName ?: "Mac"} · $peerBattery%",
+                "Battery $peerBattery%",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -280,98 +272,6 @@ private fun Filament(linked: Boolean, modifier: Modifier = Modifier) {
     }
 }
 
-@Composable
-private fun RecentRow(entry: ClipEntry, peerName: String?, onCopy: (ClipEntry) -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .glassCard(14.dp)
-            .clickable { onCopy(entry) }
-            .padding(14.dp),
-    ) {
-        Text(
-            if (entry.fromSelf) "Copied here" else "From ${peerName ?: "your Mac"}",
-            style = MaterialTheme.typography.labelSmall,
-            fontFamily = FontFamily.Monospace,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            if (entry.isImage) "Image" else entry.text.orEmpty(),
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-/** One file on its way in or out: name, where it is going, a bar, and a way to stop it. */
-@Composable
-private fun TransferRow(
-    transfer: TransferProgress,
-    peerName: String?,
-    onCancel: (String) -> Unit,
-    onOpen: (String) -> Unit,
-) {
-    val peer = peerName ?: "your Mac"
-    val status = when (transfer.state) {
-        TransferProgress.State.Active ->
-            (if (transfer.outgoing) "Sending to $peer · " else "Receiving from $peer · ") +
-                "${percent(transfer)}%"
-        TransferProgress.State.Sent -> "Waiting for $peer to confirm"
-        TransferProgress.State.Done ->
-            if (transfer.outgoing) "Sent to $peer" else "Saved to Downloads · tap to open"
-        TransferProgress.State.Cancelled -> "Cancelled"
-        TransferProgress.State.Failed -> "Didn't go through"
-    }
-    val openable = !transfer.outgoing && transfer.state == TransferProgress.State.Done
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .glassCard(14.dp)
-            .then(if (openable) Modifier.clickable { onOpen(transfer.transferId) } else Modifier)
-            .padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                transfer.name,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                status,
-                style = MaterialTheme.typography.labelSmall,
-                fontFamily = FontFamily.Monospace,
-                color = if (transfer.state == TransferProgress.State.Failed) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
-            if (!transfer.finished) {
-                Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = { percent(transfer) / 100f },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-        if (!transfer.finished) {
-            IconButton(onClick = { onCancel(transfer.transferId) }) {
-                Icon(Icons.Filled.Close, contentDescription = "Cancel ${transfer.name}")
-            }
-        } else {
-            Spacer(Modifier.size(10.dp))
-        }
-    }
-}
-
-private fun percent(transfer: TransferProgress): Int =
-    if (transfer.total <= 0) 0 else (transfer.bytes * 100 / transfer.total).toInt().coerceIn(0, 100)
-
 /**
  * Sharing this phone's screen to the Mac. The Mac can ask for it too; either way Android's
  * own consent dialog decides, every session. View only — the Mac cannot tap anything.
@@ -397,29 +297,28 @@ fun ScreenShareScreen(
             Modifier
                 .size(88.dp)
                 .clip(RoundedCornerShape(26.dp))
-                .background(
-                    if (sharing) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                    else MaterialTheme.colorScheme.surfaceVariant,
-                ),
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = if (sharing) 0.22f else 0.12f)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 Icons.Filled.ScreenShare,
                 contentDescription = null,
-                tint = if (sharing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(36.dp),
             )
         }
         Spacer(Modifier.height(20.dp))
         Text(
-            if (sharing) "Sharing with $mac" else "Show this screen on $mac",
-            style = MaterialTheme.typography.titleLarge,
+            if (sharing) "Sharing this screen" else "Share this screen",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(8.dp))
         Text(
             when {
-                sharing -> "Everything on this screen is visible on $mac. Stop any time from here or the notification."
-                linked -> "Live over your Wi-Fi, straight to $mac. Nothing goes through the internet."
+                sharing -> "$mac can see everything on this screen. Stop any time here or from the notification."
+                linked -> "Show this phone live on $mac, straight over your Wi-Fi — nothing goes through the internet."
                 else -> "Link your Mac first — sharing runs over the same direct connection."
             },
             style = MaterialTheme.typography.bodyMedium,
