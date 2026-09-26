@@ -33,6 +33,9 @@ public final class LanTransport {
     /// Screen mirroring: control messages and video frames.
     var onScreenEnvelope: ((FuseEnvelope) -> Void)?
 
+    /// Phone actions and links: `PhoneCommand`, `OpenLink`.
+    var onActionEnvelope: ((FuseEnvelope) -> Void)?
+
     /// Fires with the peers that just gained a channel — the moment to exchange history.
     public var onPeersJoined: ((Set<String>) -> Void)?
 
@@ -264,6 +267,8 @@ public final class LanTransport {
                     onNotificationEnvelope?(envelope)
                 case .some(.screenControl), .some(.screenFrame), .some(.remoteInput):
                     onScreenEnvelope?(envelope)
+                case .some(.phoneCommand), .some(.openLink):
+                    onActionEnvelope?(envelope)
                 }
             } catch {
                 return

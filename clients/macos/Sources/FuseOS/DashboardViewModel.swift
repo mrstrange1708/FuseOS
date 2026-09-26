@@ -36,6 +36,8 @@ final class DashboardViewModel: ObservableObject {
     /// The phone's screen. Created up front: it registers the transport's screen hook.
     lazy var screen = ScreenReceiver(transport: transport)
     private lazy var notifications = NotificationMirror(transport: transport)
+    /// Ring the phone, ask it for a photo, hand links across.
+    lazy var phone = PhoneCommands(transport: transport)
     private let notifier = PhoneNotifier()
     /// The notch HUD. Owned here because this is where clip events already arrive.
     private let island = ClipIsland()
@@ -99,6 +101,10 @@ final class DashboardViewModel: ObservableObject {
         notifier.onUserDismissed = { [weak self] key in self?.notifications.dismiss(key: key) }
         screen.onStateChanged = { [weak self] state in self?.screenState = state }
         screen.onCanControlChanged = { [weak self] can in self?.canControlPhone = can }
+        phone.onOpenLink = { [weak self] url in
+            NSWorkspace.shared.open(url)
+            self?.island.present(symbol: "safari", title: "Opened from \(self?.peerName ?? "your phone")", detail: url.host ?? url.absoluteString)
+        }
         transport.onConnectedPeersChanged = { [weak self] peers in
             self?.connected = peers
             self?.files.peersChanged(peers)
@@ -344,6 +350,18 @@ final class DashboardViewModel: ObservableObject {
         guard let url = receivedURLs[id], FileManager.default.fileExists(atPath: url.path) else { return false }
         NSWorkspace.shared.activateFileViewerSelecting([url])
         return true
+    }
+
+    /// The link on this Mac's clipboard right now, if there is one — what "Open on phone"
+    /// sends.
+    var clipboardLink: URL? {
+        NSPasteboard.general.string(forType: .string).flatMap(PhoneCommands.firstLink(in:))
+    }
+
+    /// Handoff, Mac → phone, for a link picked from anywhere (Services, the Phone panel).
+    func openOnPhone(_ url: URL) {
+        guard !connected.isEmpty, phone.openOnPhone(url) else { return }
+        island.present(symbol: "iphone", title: "Opening on \(peerName ?? "your phone")", detail: url.host ?? url.absoluteString)
     }
 
     /// Clicking a history entry puts it back on this Mac's clipboard.

@@ -64,6 +64,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let dashboard { dashboard.sendFiles(urls) } else { pending += urls }
     }
 
+    /// Services → "Open Link on Phone with FuseOS" on a selected link or text containing one.
+    @MainActor @objc func openLinkOnPhone(
+        _ pboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString>,
+    ) {
+        let text = pboard.string(forType: .URL) ?? pboard.string(forType: .string) ?? ""
+        guard let url = PhoneCommands.firstLink(in: text) else { return }
+        dashboard?.openOnPhone(url)
+    }
+
     /// Services → "Send Text to Phone with FuseOS" on selected text in any app. Putting it on
     /// the pasteboard is enough: clipboard sync sends every copy made on this Mac.
     @MainActor @objc func sendText(

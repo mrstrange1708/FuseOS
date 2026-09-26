@@ -8,6 +8,7 @@ import com.fuseos.app.file.FileTransfer
 import com.fuseos.app.file.TransferProgress
 import com.fuseos.app.file.Transfers
 import com.fuseos.app.net.LanTransport
+import com.fuseos.app.actions.PhoneActions
 import com.fuseos.app.notify.NotificationSync
 import com.fuseos.app.screen.ScreenShare
 import com.fuseos.app.ui.island.ClipIsland
@@ -51,6 +52,8 @@ object ServiceLocator {
     lateinit var notificationSync: NotificationSync
         private set
     lateinit var screenShare: ScreenShare
+        private set
+    lateinit var phoneActions: PhoneActions
         private set
 
     /** Outlives every screen and every service, so work that must not die with an
@@ -106,6 +109,7 @@ object ServiceLocator {
         clipboardSync = ClipboardSync(appContext, transport, appScope)
         notificationSync = NotificationSync(appContext, transport, appScope)
         screenShare = ScreenShare(appContext, transport, appScope)
+        phoneActions = PhoneActions(appContext, transport, appScope)
         signalClient = SignalClient(
             client = httpClient,
             signalUrl = Config.SIGNAL_URL,

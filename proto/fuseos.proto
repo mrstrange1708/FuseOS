@@ -42,6 +42,8 @@ message Envelope {
     ScreenControl screen_control = 20;
     ScreenFrame screen_frame = 21;
     RemoteInput remote_input = 22;
+    PhoneCommand phone_command = 23;
+    OpenLink open_link = 24;
   }
 }
 
@@ -169,4 +171,25 @@ message RemoteInput {
   uint32 duration_ms = 6;
   string text        = 7;
   uint32 key_code    = 8;
+}
+
+// Mac -> phone: something for the phone to do.
+//  RING       - play a loud alarm, even on silent, until STOP_RING, a tap on its
+//               notification, or 30 s (Find My, for a phone lost in the sofa).
+//  TAKE_PHOTO - open the camera on the phone; the photo comes back as a ClipImage, so it
+//               lands on the Mac's clipboard ready to paste (Continuity Camera).
+message PhoneCommand {
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+    RING               = 1;
+    STOP_RING          = 2;
+    TAKE_PHOTO         = 3;
+  }
+  Action action = 1;
+}
+
+// Either direction: open this http(s) link on the receiving device (Handoff). The
+// receiver opens only http and https, never another scheme.
+message OpenLink {
+  string url = 1;
 }

@@ -245,6 +245,13 @@ private struct HomePane: View {
     }
 
     private var files: some View {
+        VStack(spacing: 18) {
+            PhoneActionsPanel(viewModel: viewModel, onMirror: onMirror)
+            filesPanel
+        }
+    }
+
+    private var filesPanel: some View {
         Panel(title: "Files") {
             VStack(spacing: 10) {
                 FileDropZone(viewModel: viewModel)
@@ -253,6 +260,64 @@ private struct HomePane: View {
                 }
             }
         }
+    }
+}
+
+/// One-click things to do with the phone: find it, borrow its camera, hand it a link, see
+/// its screen. Each is a message on the LAN channel; none waits on the server.
+private struct PhoneActionsPanel: View {
+    @ObservedObject var viewModel: DashboardViewModel
+    let onMirror: () -> Void
+    @State private var ringing = false
+
+    var body: some View {
+        let linked = !viewModel.connected.isEmpty
+        Panel(title: "Your phone") {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                action(ringing ? "Stop ringing" : "Ring", symbol: ringing ? "speaker.slash.fill" : "bell.and.waves.left.and.right.fill") {
+                    if ringing {
+                        viewModel.phone.stopRinging()
+                        ringing = false
+                    } else {
+                        viewModel.phone.ring()
+                        ringing = true
+                        // The phone stops by itself after 30 s; so does this button.
+                        Task {
+                            try? await Task.sleep(nanoseconds: 30_000_000_000)
+                            ringing = false
+                        }
+                    }
+                }
+                action("Take photo", symbol: "camera.fill") { viewModel.phone.takePhoto() }
+                    .help("Opens the camera on your phone; the photo lands on this Mac's clipboard")
+                action("Open copied link", symbol: "safari.fill") {
+                    if let url = viewModel.clipboardLink { viewModel.openOnPhone(url) }
+                }
+                .disabled(viewModel.clipboardLink == nil)
+                .help("Opens the link on this Mac's clipboard in your phone's browser")
+                action("Mirror", symbol: "rectangle.on.rectangle", run: onMirror)
+            }
+            .disabled(!linked)
+        }
+    }
+
+    private func action(_ title: String, symbol: String, run: @escaping () -> Void) -> some View {
+        Button(action: run) {
+            VStack(spacing: 6) {
+                Image(systemName: symbol)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(FuseColor.accent)
+                Text(title)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(FuseColor.ink)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(FuseColor.surfaceAlt))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
