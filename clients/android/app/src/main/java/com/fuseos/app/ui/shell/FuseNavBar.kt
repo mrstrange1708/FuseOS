@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import com.fuseos.app.ui.components.glassCard
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -73,23 +74,11 @@ fun FuseNavBar(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
                 .height(64.dp)
-                .clip(RoundedCornerShape(28.dp))
                 // Glass: a translucent wash over the background plus a hairline edge. A
                 // flat opaque bar reads as a separate slab; this keeps the content
                 // visible under it and the bar attached to the page.
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                        ),
-                    ),
-                )
-                .border(
-                    1.dp,
-                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
-                    RoundedCornerShape(28.dp),
-                ),
+                .glassCard(28.dp)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.18f)),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
@@ -117,14 +106,22 @@ private fun NavItem(
         if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         label = "nav-tint",
     )
+    // The open tab sits in an ember pill, the same mark the Mac's glass bar uses.
+    val pill by animateColorAsState(
+        if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent,
+        label = "nav-pill",
+    )
     Column(
         modifier = modifier
+            .padding(horizontal = 4.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(pill)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = { onSelect(tab) },
             )
-            .padding(vertical = 8.dp),
+            .padding(vertical = 7.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {

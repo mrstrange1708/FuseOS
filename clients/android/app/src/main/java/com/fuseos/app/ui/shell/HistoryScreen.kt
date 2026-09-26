@@ -1,5 +1,6 @@
 package com.fuseos.app.ui.shell
 
+import com.fuseos.app.ui.components.glassCard
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -143,9 +144,7 @@ private fun HistoryCard(entry: ClipEntry, peerName: String?, onCopy: (ClipEntry)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+            .glassCard(16.dp)
             .clickable { onCopy(entry) }
             .padding(14.dp),
     ) {

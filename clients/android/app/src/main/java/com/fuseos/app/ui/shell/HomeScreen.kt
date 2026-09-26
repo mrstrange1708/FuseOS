@@ -1,6 +1,22 @@
 package com.fuseos.app.ui.shell
 
+import com.fuseos.app.ui.components.glassCard
 import androidx.compose.foundation.background
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -23,7 +39,6 @@ import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,7 +55,6 @@ import com.fuseos.app.clipboard.ClipEntry
 import com.fuseos.app.core.ConnectStage
 import com.fuseos.app.file.TransferProgress
 import com.fuseos.app.ui.dashboard.DashboardViewModel
-import com.fuseos.app.ui.dashboard.DeviceCard
 
 /**
  * The landing screen: link status first, then the last few clips.
@@ -67,46 +81,56 @@ fun HomeScreen(
     val connect = state.connect
     val peer = state.peers.firstOrNull { it.id == connect.peerId }
 
+    val linked = connect.stage == ConnectStage.Connected
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp),
+            .padding(horizontal = 20.dp),
     ) {
-        LinkBanner(stage = connect.stage, peerName = peer?.name)
-        Spacer(Modifier.height(20.dp))
-
-        Text("Devices", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(10.dp))
-        DeviceCard(
-            name = state.selfDevice?.name ?: "This phone",
-            subtitle = "This device · online",
-            platform = "android",
-            online = true,
-            battery = selfBattery,
+        LinkHero(
+            selfName = state.selfDevice?.name ?: "This phone",
+            peerName = peer?.name ?: state.peers.firstOrNull()?.name,
+            stage = connect.stage,
+            peerBattery = peer?.let { peerBattery(it.id) },
         )
-        Spacer(Modifier.height(10.dp))
-        state.peers.forEach { device ->
-            DeviceCard(
-                name = device.name,
-                subtitle = when {
-                    device.id in state.connected -> "${device.platform} · connected · direct"
-                    state.presence[device.id]?.online == true -> "${device.platform} · online"
-                    else -> "${device.platform} · offline"
-                },
-                platform = device.platform,
-                online = device.id in state.connected,
-                battery = peerBattery(device.id),
-            )
-            Spacer(Modifier.height(10.dp))
-        }
+        Spacer(Modifier.height(22.dp))
 
-        Spacer(Modifier.height(14.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Files", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.weight(1f))
-            OutlinedButton(onClick = onSendFile, enabled = state.connected.isNotEmpty()) {
-                Text("Send a file")
+        Text("Files", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .glassCard(18.dp)
+                .clickable(enabled = linked, onClick = onSendFile)
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = if (linked) 0.16f else 0.07f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.UploadFile,
+                    contentDescription = null,
+                    tint = if (linked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.size(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (linked) "Send a file to ${peer?.name ?: "your Mac"}" else "Send a file",
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    if (linked) "It lands in the Mac's Downloads." else "Link your Mac first.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -146,54 +170,113 @@ fun HomeScreen(
     }
 }
 
-/** One line that answers "is it working right now". */
+/**
+ * The top of Home: this phone and the Mac, joined by the filament a spark runs along while
+ * they are linked. The same card leads the Mac's Home — it answers the only question people
+ * open the app to ask.
+ */
 @Composable
-private fun LinkBanner(stage: ConnectStage, peerName: String?) {
-    val connected = stage == ConnectStage.Connected
-    val message = when (stage) {
+private fun LinkHero(selfName: String, peerName: String?, stage: ConnectStage, peerBattery: Int?) {
+    val linked = stage == ConnectStage.Connected
+    val title = when (stage) {
         ConnectStage.Connected -> "Linked to ${peerName ?: "your Mac"}"
         ConnectStage.Connecting -> "Connecting…"
-        ConnectStage.DifferentNetwork -> "Different networks — join the same WiFi"
+        ConnectStage.DifferentNetwork -> "Different networks"
         ConnectStage.PeerOffline -> "${peerName ?: "Your Mac"} is offline"
-        ConnectStage.Alone -> "No other device on this account yet"
+        ConnectStage.Alone -> "No Mac yet"
     }
-    Row(
+    val detail = when (stage) {
+        ConnectStage.Connected -> "Clipboard, files and notifications move directly over your Wi-Fi."
+        ConnectStage.Connecting -> "Finding ${peerName ?: "your Mac"} on your Wi-Fi."
+        ConnectStage.DifferentNetwork -> "Join the same Wi-Fi as ${peerName ?: "your Mac"}."
+        ConnectStage.PeerOffline -> "Open FuseOS on ${peerName ?: "your Mac"} to link it."
+        ConnectStage.Alone -> "Sign in on your Mac with this account."
+    }
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(
-                if (connected) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant
-                },
-            )
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .glassCard(24.dp)
+            .padding(horizontal = 20.dp, vertical = 22.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Endpoint(Icons.Filled.Smartphone, selfName, lit = true)
+            Filament(linked, Modifier.weight(1f).height(24.dp).padding(horizontal = 6.dp))
+            Endpoint(Icons.Filled.Computer, peerName ?: "Your Mac", lit = linked)
+        }
+        Spacer(Modifier.height(16.dp))
+        Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            detail,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        if (peerBattery != null) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "${peerName ?: "Mac"} · $peerBattery%",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun Endpoint(icon: ImageVector, name: String, lit: Boolean) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(92.dp)) {
         Box(
             Modifier
-                .size(9.dp)
+                .size(58.dp)
                 .clip(CircleShape)
-                .background(
-                    if (connected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                ),
-        )
-        Spacer(Modifier.size(10.dp))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = if (lit) 0.16f else 0.06f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = if (lit) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(26.dp),
+            )
+        }
+        Spacer(Modifier.height(6.dp))
         Text(
-            message,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = if (connected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
+            name,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+/** Linked: a spark runs the line, easing at each end like a hand-off. Not: a dim dashed gap. */
+@Composable
+private fun Filament(linked: Boolean, modifier: Modifier = Modifier) {
+    val ember = MaterialTheme.colorScheme.primary
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val t by rememberInfiniteTransition(label = "filament").animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Restart),
+        label = "spark",
+    )
+    Canvas(modifier) {
+        val y = size.height / 2
+        if (linked) {
+            drawLine(ember.copy(alpha = 0.35f), Offset(0f, y), Offset(size.width, y), strokeWidth = 2.dp.toPx())
+            val x = size.width * t
+            drawCircle(ember.copy(alpha = 0.25f), radius = 9.dp.toPx(), center = Offset(x, y))
+            drawCircle(ember, radius = 4.dp.toPx(), center = Offset(x, y))
+        } else {
+            drawLine(
+                muted.copy(alpha = 0.4f), Offset(0f, y), Offset(size.width, y),
+                strokeWidth = 1.5.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 6.dp.toPx())),
+            )
+        }
     }
 }
 
@@ -202,9 +285,7 @@ private fun RecentRow(entry: ClipEntry, peerName: String?, onCopy: (ClipEntry) -
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
+            .glassCard(14.dp)
             .clickable { onCopy(entry) }
             .padding(14.dp),
     ) {
@@ -247,9 +328,7 @@ private fun TransferRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
+            .glassCard(14.dp)
             .then(if (openable) Modifier.clickable { onOpen(transfer.transferId) } else Modifier)
             .padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -345,7 +424,7 @@ fun ScreenShareScreen(
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(24.dp))
         FusePrimaryButton(

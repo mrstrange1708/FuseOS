@@ -1,5 +1,6 @@
 package com.fuseos.app.ui.dashboard
 
+import com.fuseos.app.ui.components.glassCard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -37,9 +38,7 @@ internal fun DeviceCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+            .glassCard(16.dp)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

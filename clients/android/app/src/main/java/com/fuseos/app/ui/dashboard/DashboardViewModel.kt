@@ -33,7 +33,8 @@ class DashboardViewModel(
 
     data class UiState(
         val selfDevice: DeviceItem? = null,
-        val peers: List<DeviceItem> = emptyList(),
+        /** Every other device on the account, as the server lists them. */
+        val allPeers: List<DeviceItem> = emptyList(),
         val presence: Map<String, PeerPresence> = emptyMap(),
         /** Peers reachable over a direct LAN channel, not merely online. */
         val connected: Set<String> = emptySet(),
@@ -42,6 +43,27 @@ class DashboardViewModel(
         /** This device's advertised `ip:port`, or null until the LAN listener is bound. */
         val selfLanAddress: String? = null,
     ) {
+        /**
+         * The devices worth showing. A reinstall mints a new key and so a new device
+         * record, leaving the old one on the account forever offline under the same name.
+         * Per name and platform the connected record wins, then the online one. Mirrors
+         * `DashboardViewModel.peers` on macOS.
+         *
+         * ponytail: hides stale records rather than deleting them; a "Remove device"
+         * endpoint is the real fix.
+         */
+        val peers: List<DeviceItem>
+            get() {
+                fun rank(d: DeviceItem) = when {
+                    d.id in connected -> 0
+                    presence[d.id]?.online == true -> 1
+                    else -> 2
+                }
+                val best = allPeers.groupBy { "${it.platform}|${it.name}" }
+                    .mapValues { (_, same) -> same.minBy(::rank).id }
+                return allPeers.filter { best["${it.platform}|${it.name}"] == it.id }
+            }
+
         /** What the connect screen renders. Derived rather than stored so it cannot drift
          *  out of step with the roster and presence it is computed from. */
         val connect: ConnectState
@@ -77,7 +99,7 @@ class DashboardViewModel(
                 // is how a second device shows up with no pairing step, so it has to
                 // self-heal.
                 val known = _state.value
-                if (p.keys.any { id -> id != known.selfDevice?.id && known.peers.none { it.id == id } }) {
+                if (p.keys.any { id -> id != known.selfDevice?.id && known.allPeers.none { it.id == id } }) {
                     refresh()
                 }
             }
@@ -105,7 +127,7 @@ class DashboardViewModel(
             _state.update {
                 it.copy(
                     selfDevice = all.firstOrNull { d -> d.isSelf },
-                    peers = all.filter { d -> !d.isSelf },
+                    allPeers = all.filter { d -> !d.isSelf },
                     error = null,
                     loading = false,
                     selfLanAddress = transport.lanAddress(),

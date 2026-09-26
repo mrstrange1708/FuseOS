@@ -34,6 +34,7 @@ import com.fuseos.app.screen.ScreenShareService
 import com.fuseos.app.file.Transfers
 import com.fuseos.app.ui.components.ErrorBanner
 import com.fuseos.app.ui.components.FuseWordmark
+import com.fuseos.app.ui.components.fuseBackground
 import com.fuseos.app.ui.dashboard.DashboardViewModel
 import com.fuseos.app.service.ClipTile
 import com.fuseos.app.ui.island.ClipIsland
@@ -85,7 +86,7 @@ fun FuseShell() {
     Box(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .fuseBackground()
             .systemBarsPadding(),
     ) {
         Column(Modifier.fillMaxSize()) {

@@ -1,5 +1,6 @@
 package com.fuseos.app.ui.shell
 
+import com.fuseos.app.ui.components.glassCard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -214,9 +215,7 @@ private fun SettingRow(title: String, detail: String, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+            .glassCard(16.dp)
             .clickable(onClick = onClick)
             .padding(16.dp),
     ) {
