@@ -5,7 +5,8 @@ import FuseOSCore
 @MainActor
 final class DashboardViewModel: ObservableObject {
     @Published var selfDevice: DeviceItem?
-    @Published var peers: [DeviceItem] = []
+    /// Every other device on the account, as the server lists them.
+    @Published var allPeers: [DeviceItem] = []
     @Published var presence: [String: PeerPresence] = [:]
     /// Peers reachable over a direct LAN channel, not merely online.
     @Published var connected: Set<String> = []
@@ -44,7 +45,7 @@ final class DashboardViewModel: ObservableObject {
             // exists in the REST roster — which holds the names the UI draws. This is how
             // a second device shows up with no pairing step, so it has to self-heal.
             if presence.keys.contains(where: { id in
-                id != self.selfDevice?.id && !self.peers.contains { $0.id == id }
+                id != self.selfDevice?.id && !self.allPeers.contains { $0.id == id }
             }) {
                 Task { await self.refresh() }
             }
@@ -147,7 +148,7 @@ final class DashboardViewModel: ObservableObject {
             }
             let all = try await ControlPlane.listDevices(selfId: try await ensureStarted())
             selfDevice = all.first { $0.isSelf }
-            peers = all.filter { !$0.isSelf }
+            allPeers = all.filter { !$0.isSelf }
             errorMessage = nil
         } catch {
             errorMessage = (error as? AuthError)?.message ?? error.localizedDescription
@@ -165,6 +166,26 @@ final class DashboardViewModel: ObservableObject {
     func claimPairing(code: String) async throws {
         _ = try await ControlPlane.claimPairing(deviceId: ensureStarted(), code: code)
         await refresh()
+    }
+
+    /// The devices worth showing. A reinstall mints a new key and so a new device record,
+    /// leaving the old one on the account forever offline under the same name; showing both
+    /// reads as "your phone is offline" right next to "linked". Per name and platform, the
+    /// connected record wins, then the online one.
+    ///
+    /// ponytail: hides stale records rather than deleting them; a "Remove device" action on
+    /// the server is the real fix when the account screen grows one.
+    var peers: [DeviceItem] {
+        func rank(_ d: DeviceItem) -> Int {
+            connected.contains(d.id) ? 0 : onlineState(for: d).online ? 1 : 2
+        }
+        var best: [String: DeviceItem] = [:]
+        for d in allPeers {
+            let key = "\(d.platform)|\(d.name)"
+            if let current = best[key], rank(current) <= rank(d) { continue }
+            best[key] = d
+        }
+        return allPeers.filter { best["\($0.platform)|\($0.name)"]?.id == $0.id }
     }
 
     /// Live presence merged over the last REST snapshot for display.

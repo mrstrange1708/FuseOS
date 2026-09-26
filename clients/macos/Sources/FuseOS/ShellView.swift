@@ -192,74 +192,157 @@ private struct HomePane: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                PaneTitle("Home", subtitle: statusLine)
+            VStack(alignment: .leading, spacing: 22) {
+                LinkHero(viewModel: viewModel, statusLine: statusLine)
 
-                Text("Devices")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(FuseColor.ink)
-                deviceList
-
-                Text("Files")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(FuseColor.ink)
-                FileDropZone(viewModel: viewModel)
-                ForEach(viewModel.transfers) { transfer in
-                    TransferRow(transfer: transfer, peerName: viewModel.peerName, viewModel: viewModel)
+                VStack(alignment: .leading, spacing: 10) {
+                    SectionLabel("Files")
+                    FileDropZone(viewModel: viewModel)
+                    ForEach(viewModel.transfers) { transfer in
+                        TransferRow(transfer: transfer, peerName: viewModel.peerName, viewModel: viewModel)
+                    }
                 }
 
-                HStack {
-                    Text("Recent")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(FuseColor.ink)
-                    Spacer()
-                    Button("See all", action: onSeeAll)
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12))
-                        .foregroundStyle(FuseColor.accent)
-                }
-
-                if viewModel.history.isEmpty {
-                    Text("Nothing yet. Copy something on either device.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(FuseColor.muted)
-                } else {
-                    // Five is enough to prove sync is alive without turning home into
-                    // the history pane; the rest is one click away.
-                    ForEach(viewModel.history.prefix(5)) { entry in
-                        ClipRow(entry: entry, peerName: viewModel.peerName) {
-                            viewModel.copyToClipboard(entry)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        SectionLabel("Recent")
+                        Spacer()
+                        Button("See all", action: onSeeAll)
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(FuseColor.accent)
+                    }
+                    if viewModel.history.isEmpty {
+                        Text("Nothing yet. Copy something on either device.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(FuseColor.muted)
+                    } else {
+                        // Five is enough to prove sync is alive without turning home into
+                        // the history pane; the rest is one click away.
+                        ForEach(viewModel.history.prefix(5)) { entry in
+                            ClipRow(entry: entry, peerName: viewModel.peerName) {
+                                viewModel.copyToClipboard(entry)
+                            }
                         }
                     }
                 }
             }
-            .padding(28)
-            .frame(maxWidth: 640, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 28)
+            .padding(.top, 12)
+            .padding(.bottom, 28)
+            .frame(maxWidth: 680)
+            .frame(maxWidth: .infinity)
         }
     }
 
     private var statusLine: String {
         switch viewModel.connectState.stage {
-        case .connected: return "Clipboard and files are moving directly over your network."
-        case .connecting: return "Connecting…"
+        case .connected: return "Clipboard and files move directly over your Wi-Fi."
+        case .connecting: return "Connecting over your Wi-Fi…"
         case .differentNetwork: return "Your devices are on different networks."
-        case .peerOffline: return "Your other device is offline."
-        case .alone: return "No other device on this account yet."
+        case .peerOffline: return "Open FuseOS on your phone to link it."
+        case .alone: return "Sign in on your phone with this account."
         }
     }
+}
 
-    private var deviceList: some View {
-        VStack(spacing: 10) {
-            SelfDeviceRow(name: viewModel.selfDevice?.name)
-            ForEach(viewModel.peers) { peer in
-                DeviceRow(
-                    device: peer,
-                    presence: viewModel.onlineState(for: peer),
-                    isConnected: viewModel.isConnected(peer),
-                )
+/// The top of Home: this Mac and the phone, joined by the filament. The one place in the
+/// app that is allowed to be showy — it answers the only question people open it to ask.
+private struct LinkHero: View {
+    @ObservedObject var viewModel: DashboardViewModel
+    let statusLine: String
+
+    var body: some View {
+        let peer = viewModel.peers.first { viewModel.isConnected($0) } ?? viewModel.peers.first
+        let linked = peer.map(viewModel.isConnected) ?? false
+        return VStack(spacing: 18) {
+            HStack(spacing: 0) {
+                endpoint(symbol: "laptopcomputer", name: viewModel.selfDevice?.name ?? "This Mac", lit: true)
+                Filament(linked: linked)
+                    .frame(height: 24)
+                    .padding(.horizontal, 6)
+                endpoint(symbol: "iphone", name: peer?.name ?? "Your phone", lit: linked)
+            }
+            VStack(spacing: 5) {
+                Text(linked ? "Linked to \(peer?.name ?? "your phone")" : (peer == nil ? "No phone yet" : "Not linked"))
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(FuseColor.ink)
+                Text(statusLine)
+                    .font(.system(size: 12))
+                    .foregroundStyle(FuseColor.muted)
+                if let peer, let battery = viewModel.onlineState(for: peer).battery {
+                    BatteryBadge(percent: battery).padding(.top, 2)
+                }
+            }
+            .multilineTextAlignment(.center)
+        }
+        .padding(.vertical, 24)
+        .padding(.horizontal, 28)
+        .frame(maxWidth: .infinity)
+        .glassCard(radius: 22)
+        .animation(.easeInOut(duration: 0.4), value: linked)
+    }
+
+    private func endpoint(symbol: String, name: String, lit: Bool) -> some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(FuseColor.accent.opacity(lit ? 0.16 : 0.06))
+                    .frame(width: 62, height: 62)
+                Image(systemName: symbol)
+                    .font(.system(size: 24, weight: .light))
+                    .foregroundStyle(lit ? FuseColor.accent : FuseColor.muted)
+            }
+            Text(name)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(FuseColor.muted)
+                .lineLimit(1)
+                .frame(maxWidth: 110)
+        }
+    }
+}
+
+/// The line between the two devices. Linked, a spark runs along it; not linked, it is a
+/// dim dashed gap. Motion only while there is something live to show.
+private struct Filament: View {
+    let linked: Bool
+
+    var body: some View {
+        TimelineView(.animation(paused: !linked)) { context in
+            Canvas { ctx, size in
+                let y = size.height / 2
+                var line = Path()
+                line.move(to: CGPoint(x: 0, y: y))
+                line.addLine(to: CGPoint(x: size.width, y: y))
+                if linked {
+                    ctx.stroke(line, with: .color(FuseColor.accent.opacity(0.35)), lineWidth: 2)
+                    // One trip every 1.8 s, eased so it gathers at each end like a hand-off.
+                    let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.8) / 1.8
+                    let eased = 0.5 - cos(t * .pi) / 2
+                    let x = size.width * eased
+                    let glow = Path(ellipseIn: CGRect(x: x - 9, y: y - 9, width: 18, height: 18))
+                    ctx.fill(glow, with: .color(FuseColor.accent.opacity(0.25)))
+                    let spark = Path(ellipseIn: CGRect(x: x - 4, y: y - 4, width: 8, height: 8))
+                    ctx.fill(spark, with: .color(FuseColor.accent))
+                } else {
+                    ctx.stroke(line, with: .color(FuseColor.muted.opacity(0.4)),
+                               style: StrokeStyle(lineWidth: 1.5, dash: [4, 6]))
+                }
             }
         }
+        .frame(minWidth: 80)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct SectionLabel: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(FuseColor.ink)
     }
 }
 
@@ -302,7 +385,7 @@ private struct HistoryPane: View {
         }
         .padding(28)
         .frame(maxWidth: 680, alignment: .leading)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -335,7 +418,7 @@ private struct DevicesPane: View {
         }
         .padding(28)
         .frame(maxWidth: 640, alignment: .leading)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -416,7 +499,7 @@ private struct AccountPane: View {
         }
         .padding(28)
         .frame(maxWidth: 560, alignment: .leading)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
     }
 }
 
