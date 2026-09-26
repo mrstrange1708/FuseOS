@@ -115,10 +115,13 @@ public final class ClipboardSync {
         )
         nextId += 1
         onClipEvent?(entry)
+        commit([entry] + history)
+    }
 
-        var trimmed = Array(([entry] + history).prefix(Self.maxEntries))
+    /// Trims a new history to the caps, publishes it, and persists it.
+    private func commit(_ entries: [ClipEntry]) {
         var bytes = 0
-        trimmed = trimmed.prefix {
+        let trimmed = entries.prefix(Self.maxEntries).prefix {
             bytes += $0.imageData?.count ?? $0.text?.count ?? 0
             return bytes <= Self.maxHistoryBytes
         }
@@ -130,6 +133,62 @@ public final class ClipboardSync {
         let snapshot = history
         let store = store
         Task.detached(priority: .utility) { store.save(snapshot) }
+    }
+
+    /// Sends our recent history to peers that just connected (`HistorySync` in the proto),
+    /// newest first, stopping short of the channel's frame cap. Images too big for what is
+    /// left of the budget are skipped rather than ending the list.
+    public func sendHistory() {
+        var budget = Self.maxHistorySyncBytes
+        var sync = FuseHistorySync()
+        for entry in history {
+            let size = entry.imageData?.count ?? entry.text?.utf8.count ?? 0
+            guard size <= budget else { continue }
+            budget -= size
+            sync.items.append(FuseHistoryItem.with {
+                if let data = entry.imageData {
+                    $0.imageData = data
+                    $0.imageMime = entry.mime ?? "image/png"
+                } else {
+                    $0.text = entry.text ?? ""
+                }
+                $0.atUnixMs = Int64(entry.at.timeIntervalSince1970 * 1000)
+            })
+        }
+        guard !sync.items.isEmpty else { return }
+        var envelope = transport.newEnvelope()
+        envelope.historySync = sync
+        transport.broadcast(envelope)
+    }
+
+    /// Folds a peer's history into ours: the entries we lack, at the time they were first
+    /// copied. History only — the clipboard is not touched, the island stays quiet, and
+    /// nothing is sent back, which is what keeps this from looping.
+    func merge(_ sync: FuseHistorySync) {
+        var known = Set(history.compactMap(Self.contentHash))
+        var added: [ClipEntry] = []
+        for item in sync.items {
+            let isImage = !item.imageData.isEmpty
+            guard isImage || !item.text.isEmpty else { continue }
+            let hash = isImage ? LoopGuard.hash(item.imageData) : LoopGuard.hash(item.text)
+            guard known.insert(hash).inserted else { continue }
+            added.append(ClipEntry(
+                id: nextId,
+                text: isImage ? nil : item.text,
+                imageData: isImage ? item.imageData : nil,
+                mime: isImage ? item.imageMime : nil,
+                fromSelf: false,
+                at: Date(timeIntervalSince1970: Double(item.atUnixMs) / 1000),
+            ))
+            nextId += 1
+        }
+        guard !added.isEmpty else { return }
+        commit((history + added).sorted { $0.at > $1.at })
+    }
+
+    private static func contentHash(_ entry: ClipEntry) -> String? {
+        if let data = entry.imageData { return LoopGuard.hash(data) }
+        return entry.text.map { LoopGuard.hash($0) }
     }
 
     /// Put a history entry back on this device's clipboard — the point of a history.
@@ -215,6 +274,9 @@ public final class ClipboardSync {
         let hash: String
         let entry: (text: String?, image: Data?, mime: String?)
         switch envelope.body {
+        case .historySync(let sync):
+            merge(sync)
+            return
         case .clipText:
             let text = envelope.clipText.text
             guard !text.isEmpty else { return }
@@ -293,4 +355,6 @@ public final class ClipboardSync {
 
     private static let maxEntries = 50
     private static let maxHistoryBytes = 24 * 1024 * 1024
+    /// One `HistorySync` frame, with headroom under `LanChannel`'s 4 MB frame cap.
+    private static let maxHistorySyncBytes = 3 * 1024 * 1024
 }

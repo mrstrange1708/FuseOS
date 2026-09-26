@@ -177,4 +177,50 @@ final class ClipboardSyncTests: XCTestCase {
         )!
         return image.representation(using: .png, properties: [:])!
     }
+
+    // MARK: - History sync
+
+    private func historySync(_ texts: [(String, Int64)]) -> FuseEnvelope {
+        var envelope = FuseEnvelope()
+        envelope.sourceDeviceID = "peer"
+        envelope.historySync = FuseHistorySync.with { sync in
+            sync.items = texts.map { text, at in FuseHistoryItem.with { $0.text = text; $0.atUnixMs = at } }
+        }
+        return envelope
+    }
+
+    func testHistorySyncAddsWhatWeLackInTimeOrder() {
+        let changeCount = pasteboard.changeCount
+        let sent = envelopesSent {
+            sync.apply(historySync([("older", 1_000), ("newer", 2_000)]))
+        }
+        XCTAssertEqual(sync.history.prefix(2).map(\.text), ["newer", "older"])
+        XCTAssertTrue(sync.history.prefix(2).allSatisfy { !$0.fromSelf })
+        // History only: the clipboard is untouched and nothing is answered.
+        XCTAssertEqual(pasteboard.changeCount, changeCount)
+        XCTAssertEqual(sent, 0)
+    }
+
+    func testHistorySyncSkipsWhatWeAlreadyHave() {
+        sync.apply(historySync([("same", 1_000)]))
+        let count = sync.history.count
+        sync.apply(historySync([("same", 5_000)]))
+        XCTAssertEqual(sync.history.count, count)
+    }
+}
+
+final class ScreenReceiverFramingTests: XCTestCase {
+    func testSplitsAnnexBOnThreeAndFourByteStartCodes() {
+        let data = Data([0, 0, 0, 1, 0x67, 0xAA, 0, 0, 1, 0x68, 0xBB, 0, 0, 0, 1, 0x65, 0xCC, 0xDD])
+        XCTAssertEqual(ScreenReceiver.nalUnits(in: data), [
+            Data([0x67, 0xAA]), Data([0x68, 0xBB]), Data([0x65, 0xCC, 0xDD]),
+        ])
+    }
+
+    func testAvccPrefixesEachUnitWithItsBigEndianLength() {
+        XCTAssertEqual(
+            ScreenReceiver.avcc([Data([0x65, 0x01]), Data([0x41])]),
+            Data([0, 0, 0, 2, 0x65, 0x01, 0, 0, 0, 1, 0x41]),
+        )
+    }
 }

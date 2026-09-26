@@ -26,6 +26,12 @@ final class DashboardViewModel: ObservableObject {
     private lazy var files = FileTransfer(transport: transport)
     /// Where each received file was saved, so its row can reveal it in Finder.
     private var receivedURLs: [String: URL] = [:]
+    /// Screen mirroring's state, for the Screen pane.
+    @Published var screenState: ScreenReceiver.State = .idle
+    /// The phone's screen. Created up front: it registers the transport's screen hook.
+    lazy var screen = ScreenReceiver(transport: transport)
+    private lazy var notifications = NotificationMirror(transport: transport)
+    private let notifier = PhoneNotifier()
     /// The notch HUD. Owned here because this is where clip events already arrive.
     private let island = ClipIsland()
     private var started = false
@@ -50,6 +56,15 @@ final class DashboardViewModel: ObservableObject {
                 Task { await self.refresh() }
             }
         }
+        // Both ends send their history on every new channel, and each merges what it lacks.
+        transport.onPeersJoined = { [weak self] _ in self?.clipboard.sendHistory() }
+        notifications.onPosted = { [weak self] n in
+            self?.island.present(n)
+            self?.notifier.post(n)
+        }
+        notifications.onRemoved = { [weak self] key in self?.notifier.remove(key: key) }
+        notifier.onUserDismissed = { [weak self] key in self?.notifications.dismiss(key: key) }
+        screen.onStateChanged = { [weak self] state in self?.screenState = state }
         transport.onConnectedPeersChanged = { [weak self] peers in
             self?.connected = peers
             self?.files.peersChanged(peers)
@@ -84,6 +99,7 @@ final class DashboardViewModel: ObservableObject {
 
     func stop() {
         island.dismiss()
+        screen.stop()
         signal.stop()
         files.stop()
         clipboard.stop()

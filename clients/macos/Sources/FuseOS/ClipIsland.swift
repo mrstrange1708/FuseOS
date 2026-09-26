@@ -47,6 +47,12 @@ final class ClipIsland {
         }
     }
 
+    /// A notification from the phone: the app, and what it said.
+    func present(_ notification: PhoneNotification) {
+        show(.notification(notification), peerName: nil, restart: true)
+        scheduleDismiss(after: Self.notificationSeconds)
+    }
+
     func dismiss() {
         dismissTask?.cancel()
         dismissTask = nil
@@ -139,6 +145,8 @@ final class ClipIsland {
     private static let panelWidth: CGFloat = 440
     private static let panelHeight: CGFloat = 150
     private static let visibleSeconds: Double = 2.8
+    /// Longer than a clip: a notification is read, a clip only confirmed.
+    private static let notificationSeconds: Double = 4.5
 }
 
 /// What the island is showing. A class so the panel can mutate it after the SwiftUI view is
@@ -148,6 +156,7 @@ private final class IslandModel: ObservableObject {
     enum Content {
         case clip(ClipEntry)
         case transfer(TransferProgress)
+        case notification(PhoneNotification)
     }
 
     @Published var content: Content?
@@ -228,6 +237,14 @@ private struct IslandView: View {
                 detail: clipPreview(entry),
                 thumbnail: entry.imageData.flatMap(NSImage.init(data:)),
                 incoming: !entry.fromSelf,
+            )
+        case let .notification(n):
+            row(
+                icon: "bell.fill",
+                title: n.appName.isEmpty ? "Your phone" : n.appName,
+                detail: [n.title, n.text].filter { !$0.isEmpty }.joined(separator: " · "),
+                thumbnail: n.iconPNG.flatMap(NSImage.init(data:)),
+                incoming: true,
             )
         case let .transfer(t):
             VStack(spacing: 10) {

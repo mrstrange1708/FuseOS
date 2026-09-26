@@ -36,6 +36,11 @@ message Envelope {
     Ack       ack        = 14;
     Heartbeat heartbeat  = 15;
     FileCancel file_cancel = 16;
+    PhoneNotification phone_notification = 17;
+    NotificationDismiss notification_dismiss = 18;
+    HistorySync history_sync = 19;
+    ScreenControl screen_control = 20;
+    ScreenFrame screen_frame = 21;
   }
 }
 
@@ -76,4 +81,62 @@ message Heartbeat {}
 // forever, and a rejected one left the sender waiting for an ack that never came.
 message FileCancel {
   string transfer_id = 1;
+}
+
+// A notification posted on the phone, mirrored to the Mac. The phone is the only origin:
+// the Mac shows it and never re-emits one, so there is nothing here that can loop.
+// Posting again with the same `key` replaces the earlier one (a chat's next message).
+message PhoneNotification {
+  string key               = 1; // Android's StatusBarNotification key
+  string package           = 2;
+  string app_name          = 3;
+  string title             = 4;
+  string text              = 5;
+  bytes  icon_png          = 6; // the app's icon, small; may be empty
+  int64  posted_at_unix_ms = 7;
+}
+
+// A mirrored notification went away. The phone sends it when one is removed there; the
+// Mac sends it when the user dismisses it there, and the phone then clears it too.
+message NotificationDismiss {
+  string key = 1;
+}
+
+// Sent once each time a channel comes up: the sender's recent clipboard history, so two
+// devices converge on what was copied while they were apart. Applied to history only —
+// never to the clipboard — and never answered with another HistorySync.
+message HistorySync {
+  repeated HistoryItem items = 1;
+}
+
+message HistoryItem {
+  string text       = 1; // set for text entries
+  string image_mime = 2; // set, with image_data, for image entries
+  bytes  image_data = 3;
+  int64  at_unix_ms = 4; // when it was first copied
+}
+
+// Screen mirroring control. Mac -> phone: START asks to begin (the phone asks its user
+// for consent), STOP ends it, KEYFRAME asks for a fresh keyframe after a gap. Phone -> Mac:
+// START once frames are about to flow, STOP when mirroring ended on the phone.
+message ScreenControl {
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+    START              = 1;
+    STOP               = 2;
+    KEYFRAME           = 3;
+  }
+  Action action = 1;
+}
+
+// One H.264 access unit of the phone's screen, Annex-B framed. The codec config
+// (SPS + PPS) is sent as its own frame with `config` set, before the first keyframe and
+// whenever the size changes.
+message ScreenFrame {
+  bytes  data     = 1;
+  bool   keyframe = 2;
+  bool   config   = 3;
+  uint32 width    = 4;
+  uint32 height   = 5;
+  int64  pts_us   = 6;
 }

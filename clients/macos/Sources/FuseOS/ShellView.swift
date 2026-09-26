@@ -71,11 +71,7 @@ struct ShellView: View {
         case .devices:
             DevicesPane(viewModel: viewModel, onLinkManually: { showPairing = true })
         case .screen:
-            ComingSoonPane(
-                title: "Screen sharing",
-                detail: "See and control your phone from this Mac.",
-                symbol: "rectangle.on.rectangle",
-            )
+            ScreenPane(viewModel: viewModel)
         case .account:
             AccountPane(viewModel: viewModel, onLinkManually: { showPairing = true })
         }
@@ -503,33 +499,95 @@ private struct AccountPane: View {
     }
 }
 
-/// A destination that exists in the app but not yet in the product.
-///
-/// Screen sharing is out of scope for v1 (see CLAUDE.md) — it would change the transport
-/// design, and clipboard and files come first. The slot is here so the shape of the app is
-/// final and does not shift under people later.
-private struct ComingSoonPane: View {
-    let title: String
-    let detail: String
-    let symbol: String
+/// The phone's screen, live. View only: controlling the phone would need an
+/// AccessibilityService, which is off the table (see CLAUDE.md).
+private struct ScreenPane: View {
+    @ObservedObject var viewModel: DashboardViewModel
 
     var body: some View {
+        let linked = !viewModel.connected.isEmpty
+        VStack(spacing: 16) {
+            switch viewModel.screenState {
+            case .streaming(let width, let height):
+                PhoneScreen(layer: viewModel.screen.layer)
+                    .aspectRatio(CGFloat(width) / CGFloat(max(height, 1)), contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 6))
+                    .shadow(color: .black.opacity(0.35), radius: 24, y: 12)
+                    .frame(maxHeight: .infinity)
+                Button("Stop mirroring") { viewModel.screen.stop() }
+                    .keyboardShortcut(.escape, modifiers: [])
+            case .requesting:
+                placeholder(
+                    title: "Check your phone",
+                    detail: "Tap Start now on \(viewModel.peerName ?? "your phone") to share its screen.",
+                    busy: true,
+                )
+                Button("Cancel") { viewModel.screen.stop() }
+            case .idle, .ended:
+                placeholder(
+                    title: viewModel.screenState == .ended ? "Mirroring ended" : "See your phone here",
+                    detail: linked
+                        ? "Your phone's screen, live on this Mac over your Wi-Fi."
+                        : "Link your phone first — mirroring runs over the same direct connection.",
+                    busy: false,
+                )
+                Button(viewModel.screenState == .ended ? "Mirror again" : "Mirror \(viewModel.peerName ?? "phone")") {
+                    viewModel.screen.start()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(FuseColor.accent)
+                .controlSize(.large)
+                .disabled(!linked)
+            }
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func placeholder(title: String, detail: String, busy: Bool) -> some View {
         VStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.system(size: 34))
-                .foregroundStyle(FuseColor.muted)
+            ZStack {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(FuseColor.outline, style: StrokeStyle(lineWidth: 1.5, dash: [5, 5]))
+                    .frame(width: 120, height: 220)
+                if busy {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "iphone.gen3")
+                        .font(.system(size: 30, weight: .light))
+                        .foregroundStyle(FuseColor.muted)
+                }
+            }
             Text(title)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(FuseColor.ink)
             Text(detail)
                 .font(.system(size: 13))
                 .foregroundStyle(FuseColor.muted)
-            Label("Coming after clipboard and files", systemImage: "lock")
-                .font(.system(size: 11))
-                .foregroundStyle(FuseColor.muted)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 340)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxHeight: .infinity)
     }
+}
+
+/// Hosts the receiver's display layer. The layer decodes and draws on its own.
+private struct PhoneScreen: NSViewRepresentable {
+    let layer: CALayer
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.black.cgColor
+        layer.frame = view.bounds
+        layer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+        view.layer?.addSublayer(layer)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 // MARK: - Files

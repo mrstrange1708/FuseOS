@@ -27,6 +27,15 @@ public final class LanTransport {
     /// once here beats each of them filtering out the other's messages.
     var onFileEnvelope: ((FuseEnvelope) -> Void)?
 
+    /// Mirrored phone notifications and their dismissals.
+    var onNotificationEnvelope: ((FuseEnvelope) -> Void)?
+
+    /// Screen mirroring: control messages and video frames.
+    var onScreenEnvelope: ((FuseEnvelope) -> Void)?
+
+    /// Fires with the peers that just gained a channel — the moment to exchange history.
+    public var onPeersJoined: ((Set<String>) -> Void)?
+
     /// Peers with a live direct channel right now — what the UI's "connected" chip reads.
     public private(set) var connectedPeers: Set<String> = []
     public var onConnectedPeersChanged: ((Set<String>) -> Void)?
@@ -246,8 +255,12 @@ public final class LanTransport {
                     break // liveness only; nothing above the transport cares
                 case .some(.fileMeta), .some(.fileChunk), .some(.ack), .some(.fileCancel):
                     onFileEnvelope?(envelope)
-                case .some(.clipText), .some(.clipImage):
+                case .some(.clipText), .some(.clipImage), .some(.historySync):
                     onEnvelope?(envelope)
+                case .some(.phoneNotification), .some(.notificationDismiss):
+                    onNotificationEnvelope?(envelope)
+                case .some(.screenControl), .some(.screenFrame):
+                    onScreenEnvelope?(envelope)
                 }
             } catch {
                 return
@@ -271,6 +284,8 @@ public final class LanTransport {
         channels[channel.peerDeviceId]?.close()
         channels[channel.peerDeviceId] = channel
         setConnected(connectedPeers.union([channel.peerDeviceId]))
+        // Every channel, reconnects included: a merge drops what the peer already has.
+        onPeersJoined?([channel.peerDeviceId])
     }
 
     private func drop(_ peerId: String, channel: LanChannel) {
