@@ -1,0 +1,23 @@
+# The whole control plane on one small box: the server, and Caddy in front of it for
+# HTTPS (certificates from Let's Encrypt, renewed by itself) and the /signal WebSocket.
+# Postgres stays on Neon. See deploy/README.md.
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    env_file: server.env
+    restart: unless-stopped
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      FUSE_DOMAIN: ${FUSE_DOMAIN:?set FUSE_DOMAIN, e.g. fuseos.duckdns.org}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    restart: unless-stopped
+volumes:
+  caddy_data:

@@ -2,7 +2,8 @@ import { IconBrandAndroid, IconBrandApple, IconDownload } from '@tabler/icons-re
 import { CardBody, CardContainer, CardItem } from '@/components/ui/3d-card';
 import { AndroidAppScreen, PixelPhone } from '@/components/devices';
 
-const RELEASE = 'https://github.com/mrstrange1708/FuseOS/releases/download/preview';
+// The newest release's assets; .github/workflows/release.yml publishes them under these names.
+const RELEASE = 'https://github.com/mrstrange1708/FuseOS/releases/latest/download';
 
 const PLATFORMS = [
   {
@@ -29,9 +30,9 @@ const PLATFORMS = [
   {
     name: 'Android',
     Icon: IconBrandAndroid,
-    file: 'FuseOS-preview.apk',
+    file: 'FuseOS.apk',
     meta: 'Android 8.0 or later',
-    href: `${RELEASE}/FuseOS-preview.apk`,
+    href: `${RELEASE}/FuseOS.apk`,
     steps: [
       <>Download the APK on your phone and open it.</>,
       <>

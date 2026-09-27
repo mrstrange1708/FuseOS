@@ -44,6 +44,13 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$BIN" "$APP/Contents/MacOS/FuseOS"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+# Where the app finds the control plane (Config.baseURL), and the version the release
+# workflow stamps from the tag. Unset: localhost and the plist's own 0.1 (1).
+plutil -replace FuseServerURL -string "${FUSE_SERVER_URL:-http://localhost:3000}" "$APP/Contents/Info.plist"
+if [ -n "${FUSE_VERSION:-}" ]; then
+	plutil -replace CFBundleShortVersionString -string "$FUSE_VERSION" "$APP/Contents/Info.plist"
+	plutil -replace CFBundleVersion -string "${FUSE_BUILD:-$FUSE_VERSION}" "$APP/Contents/Info.plist"
+fi
 # The icon is committed rather than generated here: it changes about never, and a build
 # should not need Pillow. Regenerate with `python3 make-icon.py` after changing the mark.
 mkdir -p "$APP/Contents/Resources"
@@ -63,15 +70,23 @@ SIGN_PASS="fuseos-local"
 if [ ! -f "$SIGN_KC" ]; then
 	mkdir -p "$SIGN_DIR"
 	TMP="$(mktemp -d)"
-	openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=$SIGN_NAME" \
-		-addext "basicConstraints=critical,CA:false" -addext "keyUsage=critical,digitalSignature" \
-		-addext "extendedKeyUsage=critical,codeSigning" -keyout "$TMP/key.pem" -out "$TMP/cert.pem" 2>/dev/null
-	openssl pkcs12 -export -legacy -inkey "$TMP/key.pem" -in "$TMP/cert.pem" -out "$TMP/id.p12" -passout pass:"$SIGN_PASS" 2>/dev/null ||
-		openssl pkcs12 -export -inkey "$TMP/key.pem" -in "$TMP/cert.pem" -out "$TMP/id.p12" -passout pass:"$SIGN_PASS"
+	P12_PASS="$SIGN_PASS"
+	if [ -n "${FUSE_SIGN_P12:-}" ]; then
+		# Releases: one identity for every version (a repo secret), so a user's grants
+		# survive an update. It must be named "FuseOS Local Signing" too.
+		echo "$FUSE_SIGN_P12" | base64 --decode >"$TMP/id.p12"
+		P12_PASS="$FUSE_SIGN_P12_PASSWORD"
+	else
+		openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=$SIGN_NAME" \
+			-addext "basicConstraints=critical,CA:false" -addext "keyUsage=critical,digitalSignature" \
+			-addext "extendedKeyUsage=critical,codeSigning" -keyout "$TMP/key.pem" -out "$TMP/cert.pem" 2>/dev/null
+		openssl pkcs12 -export -legacy -inkey "$TMP/key.pem" -in "$TMP/cert.pem" -out "$TMP/id.p12" -passout pass:"$SIGN_PASS" 2>/dev/null ||
+			openssl pkcs12 -export -inkey "$TMP/key.pem" -in "$TMP/cert.pem" -out "$TMP/id.p12" -passout pass:"$SIGN_PASS"
+	fi
 	security create-keychain -p "$SIGN_PASS" "$SIGN_KC"
 	security set-keychain-settings "$SIGN_KC" # no auto-lock
 	security unlock-keychain -p "$SIGN_PASS" "$SIGN_KC"
-	security import "$TMP/id.p12" -k "$SIGN_KC" -P "$SIGN_PASS" -T /usr/bin/codesign >/dev/null
+	security import "$TMP/id.p12" -k "$SIGN_KC" -P "$P12_PASS" -T /usr/bin/codesign >/dev/null
 	security set-key-partition-list -S apple-tool:,apple: -s -k "$SIGN_PASS" "$SIGN_KC" >/dev/null
 	rm -rf "$TMP"
 	echo "made signing identity \"$SIGN_NAME\" in $SIGN_KC — grant permissions once more, then they stick"

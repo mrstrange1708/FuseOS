@@ -16,8 +16,9 @@ android {
         applicationId = "com.fuseos.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1"
+        // The release workflow passes the tag and run number; local builds stay 0.1 (1).
+        versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 1
+        versionName = (project.findProperty("versionName") as String?) ?: "0.1"
 
         // Where the app looks for the control plane. `./dev.sh` passes this Mac's
         // current LAN IP; the default is the emulator's alias for the host.
@@ -25,8 +26,24 @@ android {
         buildConfigField("String", "SERVER_URL", "\"$serverUrl\"")
     }
 
+    // Release signing comes from the environment (the release workflow decodes the keystore
+    // from a secret). Without it, assembleRelease still builds — unsigned, uninstallable —
+    // which is what a local release build should be: the key never lives in the repo.
+    val keystore = System.getenv("FUSE_KEYSTORE")?.let(::file)?.takeIf { it.exists() }
+    signingConfigs {
+        if (keystore != null) {
+            create("release") {
+                storeFile = keystore
+                storePassword = System.getenv("FUSE_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("FUSE_KEY_ALIAS") ?: "fuseos"
+                keyPassword = System.getenv("FUSE_KEY_PASSWORD") ?: System.getenv("FUSE_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (keystore != null) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
