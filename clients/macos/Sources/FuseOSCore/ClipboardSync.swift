@@ -79,13 +79,15 @@ public final class ClipboardSync {
     public var onLocalCopy: ((ClipOffer) -> Void)?
 
     private var nextId = 0
-    private let store = ClipHistoryStore()
+    private let store: ClipHistoryStore
 
-    /// The pasteboard is injectable so tests can drive a private one — exercising this
-    /// against `NSPasteboard.general` would fight whoever is using the machine.
-    public init(transport: LanTransport, pasteboard: NSPasteboard = .general) {
+    /// The pasteboard and the history store are injectable so tests drive private ones —
+    /// against `NSPasteboard.general` and Application Support they would fight, and
+    /// overwrite, whoever is using the machine.
+    public init(transport: LanTransport, pasteboard: NSPasteboard = .general, store: ClipHistoryStore = ClipHistoryStore()) {
         self.transport = transport
         self.pasteboard = pasteboard
+        self.store = store
         lastChangeCount = pasteboard.changeCount
     }
 

@@ -85,6 +85,7 @@ class FuseConnectionService : Service() {
 
     override fun onDestroy() {
         scope.cancel()
+        com.fuseos.app.widget.FuseWidget.markOffline(this)
         super.onDestroy()
     }
 

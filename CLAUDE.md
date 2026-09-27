@@ -67,7 +67,7 @@ All JS/TS commands run from the repo root via Turborepo (they fan out to the wor
 | Work in one workspace only | `pnpm --filter server <script>` |
 | Run a single server test | `pnpm --filter server test -- <path-or-name>` |
 
-**CI** (`.github/workflows/ci.yml`) runs `format:check`, `lint`, `typecheck`, and `test` on every push to `main` and every PR. Run these locally before pushing; they must all pass. `lint`/`format` are root-level (ESLint flat config + Prettier); `typecheck`/`test` fan out to workspaces (`tsc --noEmit`, Vitest).
+**CI** (`.github/workflows/ci.yml`) runs `format:check`, `lint`, `typecheck`, and `test` on every push to `main` and every PR. Run these locally before pushing; they must all pass. `lint`/`format` are root-level (ESLint flat config + Prettier); `typecheck`/`test` fan out to workspaces (`tsc --noEmit`, Vitest). Two more jobs build the native apps and run their unit tests: Android (`./gradlew testDebugUnitTest assembleDebug`) and macOS (`swift build` + `swift test` on macos-15 with its newest Xcode).
 
 The native clients are built with their own toolchains, outside PNPM:
 - **Android** (`clients/android/`): `./gradlew assembleDebug` to produce a debug APK; `./gradlew test` for unit tests.
@@ -142,5 +142,5 @@ Two constraints worth knowing before proposing anything in this area:
 - **This Mac has no Xcode, and its macOS 27 Command Line Tools are incomplete.** The 27 SDK lacks
   SwiftUI's macro plugin, so the app only builds against the 26.5 SDK:
   `SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk ./build-app.sh`.
-  `swift build --target FuseOSCore` works as-is. XCTest ships only with Xcode, so `swift test`
+  `swift build --target FuseOSCore` works as-is. XCTest ships only with Xcode, so `swift test` runs in CI (macos-15) — locally it
   cannot run here: install Xcode (free) to run the macOS suite.
