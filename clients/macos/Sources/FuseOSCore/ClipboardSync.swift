@@ -162,6 +162,27 @@ public final class ClipboardSync {
         Task.detached(priority: .utility) { store.save(snapshot) }
     }
 
+    /// Sends a clip already in history — the "Send" on the island's recent copies. It goes
+    /// exactly as a fresh copy would (and is timed the same way), without touching this
+    /// Mac's clipboard.
+    public func resend(_ entry: ClipEntry) {
+        var envelope = transport.newEnvelope()
+        if let data = entry.imageData {
+            guard data.count <= Self.maxInlineImageBytes else { return }
+            envelope.clipImage = FuseClipImage.with {
+                $0.mime = entry.mime ?? "image/png"
+                $0.data = data
+            }
+        } else if let text = entry.text, !text.isEmpty {
+            envelope.clipText = FuseClipText.with { $0.text = text }
+        } else {
+            return
+        }
+        awaitingAck[envelope.seq] = DispatchTime.now().uptimeNanoseconds
+        transport.broadcast(envelope)
+        onClipEvent?(entry)
+    }
+
     /// Sends our recent history to peers that just connected (`HistorySync` in the proto),
     /// newest first, stopping short of the channel's frame cap. Images too big for what is
     /// left of the budget are skipped rather than ending the list.

@@ -130,11 +130,18 @@ final class DashboardViewModel: ObservableObject {
             if let self {
                 self.recentNotifications = Array(([n] + self.recentNotifications.filter { $0.id != n.id }).prefix(5))
             }
-            // A replyable one is a banner (that is where Reply is); the rest use the island.
-            if !n.canReply { self?.island.present(n) }
+            // Every notification shows in the island (with Reply when the app offers one).
+            // Notification Center keeps a copy — when macOS lets an unsigned app post.
+            self?.island.present(n)
             self?.notifier.post(n)
         }
         notifier.onUserReplied = { [weak self] key, text in self?.notifications.reply(key: key, text: text) }
+        island.reply = { [weak self] key, text in self?.notifications.reply(key: key, text: text) }
+        island.recentClips = { [weak self] in self?.history.filter(\.fromSelf) ?? [] }
+        island.sendRecent = { [weak self] entry in
+            guard let self, !self.connected.isEmpty else { return }
+            self.clipboard.resend(entry)
+        }
         notifications.onCall = { [weak self] call in
             guard let self else { return }
             self.island.present(call, answer: self.notifications.answerCall, decline: self.notifications.declineCall,

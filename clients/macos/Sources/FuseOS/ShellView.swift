@@ -203,11 +203,23 @@ private struct HomePane: View {
         ScrollView {
             VStack(spacing: 18) {
                 LinkHero(viewModel: viewModel, onMirror: onMirror)
+                // Three columns when the window is wide, two when it is not, one when it is
+                // narrow — the window's width goes to content instead of margins.
                 ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 18) {
+                        clipboard.frame(minWidth: 360)
+                        VStack(spacing: 18) {
+                            nowPlaying
+                            notificationsPanel
+                        }
+                        .frame(width: 380)
+                        files.frame(width: 340)
+                    }
                     HStack(alignment: .top, spacing: 18) {
                         VStack(spacing: 18) {
                             nowPlaying
                             clipboard
+                            notificationsPanel
                         }
                         .frame(minWidth: 420)
                         files.frame(width: 340)
@@ -215,15 +227,45 @@ private struct HomePane: View {
                     VStack(spacing: 18) {
                         nowPlaying
                         clipboard
+                        notificationsPanel
                         files
                     }
                 }
             }
-            .padding(.horizontal, 28)
+            .padding(.horizontal, 24)
             .padding(.top, 8)
             .padding(.bottom, 28)
-            .frame(maxWidth: 1040)
+            .frame(maxWidth: 1600)
             .frame(maxWidth: .infinity)
+        }
+    }
+
+    /// The phone's latest notifications — the island's history, for the ones missed.
+    @ViewBuilder private var notificationsPanel: some View {
+        Panel(title: "From your phone") {
+            if viewModel.recentNotifications.isEmpty {
+                EmptyNote(symbol: "bell.badge", text: "Turn on notification sync in FuseOS on your phone, and they land here.")
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(viewModel.recentNotifications) { n in
+                        HStack(alignment: .top, spacing: 10) {
+                            if let data = n.iconPNG, let icon = NSImage(data: data) {
+                                Image(nsImage: icon).resizable().frame(width: 30, height: 30)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            } else {
+                                IconTile(symbol: "app.badge")
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(n.title.isEmpty ? n.appName : n.title)
+                                    .font(.system(size: 13, weight: .medium)).foregroundStyle(FuseColor.ink).lineLimit(1)
+                                Text(n.text).font(.system(size: 12)).foregroundStyle(FuseColor.muted).lineLimit(2)
+                            }
+                            Spacer(minLength: 6)
+                            Text(n.postedAt, style: .time).font(.system(size: 11)).foregroundStyle(FuseColor.muted)
+                        }
+                    }
+                }
+            }
         }
     }
 

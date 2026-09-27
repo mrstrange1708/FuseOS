@@ -82,6 +82,16 @@ enum DemoMode {
                 try? rep.representation(using: .png, properties: [:])?.write(to: directory.appendingPathComponent(name))
             }
         }
+        // A wide window, where Home spreads to three columns.
+        NSApp.appearance = NSAppearance(named: .darkAqua)
+        window.setContentSize(NSSize(width: 1680, height: 980))
+        NotificationCenter.default.post(name: showSection, object: FuseSection.home.rawValue)
+        try? await Task.sleep(nanoseconds: 900_000_000)
+        if let view = window.contentView?.superview ?? window.contentView,
+           let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+            view.cacheDisplay(in: view.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: directory.appendingPathComponent("dark-home-wide.png"))
+        }
         await snapshotPopover(to: directory)
         NSApp.terminate(nil)
     }
