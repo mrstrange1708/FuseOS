@@ -20,9 +20,16 @@ let package = Package(
             dependencies: [.product(name: "SwiftProtobuf", package: "swift-protobuf")],
             path: "Sources/FuseOSCore",
         ),
+        // CoreGraphics' virtual-display classes, which have no public header: Sidecar
+        // adds a display for the phone with them.
+        .target(
+            name: "VirtualDisplay",
+            path: "Sources/VirtualDisplay",
+            linkerSettings: [.linkedFramework("CoreGraphics")],
+        ),
         .executableTarget(
             name: "FuseOS",
-            dependencies: ["FuseOSCore"],
+            dependencies: ["FuseOSCore", "VirtualDisplay"],
             path: "Sources/FuseOS",
         ),
         .testTarget(

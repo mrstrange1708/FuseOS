@@ -61,6 +61,10 @@ final class DashboardViewModel: ObservableObject {
     /// The phone as this Mac's trackpad and keyboard, when the user allows it.
     private lazy var pointer = PointerReceiver(transport: transport)
     private let macPointer = MacPointer()
+    /// The phone as a second display for this Mac, when the phone asks for it.
+    private lazy var sidecarLink = SidecarLink(transport: transport)
+    private var sidecar: SidecarHost?
+    @Published var sidecarActive = false
     private let notifier = PhoneNotifier()
     /// The notch HUD. Owned here because this is where clip events already arrive.
     private let island = ClipIsland()
@@ -148,6 +152,15 @@ final class DashboardViewModel: ObservableObject {
             self?.nowPlaying = playing
         }
         pointer.onEvent = { [weak self] event in self?.macPointer.handle(event) }
+        sidecar = SidecarHost(link: sidecarLink) { [weak self] active in
+            guard let self else { return }
+            self.sidecarActive = active
+            self.island.present(
+                symbol: "rectangle.on.rectangle",
+                title: active ? "\(self.peerName ?? "Your phone") is a second display" : "Second display off",
+                detail: active ? "Drag windows onto it" : "The extra display was removed",
+            )
+        }
         phone.onOpenLink = { [weak self] url in
             NSWorkspace.shared.open(url)
             self?.island.present(symbol: "safari", title: "Opened from \(self?.peerName ?? "your phone")", detail: url.host ?? url.absoluteString)
@@ -207,6 +220,7 @@ final class DashboardViewModel: ObservableObject {
     func stop() {
         island.dismiss()
         screen.stop()
+        sidecar?.stop(notifyPhone: true)
         signal.stop()
         files.stop()
         clipboard.stop()
