@@ -23,6 +23,8 @@
 
 	<!-- Required from macOS 15 on: connecting directly to a peer on the LAN triggers a
 	     permission prompt, and an app without this key is denied rather than asked. -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>FuseOS listens for your phone's private Bluetooth beacon to tell how close it is — to lock this Mac when you walk away, and to unlock it when you unlock your phone beside it.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>FuseOS connects directly to your other devices on this Wi-Fi network so clipboard content and files travel between them without going through a server.</string>
 

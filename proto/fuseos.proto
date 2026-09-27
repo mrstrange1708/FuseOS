@@ -54,6 +54,8 @@ message Envelope {
     ScreenFrame sidecar_frame = 32; // Mac -> phone: a frame of the Mac's extra display
     SidecarInput sidecar_input = 33;
     DeviceStatus device_status = 34;
+    BeaconKey beacon_key = 35;
+    Unlocked unlocked = 36;
   }
 }
 
@@ -342,3 +344,17 @@ message DeviceStatus {
   int32 battery  = 1; // 0–100; -1 when the device has no battery (a desktop Mac)
   bool  charging = 2;
 }
+
+// Mac -> phone, on every new channel: a fresh random key for the phone's Bluetooth
+// beacon. The phone advertises HMAC-SHA256(key, unix_time / 600) truncated to 8 bytes as
+// manufacturer data, so only this Mac can recognise it and the value changes every ten
+// minutes — nobody else can track the phone by it.
+message BeaconKey {
+  bytes key = 1; // 16 random bytes
+}
+
+// Either direction: "I was just unlocked by my user." The phone sends it on unlock, and
+// the Mac — when it is locked, the phone is close by Bluetooth, and the user opted in —
+// unlocks. The Mac sends it on unlock, and the phone wakes its screen (an app cannot get
+// past the phone's own lock).
+message Unlocked {}

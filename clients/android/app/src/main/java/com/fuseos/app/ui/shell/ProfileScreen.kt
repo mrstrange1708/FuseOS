@@ -60,6 +60,8 @@ fun ProfileScreen(
     notificationAccess: Boolean,
     notificationsOn: Boolean,
     onNotifications: () -> Unit,
+    nearbyOn: Boolean,
+    onNearby: () -> Unit,
     callsOn: Boolean,
     onCalls: () -> Unit,
     remoteControlOn: Boolean,
@@ -164,6 +166,14 @@ fun ProfileScreen(
                     else -> "Off"
                 },
                 trailingLit = notificationAccess && notificationsOn,
+            )
+            SettingItem(
+                "Nearby lock & unlock",
+                if (nearbyOn) "Your Mac can tell how close this phone is: it locks when you walk away, and wakes this phone when it unlocks."
+                else "Allow Bluetooth so your Mac can tell how close this phone is — to lock when you walk away.",
+                onNearby,
+                trailing = if (nearbyOn) "On" else "Set up",
+                trailingLit = nearbyOn,
             )
             SettingItem(
                 "Calls on your Mac",

@@ -78,6 +78,11 @@ fun FuseShell() {
     var copyOffers by remember { mutableStateOf(com.fuseos.app.capture.CopyOffers.isOn(context)) }
     var callsGranted by remember { mutableStateOf(ServiceLocator.notificationSync.calls.hasPermission()) }
     val askCalls = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { callsGranted = it }
+    var nearbyGranted by remember { mutableStateOf(ServiceLocator.proximity.hasPermission()) }
+    val askNearby = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        nearbyGranted = granted
+        if (granted) ServiceLocator.proximity.permissionChanged()
+    }
     var showPairing by remember { mutableStateOf(false) }
 
     if (showPairing) {
@@ -202,6 +207,12 @@ fun FuseShell() {
                                 sync.setEnabled(!notificationsOn)
                             } else {
                                 runCatching { context.startActivity(sync.accessSettingsIntent()) }
+                            }
+                        },
+                        nearbyOn = nearbyGranted,
+                        onNearby = {
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                                askNearby.launch(android.Manifest.permission.BLUETOOTH_ADVERTISE)
                             }
                         },
                         callsOn = callsGranted,

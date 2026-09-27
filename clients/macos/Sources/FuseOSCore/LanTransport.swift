@@ -33,6 +33,9 @@ public final class LanTransport {
     /// Screen mirroring: control messages and video frames.
     var onScreenEnvelope: ((FuseEnvelope) -> Void)?
 
+    /// Nearby lock and unlock: `BeaconKey`, `Unlocked`.
+    var onProximityEnvelope: ((FuseEnvelope) -> Void)?
+
     /// The other device's battery and charging: `DeviceStatus`.
     var onStatusEnvelope: ((FuseEnvelope) -> Void)?
 
@@ -290,6 +293,8 @@ public final class LanTransport {
                     onSidecarEnvelope?(envelope)
                 case .some(.deviceStatus):
                     onStatusEnvelope?(envelope)
+                case .some(.beaconKey), .some(.unlocked):
+                    onProximityEnvelope?(envelope)
                 }
             } catch {
                 return
