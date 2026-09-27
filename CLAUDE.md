@@ -99,10 +99,11 @@ session that ends mid-plan leaves nothing else behind. When a day lands, tick it
 same commit as the work, and add what the next session needs to know.
 
 v1 is being finished against a plan agreed on 2026-08-20 (days 1–2) and replanned on 2026-09-21
-into ten days that end with v1 released and hosted. On 2026-09-26 the user pulled notification
-sync and view-only screen mirroring into v1 and spent that day on them, so days 3–10 below have
-not started and their dates slip — replan them with the user. v2 (remote control, call/SMS
-relay, cross-network relay) starts only after v1 ships.
+into ten days that end with v1 released and hosted. On 2026-09-26/27 the user widened v1 into a
+continuity suite (below) and set **free distribution only**; hosting, release and the soak slip —
+replan them with the user. Work lands **one feature branch per feature**, merged by PR when done.
+Still not built: cross-network relay, a full Messages pane (reading SMS threads and starting new
+ones — replies to SMS already work through notifications), Bluetooth-proximity auto-lock.
 
 | Day | Date | Work | State |
 | --- | --- | --- | --- |
@@ -112,16 +113,19 @@ relay, cross-network relay) starts only after v1 ships.
 | 2 | Sep 22 | Share for files both ways: Android `ACTION_SEND`/`SEND_MULTIPLE` of any type (done); Mac via Finder Services + drop on the menu bar item — a real Share extension needs a sandbox + App Group signed with a paid Team ID | ✅ done 2026-09-22 — needs a two-device run |
 | — | Sep 26 | Pulled forward by the user: Mac glass redesign (floating nav, link hero, Dock reopen + "Show in Dock", "Ask before sending copies"), Android glass redesign, stale device records hidden, history catch-up (`HistorySync`), notification sync, view-only screen mirroring with rotation (`docs/protocol.md` §9–§11) | ✅ done — needs a two-device run |
 | 3–4 | Sep 23–24 | Real auth: Better Auth on the canonical schema, replacing the dev stand-in | ✅ done 2026-09-26 — bearer session tokens (90 days, rolling), dev accounts migrated with their ids and passwords (0003), dev tables dropped (0004), both clients return to sign-in on a 401 |
-| 5 | Sep 25 | Inngest (presence sweep, verification email) + instrument and measure the clipboard hot path | 🟡 measuring done 2026-09-26 (clip `Ack` round trip, p95 on both link cards); Inngest + email verification not started — need an Inngest account and an email provider |
-| 6 | Sep 26 | Hosting: server on an always-on free VM + Neon Postgres + TLS; release builds default to the hosted `https`/`wss` URL | ⬜ |
+| 5 | Sep 25 | Inngest (presence sweep, verification email) + instrument and measure the clipboard hot path | 🟡 measuring done 2026-09-26 (clip `Ack` round trip, p95 on both link cards). Inngest waits for email verification (Resend, user's account); run it self-hosted on the AWS box |
+| — | Sep 26–27 | Continuity suite, PRs #4–#13: FuseOS keyboard fixed + clipboard strip; remote control of the phone from the Mac (AccessibilityService); ring the phone, Continuity Camera, Handoff for links; Now Playing; phone as trackpad/keyboard; answer calls + reply to notifications from the Mac; lock the Mac when the phone leaves; live activities; live menu bar (spark per crossing); Sidecar (phone as a second display). Remove stale devices, server sign-out, Keychain token, sync-speed p95, 16 KB-aligned libraries. `docs/protocol.md` §9–§16 | ✅ merged — none run on two devices yet |
+| 6 | Sep 26 | Hosting: server on the user's AWS free tier (Neon Postgres stays) + TLS; release builds default to the hosted `https`/`wss` URL | ⬜ next — needs the AWS instance |
 | 7 | Sep 27 | Release pipeline: signed release APK + DMG (self-signed cert, no notarization) on GitHub Releases | ⬜ |
 | 8–9 | Sep 28–29 | Two-device soak against `docs/testing.md`, fix what it finds | ⬜ |
 | 10 | Sep 30 | Docs pass, tag v1.0.0 | ⬜ |
 
-Already working: auth (Better Auth, email + password), device linking, presence/`/signal`, clipboard text and
-images both ways with history (caught up on connect) and reboot survival, Android Share-sheet send
-(text/images), file transfer both ways with progress and cancel, phone notifications on the Mac,
-and the phone's screen mirrored to the Mac.
+Already working (built; the two-device run is still owed): auth (Better Auth), device linking and
+removal, presence, clipboard text and images both ways with history catch-up, Share sheet, file
+transfer, notifications (with replies and live activities), calls, screen mirroring with remote
+control, Sidecar, the phone as trackpad, Now Playing, ring / camera / links, and away-lock. Both
+apps have a debug demo mode for design review (`FUSE_DEMO=<dir>` on macOS, `--ez fuse_demo true`
+on Android).
 
 Two constraints worth knowing before proposing anything in this area:
 
