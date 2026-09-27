@@ -2,7 +2,7 @@
 # Packs a release build into .build/FuseOS.dmg: the app next to an Applications link,
 # so installing is one drag.
 #
-# ponytail: ad-hoc signed and not notarized — there is no paid Developer ID. On first
+# ponytail: self-signed (see build-app.sh) and not notarized — there is no paid Developer ID. On first
 # launch macOS blocks it; the user opens it once, then System Settings → Privacy &
 # Security → Open Anyway. The website's install steps say so.
 set -euo pipefail

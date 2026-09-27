@@ -381,7 +381,10 @@ final class DashboardViewModel: ObservableObject {
             }
         }
         proximityLink.onPeerUnlocked = { [weak self] in
-            guard let self, self.proximity.isNear else { return }
+            guard let self else { return }
+            guard self.proximity.isNear else {
+                return FuseLog.unlock.info("phone unlocked but not near by Bluetooth (\(String(describing: self.proximity.range), privacy: .public))")
+            }
             MacUnlock.unlock()
         }
         let center = DistributedNotificationCenter.default()
