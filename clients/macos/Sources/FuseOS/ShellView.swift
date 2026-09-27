@@ -466,7 +466,7 @@ private struct LinkHero: View {
         return HStack(spacing: 28) {
             HStack(spacing: 0) {
                 endpoint(symbol: "laptopcomputer", name: viewModel.selfDevice?.name ?? "This Mac", lit: true)
-                Filament(linked: linked)
+                LiveFilament(linked: linked, pulse: viewModel.linkPulse)
                     .frame(height: 24)
                     .padding(.horizontal, 4)
                 endpoint(symbol: "iphone", name: peer?.name ?? "Your phone", lit: linked)
@@ -565,38 +565,6 @@ private struct LinkHero: View {
                 .truncationMode(.middle)
                 .frame(maxWidth: 104)
         }
-    }
-}
-
-/// The line between the two devices. Linked, a spark runs along it; not linked, it is a
-/// dim dashed gap. Motion only while there is something live to show.
-private struct Filament: View {
-    let linked: Bool
-
-    var body: some View {
-        TimelineView(.animation(paused: !linked)) { context in
-            Canvas { ctx, size in
-                let y = size.height / 2
-                var line = Path()
-                line.move(to: CGPoint(x: 0, y: y))
-                line.addLine(to: CGPoint(x: size.width, y: y))
-                if linked {
-                    ctx.stroke(line, with: .color(FuseColor.accent.opacity(0.3)), lineWidth: 1.5)
-                    // One trip every 1.8 s, eased so it gathers at each end like a hand-off.
-                    let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.8) / 1.8
-                    let x = size.width * (0.5 - cos(t * .pi) / 2)
-                    ctx.fill(Path(ellipseIn: CGRect(x: x - 9, y: y - 9, width: 18, height: 18)),
-                             with: .color(FuseColor.accent.opacity(0.22)))
-                    ctx.fill(Path(ellipseIn: CGRect(x: x - 3.5, y: y - 3.5, width: 7, height: 7)),
-                             with: .color(FuseColor.accent))
-                } else {
-                    ctx.stroke(line, with: .color(FuseColor.muted.opacity(0.4)),
-                               style: StrokeStyle(lineWidth: 1.5, dash: [4, 6]))
-                }
-            }
-        }
-        .frame(minWidth: 60)
-        .accessibilityHidden(true)
     }
 }
 
@@ -1271,22 +1239,6 @@ private struct StatusPill: View {
     }
 }
 
-private struct ProgressBar: View {
-    let fraction: Double
-
-    var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(FuseColor.outline.opacity(0.6))
-                Capsule()
-                    .fill(FuseColor.accent)
-                    .frame(width: geo.size.width * min(max(fraction, 0), 1))
-                    .animation(.easeOut(duration: 0.25), value: fraction)
-            }
-        }
-        .frame(height: 4)
-    }
-}
 
 /// One clipboard entry: what it is, where it came from, when. Click to copy it back.
 struct ClipRow: View {

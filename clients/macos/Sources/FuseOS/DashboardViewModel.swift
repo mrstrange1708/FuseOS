@@ -41,6 +41,21 @@ final class DashboardViewModel: ObservableObject {
     /// What the phone is playing, and the controls for it.
     lazy var media = MediaRemote(transport: transport)
     @Published var nowPlaying: NowPlaying?
+    /// The latest crossing of the link, for the filament's spark.
+    @Published var linkPulse: LinkPulse?
+    /// The phone's recent notifications, newest first, for the menu bar.
+    @Published var recentNotifications: [PhoneNotification] = []
+    private var lastPulseAt = Date.distantPast
+
+    /// One spark per crossing, at most five a second — a file's progress would otherwise
+    /// ask for hundreds.
+    func pulse(toPhone: Bool) {
+        let now = Date()
+        guard now.timeIntervalSince(lastPulseAt) > 0.2 else { return }
+        lastPulseAt = now
+        linkPulse = LinkPulse(toPhone: toPhone)
+    }
+
     /// The phone's live activities by key, newest first when shown.
     @Published var liveActivities: [String: PhoneNotification] = [:]
     /// The phone as this Mac's trackpad and keyboard, when the user allows it.
@@ -102,10 +117,14 @@ final class DashboardViewModel: ObservableObject {
         // Both ends send their history on every new channel, and each merges what it lacks.
         transport.onPeersJoined = { [weak self] _ in self?.clipboard.sendHistory() }
         notifications.onPosted = { [weak self] n in
+            self?.pulse(toPhone: false)
             // A live activity updates in place in its panel; it is not news to announce.
             if n.ongoing {
                 self?.liveActivities[n.id] = n
                 return
+            }
+            if let self {
+                self.recentNotifications = Array(([n] + self.recentNotifications.filter { $0.id != n.id }).prefix(5))
             }
             // A replyable one is a banner (that is where Reply is); the rest use the island.
             if !n.canReply { self?.island.present(n) }
@@ -124,7 +143,10 @@ final class DashboardViewModel: ObservableObject {
         notifier.onUserDismissed = { [weak self] key in self?.notifications.dismiss(key: key) }
         screen.onStateChanged = { [weak self] state in self?.screenState = state }
         screen.onCanControlChanged = { [weak self] can in self?.canControlPhone = can }
-        media.onChange = { [weak self] playing in self?.nowPlaying = playing }
+        media.onChange = { [weak self] playing in
+            if playing != nil { self?.pulse(toPhone: false) }
+            self?.nowPlaying = playing
+        }
         pointer.onEvent = { [weak self] event in self?.macPointer.handle(event) }
         phone.onOpenLink = { [weak self] url in
             NSWorkspace.shared.open(url)
@@ -156,6 +178,7 @@ final class DashboardViewModel: ObservableObject {
             // ponytail: newest 20 only; a record of every file ever sent belongs in a
             // history store, which files do not have yet.
             self.transfers = Array(([progress] + self.transfers.filter { $0.id != progress.id }).prefix(20))
+            if !progress.finished { self.pulse(toPhone: progress.outgoing) }
             // Files get the island too: it swells out of the notch and fills as bytes move.
             self.island.present(progress, peerName: self.peerName)
         }
@@ -176,6 +199,7 @@ final class DashboardViewModel: ObservableObject {
             // that is always the right name, and with several the connected one is the
             // only one the clip can have come from or gone to.
             self.island.present(entry, peerName: self.peerName)
+            self.pulse(toPhone: entry.fromSelf)
         }
         Task { await bootstrap() }
     }

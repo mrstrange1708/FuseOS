@@ -20,8 +20,12 @@ enum DemoMode {
     /// Posted with the tab's raw value; ShellView switches to it.
     static let showSection = Notification.Name("fuse.demo.showSection")
 
+    /// The view model the demo filled, for rendering the popover outside the window.
+    @MainActor private static var viewModel: DashboardViewModel?
+
     @MainActor
     static func fill(_ vm: DashboardViewModel) {
+        viewModel = vm
         let mac = DeviceItem(id: "mac", name: "Junaid's MacBook Pro", platform: "macos", online: true, battery: nil, trusted: true, isSelf: true)
         let phone = DeviceItem(id: "phone", name: "Realme 12 Pro", platform: "android", online: true, battery: 76, trusted: true, isSelf: false)
         vm.selfDevice = mac
@@ -30,6 +34,12 @@ enum DemoMode {
         vm.connected = [phone.id]
         let now = Date()
         vm.syncLatency = SyncLatency(lastMs: 38, p95Ms: 64, samples: 50)
+        vm.recentNotifications = [
+            PhoneNotification(id: "wa", appName: "WhatsApp", title: "Ananya", text: "Are we still on for 7?",
+                              iconPNG: nil, postedAt: now.addingTimeInterval(-120), canReply: true),
+            PhoneNotification(id: "bank", appName: "HDFC Bank", title: "Payment received", text: "₹2,400 credited to your account",
+                              iconPNG: nil, postedAt: now.addingTimeInterval(-900)),
+        ]
         vm.liveActivities = [
             "uber": PhoneNotification(
                 id: "uber", appName: "Uber", title: "Driver arriving in 4 min", text: "White Swift · KA 01 AB 1234",
@@ -72,7 +82,30 @@ enum DemoMode {
                 try? rep.representation(using: .png, properties: [:])?.write(to: directory.appendingPathComponent(name))
             }
         }
+        await snapshotPopover(to: directory)
         NSApp.terminate(nil)
+    }
+
+    /// The menu bar popover, in both appearances, caught mid-pulse so the spark shows.
+    @MainActor
+    private static func snapshotPopover(to directory: URL) async {
+        guard let vm = viewModel else { return }
+        for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+            let host = NSHostingView(rootView: MenuBarContent(viewModel: vm).environmentObject(SessionStore.shared))
+            host.appearance = NSAppearance(named: appearance)
+            let size = host.fittingSize
+            let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+            window.contentView = host
+            window.orderBack(nil)
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            vm.pulse(toPhone: false)
+            try? await Task.sleep(nanoseconds: 260_000_000)
+            guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { continue }
+            host.cacheDisplay(in: host.bounds, to: rep)
+            let name = "\(appearance == .darkAqua ? "dark" : "light")-popover.png"
+            try? rep.representation(using: .png, properties: [:])?.write(to: directory.appendingPathComponent(name))
+            window.orderOut(nil)
+        }
     }
 
     private static func sampleImage() -> Data? {

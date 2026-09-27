@@ -201,3 +201,85 @@ struct CapsuleButtonStyle: ButtonStyle {
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
+
+/// Something just crossed the link, and which way. The filament animates one spark per
+/// pulse, so the link visibly "does something" exactly when data moves.
+struct LinkPulse: Equatable {
+    let id = UUID()
+    /// Mac → phone when true; phone → Mac when false.
+    let toPhone: Bool
+}
+
+/// The line between this Mac (left) and the phone (right). Linked, it rests with a soft dot
+/// in the middle, and a spark runs along it — in the direction the data went — each time a
+/// `LinkPulse` arrives. Not linked, a dim dashed gap. Animation-driven, so an idle link
+/// costs nothing.
+struct LiveFilament: View {
+    let linked: Bool
+    let pulse: LinkPulse?
+    @State private var travel: CGFloat = 0
+    @State private var running = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width, y = geo.size.height / 2
+            ZStack {
+                if linked {
+                    Capsule().fill(FuseColor.accent.opacity(0.3)).frame(width: w, height: 1.5).position(x: w / 2, y: y)
+                    Circle()
+                        .fill(FuseColor.accent.opacity(running ? 0.25 : 0.85))
+                        .frame(width: 6, height: 6)
+                        .position(x: w / 2, y: y)
+                    if running {
+                        let x = (pulse?.toPhone ?? true) ? travel * w : (1 - travel) * w
+                        Circle().fill(FuseColor.accent.opacity(0.22)).frame(width: 18, height: 18).position(x: x, y: y)
+                        Circle().fill(FuseColor.accent).frame(width: 8, height: 8).position(x: x, y: y)
+                    }
+                } else {
+                    Path { p in
+                        p.move(to: CGPoint(x: 0, y: y))
+                        p.addLine(to: CGPoint(x: w, y: y))
+                    }
+                    .stroke(FuseColor.muted.opacity(0.4), style: StrokeStyle(lineWidth: 1.5, dash: [4, 6]))
+                }
+            }
+        }
+        .onChange(of: pulse) { _ in run() }
+        .accessibilityHidden(true)
+    }
+
+    private func run() {
+        guard linked else { return }
+        var reset = Transaction()
+        reset.disablesAnimations = true
+        withTransaction(reset) {
+            travel = 0
+            running = true
+        }
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.55)) { travel = 1 }
+        }
+        let id = pulse?.id
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            if pulse?.id == id { running = false }
+        }
+    }
+}
+
+/// A thin ember progress bar — the one used everywhere a thing is moving.
+struct ProgressBar: View {
+    let fraction: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(FuseColor.outline.opacity(0.6))
+                Capsule()
+                    .fill(FuseColor.accent)
+                    .frame(width: geo.size.width * min(max(fraction, 0), 1))
+                    .animation(.easeOut(duration: 0.25), value: fraction)
+            }
+        }
+        .frame(height: 4)
+    }
+}
