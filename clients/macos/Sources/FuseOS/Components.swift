@@ -210,58 +210,85 @@ struct LinkPulse: Equatable {
     let toPhone: Bool
 }
 
-/// The line between this Mac (left) and the phone (right). Linked, it rests with a soft dot
-/// in the middle, and a spark runs along it — in the direction the data went — each time a
-/// `LinkPulse` arrives. Not linked, a dim dashed gap. Animation-driven, so an idle link
-/// costs nothing.
+/// The line between this Mac (left) and the phone (right), driven by what actually moves:
+/// a comet with an amber tail for each `LinkPulse`, in the direction the data went, and a
+/// ring where it lands; beads streaming the whole time a file is in flight (`stream`, true
+/// toward the phone). Idle, it rests with a dot in the middle and draws nothing per frame.
+/// Not linked, a dim dashed gap.
 struct LiveFilament: View {
     let linked: Bool
     let pulse: LinkPulse?
-    @State private var travel: CGFloat = 0
-    @State private var running = false
+    var stream: Bool? = nil
+    @State private var sparkStart: Date?
+    @State private var toPhone = true
+
+    private static let travel = 0.6
+    private static let landing = 0.45
 
     var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width, y = geo.size.height / 2
-            ZStack {
-                if linked {
-                    Capsule().fill(FuseColor.accent.opacity(0.3)).frame(width: w, height: 1.5).position(x: w / 2, y: y)
-                    Circle()
-                        .fill(FuseColor.accent.opacity(running ? 0.25 : 0.85))
-                        .frame(width: 6, height: 6)
-                        .position(x: w / 2, y: y)
-                    if running {
-                        let x = (pulse?.toPhone ?? true) ? travel * w : (1 - travel) * w
-                        Circle().fill(FuseColor.accent.opacity(0.22)).frame(width: 18, height: 18).position(x: x, y: y)
-                        Circle().fill(FuseColor.accent).frame(width: 8, height: 8).position(x: x, y: y)
-                    }
-                } else {
-                    Path { p in
-                        p.move(to: CGPoint(x: 0, y: y))
-                        p.addLine(to: CGPoint(x: w, y: y))
-                    }
-                    .stroke(FuseColor.muted.opacity(0.4), style: StrokeStyle(lineWidth: 1.5, dash: [4, 6]))
-                }
+        TimelineView(.animation(paused: stream == nil && sparkStart == nil)) { timeline in
+            Canvas { g, size in draw(&g, size: size, now: timeline.date) }
+        }
+        .onChange(of: pulse) { pulse in
+            guard linked, let pulse else { return }
+            let start = Date()
+            toPhone = pulse.toPhone
+            sparkStart = start
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.travel + Self.landing) {
+                if sparkStart == start { sparkStart = nil }
             }
         }
-        .onChange(of: pulse) { _ in run() }
         .accessibilityHidden(true)
     }
 
-    private func run() {
-        guard linked else { return }
-        var reset = Transaction()
-        reset.disablesAnimations = true
-        withTransaction(reset) {
-            travel = 0
-            running = true
+    private func draw(_ g: inout GraphicsContext, size: CGSize, now: Date) {
+        let w = size.width, y = size.height / 2
+        var rail = Path()
+        rail.move(to: CGPoint(x: 0, y: y))
+        rail.addLine(to: CGPoint(x: w, y: y))
+        guard linked else {
+            g.stroke(rail, with: .color(FuseColor.muted.opacity(0.4)), style: StrokeStyle(lineWidth: 1.5, dash: [4, 6]))
+            return
         }
-        DispatchQueue.main.async {
-            withAnimation(.easeInOut(duration: 0.55)) { travel = 1 }
+        g.stroke(rail, with: .linearGradient(
+            Gradient(colors: [FuseColor.accent.opacity(0.15), FuseColor.accent.opacity(0.5), FuseColor.accent.opacity(0.15)]),
+            startPoint: CGPoint(x: 0, y: y), endPoint: CGPoint(x: w, y: y),
+        ), lineWidth: 1.5)
+        func dot(_ x: CGFloat, _ r: CGFloat, _ color: Color) {
+            g.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)), with: .color(color))
         }
-        let id = pulse?.id
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            if pulse?.id == id { running = false }
+        if let stream {
+            let phase = now.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.1) / 1.1
+            for i in 0..<3 {
+                let t = (phase + Double(i) / 3).truncatingRemainder(dividingBy: 1)
+                // Fading at both ends reads as leaving one device and entering the other.
+                dot(stream ? t * w : (1 - t) * w, 2.5, FuseColor.amber.opacity(sin(t * .pi)))
+            }
+        } else if sparkStart == nil {
+            dot(w / 2, 3, FuseColor.accent.opacity(0.85))
+        }
+        guard let sparkStart else { return }
+        let elapsed = now.timeIntervalSince(sparkStart)
+        if elapsed < Self.travel {
+            let p = elapsed / Self.travel
+            let t = p < 0.5 ? 2 * p * p : 1 - pow(-2 * p + 2, 2) / 2 // ease in-out
+            let x = toPhone ? t * w : (1 - t) * w
+            let tail = 60 * (1 - abs(0.5 - t))
+            let from = CGPoint(x: toPhone ? max(0, x - tail) : min(w, x + tail), y: y)
+            var streak = Path()
+            streak.move(to: from)
+            streak.addLine(to: CGPoint(x: x, y: y))
+            g.stroke(streak, with: .linearGradient(Gradient(colors: [.clear, FuseColor.amber]), startPoint: from, endPoint: CGPoint(x: x, y: y)),
+                     style: StrokeStyle(lineWidth: 3, lineCap: .round))
+            dot(x, 9, FuseColor.accent.opacity(0.25))
+            dot(x, 4, FuseColor.amber)
+        } else {
+            // Landed: a ring opens at the receiving end and fades.
+            let c = min(1, (elapsed - Self.travel) / Self.landing)
+            let x = toPhone ? w : 0
+            let r = 4 + 14 * c
+            g.stroke(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)),
+                     with: .color(FuseColor.amber.opacity(1 - c)), lineWidth: 1.5)
         }
     }
 }

@@ -2,7 +2,19 @@ package com.fuseos.app.ui.shell
 
 import com.fuseos.app.ui.components.glassCard
 import androidx.compose.foundation.background
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.spring
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import com.fuseos.app.ui.theme.Amber
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -95,6 +107,9 @@ fun HomeScreen(
             peerBattery = macStatus?.battery ?: peer?.let { peerBattery(it.id) },
             peerCharging = macStatus?.charging == true,
             latency = latency,
+            // The newest clip crossed the link: from here when this phone copied it.
+            crossing = history.firstOrNull()?.let { Crossing(it.id, toMac = it.fromSelf) },
+            streamToMac = transfers.firstOrNull { it.state == TransferProgress.State.Active }?.outgoing,
         )
 
         Panel(title = "Files") {
@@ -172,8 +187,13 @@ private fun LinkHero(
     peerBattery: Int?,
     peerCharging: Boolean,
     latency: SyncLatency?,
+    crossing: Crossing?,
+    streamToMac: Boolean?,
 ) {
     val linked = stage == ConnectStage.Connected
+    // Which end last caught something, so it can take the hit.
+    var caught by remember { mutableStateOf<Pair<Boolean, Any>?>(null) }
+    val ember = MaterialTheme.colorScheme.primary
     val pill = when (stage) {
         ConnectStage.Connected -> "Linked · direct"
         ConnectStage.Connecting -> "Connecting"
@@ -192,20 +212,39 @@ private fun LinkHero(
         modifier = Modifier
             .fillMaxWidth()
             .glassCard(24.dp)
+            // The website's glowing edge: lit while linked, the one warm outline on Home.
+            .border(
+                1.dp,
+                Brush.linearGradient(
+                    listOf(ember.copy(alpha = if (linked) 0.7f else 0.1f), Color.Transparent, Amber.copy(alpha = if (linked) 0.45f else 0.05f)),
+                ),
+                RoundedCornerShape(24.dp),
+            )
             .padding(horizontal = 18.dp, vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Endpoint(Icons.Filled.Smartphone, selfName, lit = true)
-            Filament(linked, Modifier.weight(1f).height(24.dp).padding(horizontal = 4.dp))
-            Endpoint(Icons.Filled.Computer, peerName ?: "Your Mac", lit = linked)
+            Endpoint(Icons.Filled.Smartphone, selfName, lit = true, catchKey = caught?.takeIf { !it.first })
+            Filament(
+                linked,
+                crossing,
+                streamToMac,
+                onArrive = { toMac -> caught = toMac to Any() },
+                modifier = Modifier.weight(1f).height(24.dp).padding(horizontal = 4.dp),
+            )
+            Endpoint(Icons.Filled.Computer, peerName ?: "Your Mac", lit = linked, catchKey = caught?.takeIf { it.first })
         }
         Spacer(Modifier.height(16.dp))
         StatusPill(pill, linked)
         Spacer(Modifier.height(8.dp))
         Text(
             peerName ?: "No Mac yet",
-            style = MaterialTheme.typography.titleLarge,
+            // Ember to amber, like the website's headline — only when there is a link to celebrate.
+            style = if (linked) {
+                MaterialTheme.typography.titleLarge.copy(brush = Brush.linearGradient(listOf(ember, Amber)))
+            } else {
+                MaterialTheme.typography.titleLarge
+            },
             textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -234,11 +273,18 @@ private fun LinkHero(
 }
 
 @Composable
-private fun Endpoint(icon: ImageVector, name: String, lit: Boolean) {
+private fun Endpoint(icon: ImageVector, name: String, lit: Boolean, catchKey: Any? = null) {
+    val bump = remember { Animatable(1f) }
+    LaunchedEffect(catchKey) {
+        if (catchKey == null) return@LaunchedEffect
+        bump.snapTo(1.16f)
+        bump.animateTo(1f, spring(dampingRatio = 0.35f, stiffness = 500f))
+    }
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(92.dp)) {
         Box(
             Modifier
                 .size(58.dp)
+                .scale(bump.value)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = if (lit) 0.16f else 0.06f)),
             contentAlignment = Alignment.Center,
@@ -261,30 +307,80 @@ private fun Endpoint(icon: ImageVector, name: String, lit: Boolean) {
     }
 }
 
-/** Linked: a spark runs the line, easing at each end like a hand-off. Not: a dim dashed gap. */
+/** Something crossed the link: which item (so it plays once), and which way. */
+data class Crossing(val key: Any, val toMac: Boolean)
+
+/**
+ * The line between the devices, driven by what actually moves: a comet with an amber tail
+ * for each clip, in the direction it went; beads streaming the whole time a file is in
+ * flight. Idle, it rests — a spark that loops by itself says nothing. Not linked: a dim
+ * dashed gap.
+ */
 @Composable
-private fun Filament(linked: Boolean, modifier: Modifier = Modifier) {
+private fun Filament(
+    linked: Boolean,
+    crossing: Crossing?,
+    streamToMac: Boolean?,
+    onArrive: (toMac: Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val ember = MaterialTheme.colorScheme.primary
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val t by rememberInfiniteTransition(label = "filament").animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Restart),
-        label = "spark",
-    )
+    val spark = remember { Animatable(0f) }
+    var toMac by remember { mutableStateOf(true) }
+    // What was already there when Home opened is history, not news.
+    val seen = remember { crossing?.key }
+    LaunchedEffect(crossing?.key) {
+        val c = crossing ?: return@LaunchedEffect
+        if (c.key == seen || !linked) return@LaunchedEffect
+        toMac = c.toMac
+        spark.snapTo(0f)
+        spark.animateTo(1f, tween(620, easing = FastOutSlowInEasing))
+        onArrive(c.toMac)
+        spark.snapTo(0f)
+    }
+    val bead = if (streamToMac != null) {
+        rememberInfiniteTransition(label = "stream").animateFloat(
+            0f, 1f, infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Restart), label = "bead",
+        ).value
+    } else {
+        null
+    }
     Canvas(modifier) {
         val y = size.height / 2
-        if (linked) {
-            drawLine(ember.copy(alpha = 0.35f), Offset(0f, y), Offset(size.width, y), strokeWidth = 2.dp.toPx())
-            val x = size.width * t
-            drawCircle(ember.copy(alpha = 0.25f), radius = 9.dp.toPx(), center = Offset(x, y))
-            drawCircle(ember, radius = 4.dp.toPx(), center = Offset(x, y))
-        } else {
+        val w = size.width
+        if (!linked) {
             drawLine(
-                muted.copy(alpha = 0.4f), Offset(0f, y), Offset(size.width, y),
+                muted.copy(alpha = 0.4f), Offset(0f, y), Offset(w, y),
                 strokeWidth = 1.5.dp.toPx(),
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 6.dp.toPx())),
             )
+            return@Canvas
+        }
+        drawLine(
+            Brush.horizontalGradient(listOf(ember.copy(alpha = 0.15f), ember.copy(alpha = 0.5f), ember.copy(alpha = 0.15f))),
+            Offset(0f, y), Offset(w, y), strokeWidth = 2.dp.toPx(),
+        )
+        if (bead != null && streamToMac != null) {
+            repeat(3) { i ->
+                val t = (bead + i / 3f) % 1f
+                val x = if (streamToMac) t * w else (1 - t) * w
+                // Fade in and out at the ends so beads appear to leave one device and enter the other.
+                val a = kotlin.math.sin(t * Math.PI).toFloat()
+                drawCircle(Amber.copy(alpha = a), radius = 3.dp.toPx(), center = Offset(x, y))
+            }
+        }
+        val t = spark.value
+        if (t > 0f) {
+            val x = if (toMac) t * w else (1 - t) * w
+            val tail = 64.dp.toPx() * (1 - kotlin.math.abs(0.5f - t))
+            val from = Offset(if (toMac) x - tail else x + tail, y)
+            drawLine(
+                Brush.linearGradient(listOf(Color.Transparent, Amber), start = from, end = Offset(x, y)),
+                from, Offset(x, y), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round,
+            )
+            drawCircle(ember.copy(alpha = 0.28f), radius = 11.dp.toPx(), center = Offset(x, y))
+            drawCircle(Amber, radius = 4.5.dp.toPx(), center = Offset(x, y))
         }
     }
 }

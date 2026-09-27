@@ -11,6 +11,9 @@ import androidx.compose.ui.graphics.Color
 val Ember = Color(0xFFE85D2A)
 val EmberDark = Color(0xFFFF7A45)
 
+/** The website's second warm note: tails, beads and the end of every gradient. */
+val Amber = Color(0xFFFFB347)
+
 private val LightColors = lightColorScheme(
     primary = Ember,
     onPrimary = Color(0xFFFFFFFF),
