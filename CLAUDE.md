@@ -103,7 +103,8 @@ into ten days that end with v1 released and hosted. On 2026-09-26/27 the user wi
 continuity suite (below) and set **free distribution only**; hosting, release and the soak slip —
 replan them with the user. Work lands **one feature branch per feature**, merged by PR when done.
 Still not built: cross-network relay, a full Messages pane (reading SMS threads and starting new
-ones — replies to SMS already work through notifications), Bluetooth-proximity auto-lock.
+ones — replies to SMS already work through notifications). The Mac cannot unlock the phone —
+Android allows no app past its lock; unlocking the Mac only wakes the phone's screen.
 
 | Day | Date | Work | State |
 | --- | --- | --- | --- |
@@ -115,6 +116,7 @@ ones — replies to SMS already work through notifications), Bluetooth-proximity
 | 3–4 | Sep 23–24 | Real auth: Better Auth on the canonical schema, replacing the dev stand-in | ✅ done 2026-09-26 — bearer session tokens (90 days, rolling), dev accounts migrated with their ids and passwords (0003), dev tables dropped (0004), both clients return to sign-in on a 401 |
 | 5 | Sep 25 | Inngest (presence sweep, verification email) + instrument and measure the clipboard hot path | 🟡 measuring done 2026-09-26 (clip `Ack` round trip, p95 on both link cards). Inngest waits for email verification (Resend, user's account); run it self-hosted on the AWS box |
 | — | Sep 26–27 | Continuity suite, PRs #4–#13: FuseOS keyboard fixed + clipboard strip; remote control of the phone from the Mac (AccessibilityService); ring the phone, Continuity Camera, Handoff for links; Now Playing; phone as trackpad/keyboard; answer calls + reply to notifications from the Mac; lock the Mac when the phone leaves; live activities; live menu bar (spark per crossing); Sidecar (phone as a second display). Remove stale devices, server sign-out, Keychain token, sync-speed p95, 16 KB-aligned libraries. `docs/protocol.md` §9–§16 | ✅ merged — none run on two devices yet |
+| — | Sep 27 | Round two, PRs #15–#20: copy pop-up with Gboard (FuseOS keyboard removed, quiet notification, dev phone over Wi-Fi); island shows every notification with Reply, hover the notch for recent copies, wide Home; trackpad three-finger swipes + typing; charging both ways (`DeviceStatus`); home-screen widget; Bluetooth-distance lock and experimental phone-unlocks-Mac (`docs/protocol.md` §15, §17) | ✅ merged — none run on two devices yet |
 | 6 | Sep 26 | Hosting: server on the user's AWS free tier (Neon Postgres stays) + TLS; release builds default to the hosted `https`/`wss` URL | ⬜ next — needs the AWS instance |
 | 7 | Sep 27 | Release pipeline: signed release APK + DMG (self-signed cert, no notarization) on GitHub Releases | ⬜ |
 | 8–9 | Sep 28–29 | Two-device soak against `docs/testing.md`, fix what it finds | ⬜ |
