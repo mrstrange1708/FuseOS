@@ -62,7 +62,12 @@ class FuseConnectionService : Service() {
         if (islandJob?.isActive != true) {
             islandJob = scope.launch {
                 ServiceLocator.clipboardSync.events.collect { entry ->
-                    ServiceLocator.clipIsland.clip(entry)
+                    // Copied here with nothing linked: it is in History, but it went nowhere.
+                    if (entry.fromSelf && ServiceLocator.lanTransport.connectedPeers.value.isEmpty()) {
+                        ServiceLocator.clipIsland.status("Not sent", "Your Mac isn't linked. Kept in History.")
+                    } else {
+                        ServiceLocator.clipIsland.clip(entry)
+                    }
                 }
             }
         }

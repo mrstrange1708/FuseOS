@@ -1,5 +1,6 @@
 package com.fuseos.app.ui.shell
 
+import com.fuseos.app.clipboard.SendOutcome
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -245,10 +246,13 @@ fun FuseShell() {
             onSelect = { tab = it },
             centreEnabled = linked,
             onCentreTap = {
-                val sent = viewModel.sendCurrentClipboard()
                 Toast.makeText(
                     context,
-                    if (sent) "Sent to your Mac" else "Nothing on the clipboard to send",
+                    when (viewModel.sendCurrentClipboard()) {
+                        SendOutcome.Sent -> "Sent to your Mac"
+                        SendOutcome.NotLinked -> "Your Mac isn't linked. Kept in History."
+                        SendOutcome.Nothing -> "Nothing on the clipboard to send"
+                    },
                     Toast.LENGTH_SHORT,
                 ).show()
             },
