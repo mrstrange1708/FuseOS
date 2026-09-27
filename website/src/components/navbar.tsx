@@ -9,6 +9,7 @@ const LINKS = [
   { href: '#notch', label: 'The island' },
   { href: '#story', label: 'How it feels' },
   { href: '#menubar', label: 'Menu bar' },
+  { href: '#continuity', label: 'Continuity' },
   { href: '#privacy', label: 'Privacy' },
 ];
 

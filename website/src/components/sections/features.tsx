@@ -68,8 +68,8 @@ const FEATURES: Feature[] = [
   {
     Icon: IconShare3,
     title: 'From the share sheet',
-    body: "Choose FuseOS in any app's Share menu to send a link, a photo or some text. The app doesn't need to be open.",
-    spec: 'android today · mac next',
+    body: "Choose FuseOS in any app's Share menu on the phone, or right-click a file in Finder, to send a link, a photo, text or files.",
+    spec: 'android share sheet · mac finder',
     className: 'md:col-span-2',
   },
   {
@@ -82,8 +82,8 @@ const FEATURES: Feature[] = [
   {
     Icon: IconDeviceMobileMessage,
     title: 'One tap from any app',
-    body: 'Send your clipboard from Quick Settings, the notification, or the island. You never have to open FuseOS.',
-    spec: 'tile · notification · island',
+    body: 'Copy anything and the island offers to send it. Or send from Quick Settings or the home-screen widget. You never open FuseOS.',
+    spec: 'copy pop-up · tile · widget',
     className: 'md:col-span-2',
   },
 ];
