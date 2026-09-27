@@ -33,6 +33,14 @@
          without it FuseOS falls back to pressing the call notification's own buttons. -->
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
 
+    <!-- Nearby lock and unlock: a private Bluetooth beacon the Mac measures distance by
+         (advertise only — FuseOS never scans or connects on the phone), and waking the
+         screen when the Mac is unlocked. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <application
         android:name=".FuseApp"
         android:allowBackup="true"

@@ -737,6 +737,7 @@ private struct AccountPane: View {
     @AppStorage(DashboardViewModel.askBeforeSendKey) private var askBeforeSend = false
     @AppStorage(MacPointer.enabledKey) private var phoneControlsMac = false
     @AppStorage(ScreenLock.enabledKey) private var lockWhenPhoneLeaves = false
+    @AppStorage(MacUnlock.enabledKey) private var unlockWithPhone = false
 
     var body: some View {
         ScrollView {
@@ -811,9 +812,25 @@ private struct AccountPane: View {
                         Divider().opacity(0.5)
                         SettingSwitch(
                             title: "Lock this Mac when your phone leaves",
-                            detail: "When your phone leaves this Wi-Fi but is still online, the Mac locks after 20 s.",
+                            detail: "When your phone walks away (Bluetooth distance) or leaves this Wi-Fi, the Mac locks.",
                             isOn: $lockWhenPhoneLeaves,
                         )
+                        .onChange(of: lockWhenPhoneLeaves) { _ in viewModel.proximitySettingsChanged() }
+                        Divider().opacity(0.5)
+                        SettingSwitch(
+                            title: "Unlock this Mac with your phone",
+                            detail: "Experimental. Unlock your phone next to the Mac and the Mac unlocks too.",
+                            isOn: $unlockWithPhone,
+                        )
+                        .onChange(of: unlockWithPhone) { on in
+                            if on {
+                                if !MacUnlock.setUp() { unlockWithPhone = false }
+                                MacPointer.accessibilityGranted(prompt: true)
+                            } else {
+                                MacUnlock.forget()
+                            }
+                            viewModel.proximitySettingsChanged()
+                        }
                         Divider().opacity(0.5)
                         SettingSwitch(
                             title: "Let your phone control this Mac",

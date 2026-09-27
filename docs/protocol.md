@@ -92,6 +92,8 @@ message Envelope {
 | `SIDECAR_FRAME` | Mac → phone | one H.264 access unit of the Mac's extra display (§16) |
 | `SIDECAR_INPUT` | phone → Mac | a touch on the second display (§16) |
 | `DEVICE_STATUS` | either | battery and charging, live (§17) |
+| `BEACON_KEY` | Mac → phone | the key the phone's private Bluetooth beacon rotates with (§15) |
+| `UNLOCKED` | either | "my user just unlocked me" (§15) |
 | `REMOTE_INPUT` | Mac → phone | a tap, swipe, long-press, Back/Home/Recents, text or key for the phone to perform (§11) |
 
 ## 4. Loop-prevention invariant (critical)
@@ -259,9 +261,13 @@ Anything the phone must show while FuseOS is in the background (the camera, a li
 
 The Mac acts on `POINTER_INPUT` only when **both** gates are open: the user's *Let your phone control this Mac* switch in Account (off by default), and macOS Accessibility access for FuseOS (turning the switch on asks macOS to show its prompt). It then posts real `CGEvent`s — mouse moves clamped to the screens, clicks with the right click count, pixel scroll-wheel events, and Unicode keyboard events for text.
 
-## 15. Lock the Mac when the phone leaves
+## 15. Nearby lock and unlock
 
-No message of its own: the Mac reads it from what it already knows. With *Lock this Mac when your phone leaves* on (Account; off by default), a dropped LAN channel to the phone starts a 20 s wait. If after that the channel is still down **and** `/signal` presence still shows the phone online, the phone is somewhere else — on mobile data or another network — and the Mac locks (the same lock as ⌃⌘Q, through the private `SACLockScreenImmediate`, looked up at run time). A phone that simply went quiet — asleep, app killed, battery dead — drops off `/signal` too and never locks anyone out. Proximity by Bluetooth signal strength, for "walked to the next room", is a later refinement.
+**Distance.** Wi-Fi cannot tell distance, so the phone runs a private Bluetooth beacon: low power, not connectable, manufacturer data (company id 0xFFFF) = `HMAC-SHA256(key, window)[0..8]`, where the window is unix time in ten-minute steps as an 8-byte big-endian integer (`BeaconToken`; a shared test vector pins both platforms). The Mac sends a fresh random 16-byte key in `BEACON_KEY` on every channel, so nobody without it can recognise or follow the phone, and the value changes every ten minutes. The Mac scans (CoreBluetooth), accepts this or the previous window's value, and keeps a smoothed RSSI: near at −72 dBm or stronger, far at −88 or weaker (a gap, so it does not flap), and far after 25 s without hearing it.
+
+**Lock.** With *Lock this Mac when your phone leaves* on (off by default): far for 10 s locks the Mac — the phone went to another room on the same Wi-Fi. Separately, the channel dropping while `/signal` still shows the phone online for 20 s also locks — the phone left the network. A phone that went quiet (asleep, app killed) triggers neither. The lock is the same as ⌃⌘Q (`SACLockScreenImmediate`, private, looked up at run time).
+
+**Unlock — experimental, opt-in.** macOS has no API for a third party to unlock the screen. With *Unlock this Mac with your phone* on, the Mac asks once for the login password, checks it against Open Directory, and keeps it in the login Keychain (this device only). When the phone is unlocked it sends `UNLOCKED`; if the Mac's screen is locked and the phone is **near** by Bluetooth, the Mac wakes the display and types the password at the lock screen (needs Accessibility; a macOS that blocks synthetic input there will refuse it). When the Mac is unlocked it sends `UNLOCKED`, and the phone wakes its screen — an app cannot get past Android's own lock.
 
 ## 16. Sidecar — the phone as a second display
 

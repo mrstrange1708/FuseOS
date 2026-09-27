@@ -68,6 +68,11 @@ final class DashboardViewModel: ObservableObject {
     /// The phone's battery and charging, live over the LAN.
     @Published var phoneStatus: PeerStatus?
     private lazy var status = DeviceStatusLink(transport: transport)
+    /// Nearby lock and unlock: the phone's beacon key and "unlocked" both ways.
+    private lazy var proximityLink = ProximityLink(transport: transport)
+    private let proximity = PhoneProximity()
+    private var farLock: Task<Void, Never>?
+    private var screenObservers: [NSObjectProtocol] = []
     private let notifier = PhoneNotifier()
     /// The notch HUD. Owned here because this is where clip events already arrive.
     private let island = ClipIsland()
@@ -125,7 +130,9 @@ final class DashboardViewModel: ObservableObject {
         transport.onPeersJoined = { [weak self] _ in
             self?.clipboard.sendHistory()
             self?.status.send(force: true)
+            self?.proximityLink.sendBeaconKey()
         }
+        startProximity()
         status.onPeerStatus = { [weak self] status in self?.phoneStatus = status }
         notifications.onPosted = { [weak self] n in
             self?.pulse(toPhone: false)
@@ -356,6 +363,43 @@ final class DashboardViewModel: ObservableObject {
     /// one there is. Used wherever the UI would otherwise say "your phone".
     var peerName: String? {
         (peers.first { connected.contains($0.id) } ?? peers.first)?.name
+    }
+
+    /// Bluetooth distance to the phone: far for a while → lock (the phone went to another
+    /// room on the same Wi-Fi); the phone unlocked close by → unlock (opt-in, experimental);
+    /// this Mac unlocked → wake the phone.
+    private func startProximity() {
+        proximityLink.onBeaconKeyChanged = { [weak self] key in self?.proximity.key = key }
+        proximity.onRangeChanged = { [weak self] range in
+            guard let self else { return }
+            self.farLock?.cancel()
+            guard range == .far, UserDefaults.standard.bool(forKey: ScreenLock.enabledKey) else { return }
+            self.farLock = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 10_000_000_000)
+                guard !Task.isCancelled, let self, self.proximityRangeIsFar, !MacUnlock.isScreenLocked else { return }
+                ScreenLock.lockNow()
+            }
+        }
+        proximityLink.onPeerUnlocked = { [weak self] in
+            guard let self, self.proximity.isNear else { return }
+            MacUnlock.unlock()
+        }
+        let center = DistributedNotificationCenter.default()
+        screenObservers.append(center.addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.proximityLink.sendUnlocked() }
+        })
+        if UserDefaults.standard.bool(forKey: ScreenLock.enabledKey) || MacUnlock.isEnabled { proximity.start() }
+    }
+
+    private var proximityRangeIsFar: Bool { proximity.range == .far }
+
+    /// The Account switches changed: scan only while something needs the distance.
+    func proximitySettingsChanged() {
+        if UserDefaults.standard.bool(forKey: ScreenLock.enabledKey) || MacUnlock.isEnabled {
+            proximity.start()
+        } else {
+            proximity.stop()
+        }
     }
 
     private var awayCheck: Task<Void, Never>?

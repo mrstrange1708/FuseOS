@@ -60,6 +60,8 @@ object ServiceLocator {
         private set
     lateinit var deviceStatus: com.fuseos.app.core.DeviceStatusSync
         private set
+    lateinit var proximity: com.fuseos.app.proximity.Proximity
+        private set
 
     /** The linked Mac's name, as the dashboard last saw it — for the widget. */
     val macName = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
@@ -120,6 +122,7 @@ object ServiceLocator {
         phoneActions = PhoneActions(appContext, transport, appScope)
         mediaSync = MediaSync(appContext, transport, appScope)
         deviceStatus = com.fuseos.app.core.DeviceStatusSync(appContext, transport, appScope)
+        proximity = com.fuseos.app.proximity.Proximity(appContext, transport, appScope)
         // The widget follows the link, the Mac's battery and the last clip — pushed on change.
         appScope.launch {
             kotlinx.coroutines.flow.combine(
