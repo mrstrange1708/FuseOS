@@ -74,6 +74,7 @@ fun HomeScreen(
     onCancelTransfer: (String) -> Unit,
     onOpenTransfer: (String) -> Unit,
     latency: SyncLatency? = null,
+    macStatus: com.fuseos.app.core.PeerStatus? = null,
     modifier: Modifier = Modifier,
 ) {
     val connect = state.connect
@@ -91,7 +92,8 @@ fun HomeScreen(
             selfName = state.selfDevice?.name ?: "This phone",
             peerName = peer?.name ?: state.peers.firstOrNull()?.name,
             stage = connect.stage,
-            peerBattery = peer?.let { peerBattery(it.id) },
+            peerBattery = macStatus?.battery ?: peer?.let { peerBattery(it.id) },
+            peerCharging = macStatus?.charging == true,
             latency = latency,
         )
 
@@ -168,6 +170,7 @@ private fun LinkHero(
     peerName: String?,
     stage: ConnectStage,
     peerBattery: Int?,
+    peerCharging: Boolean,
     latency: SyncLatency?,
 ) {
     val linked = stage == ConnectStage.Connected
@@ -215,7 +218,7 @@ private fun LinkHero(
             textAlign = TextAlign.Center,
         )
         val facts = listOfNotNull(
-            peerBattery?.let { "Battery $it%" },
+            peerBattery?.let { if (peerCharging) "⚡ Charging $it%" else "Battery $it%" },
             // The PRD's yardstick — p95 under 300 ms — shown where people look.
             latency?.takeIf { linked }?.let { "Sync ${it.lastMs} ms · p95 ${it.p95Ms} ms" },
         )

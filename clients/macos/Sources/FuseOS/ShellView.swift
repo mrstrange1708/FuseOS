@@ -526,7 +526,9 @@ private struct LinkHero: View {
                     .foregroundStyle(FuseColor.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 8) {
-                    if let peer, let battery = viewModel.onlineState(for: peer).battery {
+                    if let live = viewModel.phoneStatus, let battery = live.battery {
+                        BatteryBadge(percent: battery, charging: live.charging)
+                    } else if let peer, let battery = viewModel.onlineState(for: peer).battery {
                         BatteryBadge(percent: battery)
                     }
                     if linked, let latency = viewModel.syncLatency {

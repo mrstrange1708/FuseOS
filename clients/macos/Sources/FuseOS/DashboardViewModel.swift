@@ -65,6 +65,9 @@ final class DashboardViewModel: ObservableObject {
     private lazy var sidecarLink = SidecarLink(transport: transport)
     private var sidecar: SidecarHost?
     @Published var sidecarActive = false
+    /// The phone's battery and charging, live over the LAN.
+    @Published var phoneStatus: PeerStatus?
+    private lazy var status = DeviceStatusLink(transport: transport)
     private let notifier = PhoneNotifier()
     /// The notch HUD. Owned here because this is where clip events already arrive.
     private let island = ClipIsland()
@@ -119,7 +122,11 @@ final class DashboardViewModel: ObservableObject {
             }
         }
         // Both ends send their history on every new channel, and each merges what it lacks.
-        transport.onPeersJoined = { [weak self] _ in self?.clipboard.sendHistory() }
+        transport.onPeersJoined = { [weak self] _ in
+            self?.clipboard.sendHistory()
+            self?.status.send(force: true)
+        }
+        status.onPeerStatus = { [weak self] status in self?.phoneStatus = status }
         notifications.onPosted = { [weak self] n in
             self?.pulse(toPhone: false)
             // A live activity updates in place in its panel; it is not news to announce.
@@ -178,6 +185,7 @@ final class DashboardViewModel: ObservableObject {
             self.connected = peers
             if !left.isEmpty { self.watchForAway() }
             if peers.isEmpty {
+                self.phoneStatus = nil
                 self.media.peerGone()
                 self.liveActivities = [:]
             }

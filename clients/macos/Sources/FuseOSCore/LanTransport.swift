@@ -33,6 +33,9 @@ public final class LanTransport {
     /// Screen mirroring: control messages and video frames.
     var onScreenEnvelope: ((FuseEnvelope) -> Void)?
 
+    /// The other device's battery and charging: `DeviceStatus`.
+    var onStatusEnvelope: ((FuseEnvelope) -> Void)?
+
     /// Sidecar: `SidecarControl`, `SidecarInput` (and our own outgoing frames).
     var onSidecarEnvelope: ((FuseEnvelope) -> Void)?
 
@@ -285,6 +288,8 @@ public final class LanTransport {
                     onPointerEnvelope?(envelope)
                 case .some(.sidecarControl), .some(.sidecarInput), .some(.sidecarFrame):
                     onSidecarEnvelope?(envelope)
+                case .some(.deviceStatus):
+                    onStatusEnvelope?(envelope)
                 }
             } catch {
                 return
