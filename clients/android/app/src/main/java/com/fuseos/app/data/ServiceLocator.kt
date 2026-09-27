@@ -61,6 +61,9 @@ object ServiceLocator {
     lateinit var deviceStatus: com.fuseos.app.core.DeviceStatusSync
         private set
 
+    /** The linked Mac's name, as the dashboard last saw it — for the widget. */
+    val macName = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+
     /** Outlives every screen and every service, so work that must not die with an
      *  Activity — a send fired from the island after its activity finished — runs here. */
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -117,6 +120,23 @@ object ServiceLocator {
         phoneActions = PhoneActions(appContext, transport, appScope)
         mediaSync = MediaSync(appContext, transport, appScope)
         deviceStatus = com.fuseos.app.core.DeviceStatusSync(appContext, transport, appScope)
+        // The widget follows the link, the Mac's battery and the last clip — pushed on change.
+        appScope.launch {
+            kotlinx.coroutines.flow.combine(
+                transport.connectedPeers,
+                deviceStatus.peer,
+                clipboardSync.history,
+                macName,
+            ) { peers, status, history, name ->
+                com.fuseos.app.widget.WidgetState(
+                    linked = peers.isNotEmpty(),
+                    macName = name,
+                    macBattery = status?.battery,
+                    macCharging = status?.charging == true,
+                    lastClip = history.firstOrNull()?.let { it.text ?: "Image" },
+                )
+            }.collect { com.fuseos.app.widget.FuseWidget.update(appContext, it) }
+        }
         signalClient = SignalClient(
             client = httpClient,
             signalUrl = Config.SIGNAL_URL,

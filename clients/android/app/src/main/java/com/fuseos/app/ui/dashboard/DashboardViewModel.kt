@@ -139,7 +139,9 @@ class DashboardViewModel(
             _state.update {
                 it.copy(
                     selfDevice = all.firstOrNull { d -> d.isSelf },
-                    allPeers = all.filter { d -> !d.isSelf },
+                    allPeers = all.filter { d -> !d.isSelf }.also { peers ->
+                        peers.firstOrNull { p -> p.platform == "macos" }?.let { mac -> ServiceLocator.macName.value = mac.name }
+                    },
                     error = null,
                     loading = false,
                     selfLanAddress = transport.lanAddress(),
