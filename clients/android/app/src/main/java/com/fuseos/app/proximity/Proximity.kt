@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import com.fuseos.app.net.LanTransport
 import com.fuseos.proto.Envelope
 import com.fuseos.proto.Unlocked
@@ -44,6 +45,9 @@ class Proximity(
 
     private val callback = object : AdvertiseCallback() {}
 
+    /** When the phone was unlocked with no link up — the link usually comes back seconds later. */
+    private var unlockedAt = 0L
+
     init {
         scope.launch {
             transport.incoming.collect { envelope ->
@@ -54,6 +58,15 @@ class Proximity(
                     }
                     Envelope.BodyCase.UNLOCKED -> main.post { wakeScreen() }
                     else -> Unit
+                }
+            }
+        }
+        // A locked phone often loses its LAN link; deliver the unlock once it is back.
+        scope.launch {
+            transport.connectedPeers.collect { peers ->
+                if (peers.isNotEmpty() && SystemClock.elapsedRealtime() - unlockedAt < UNLOCK_GRACE_MS) {
+                    unlockedAt = 0
+                    sendUnlocked()
                 }
             }
         }
@@ -98,7 +111,10 @@ class Proximity(
     }
 
     private fun sendUnlocked() {
-        if (transport.connectedPeers.value.isEmpty()) return
+        if (transport.connectedPeers.value.isEmpty()) {
+            unlockedAt = SystemClock.elapsedRealtime()
+            return
+        }
         scope.launch(Dispatchers.IO) {
             transport.broadcast(transport.newEnvelope().setUnlocked(Unlocked.getDefaultInstance()).build())
         }
@@ -117,5 +133,6 @@ class Proximity(
     private companion object {
         /** 0xFFFF: the Bluetooth SIG's id for testing/unassigned — FuseOS has no company id. */
         const val COMPANY_ID = 0xFFFF
+        const val UNLOCK_GRACE_MS = 10_000L
     }
 }

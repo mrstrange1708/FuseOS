@@ -68,7 +68,10 @@ enum DemoMode {
     static func snapshot(to directory: URL) async {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try? await Task.sleep(nanoseconds: 1_500_000_000)
-        guard let window = NSApp.windows.first(where: { $0.canBecomeMain }) else { return }
+        // A window closed in the last session is not restored at launch; open it.
+        (NSApp.delegate as? AppDelegate)?.showMainWindow()
+        try? await Task.sleep(nanoseconds: 800_000_000)
+        guard let window = NSApp.windows.first(where: { $0.canBecomeMain }) else { return NSApp.terminate(nil) }
         window.setContentSize(NSSize(width: 1080, height: 760))
         for appearance in [NSAppearance.Name.darkAqua, .aqua] {
             NSApp.appearance = NSAppearance(named: appearance)

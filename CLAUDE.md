@@ -71,7 +71,7 @@ All JS/TS commands run from the repo root via Turborepo (they fan out to the wor
 
 The native clients are built with their own toolchains, outside PNPM:
 - **Android** (`clients/android/`): `./gradlew assembleDebug` to produce a debug APK; `./gradlew test` for unit tests.
-- **macOS** (`clients/macos/`): `./build-app.sh` then `open .build/FuseOS.app`; `./make-dmg.sh` for a release `.build/FuseOS.dmg`; `swift test` for the unit tests. SwiftPM, no `.xcodeproj`. Run the bundle rather than `swift run` — LAN connections need local-network permission, which only a bundle identifier can hold.
+- **macOS** (`clients/macos/`): `./build-app.sh` then `open .build/FuseOS.app`; `./make-dmg.sh` for a release `.build/FuseOS.dmg`; `swift test` for the unit tests. SwiftPM, no `.xcodeproj`. Run the bundle rather than `swift run` — LAN connections need local-network permission, which only a bundle identifier can hold. The build signs with a self-signed identity it makes once in `~/.fuseos/signing.keychain-db`, so Accessibility, Bluetooth and local-network grants survive rebuilds (an ad-hoc signature voided them silently every build).
 
 > `packages/proto/` is deliberately a stub — the server never decodes a payload, so there are no TypeScript bindings and `pnpm proto:gen` is a no-op.
 

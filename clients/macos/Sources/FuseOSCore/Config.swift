@@ -27,4 +27,6 @@ import os
 public enum FuseLog {
     public static let lan = Logger(subsystem: "com.fuseos.app", category: "lan")
     public static let clipboard = Logger(subsystem: "com.fuseos.app", category: "clipboard")
+    /// Why nearby unlock did or did not act — every refusal used to be silent.
+    public static let unlock = Logger(subsystem: "com.fuseos.app", category: "unlock")
 }

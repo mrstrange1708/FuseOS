@@ -269,6 +269,8 @@ The Mac acts on `POINTER_INPUT` only when **both** gates are open: the user's *L
 
 **Unlock — experimental, opt-in.** macOS has no API for a third party to unlock the screen. With *Unlock this Mac with your phone* on, the Mac asks once for the login password, checks it against Open Directory, and keeps it in the login Keychain (this device only). When the phone is unlocked it sends `UNLOCKED`; if the Mac's screen is locked and the phone is **near** by Bluetooth, the Mac wakes the display and types the password at the lock screen (needs Accessibility; a macOS that blocks synthetic input there will refuse it). When the Mac is unlocked it sends `UNLOCKED`, and the phone wakes its screen — an app cannot get past Android's own lock.
 
+A phone that was locked has often lost its LAN link; it holds `UNLOCKED` for up to 10 s and sends it when the link returns. Every refusal on the Mac is logged under `com.fuseos.app` / `unlock` (not near, no Accessibility grant, no password) — `log stream --predicate 'subsystem == "com.fuseos.app" && category == "unlock"'`.
+
 ## 16. Sidecar — the phone as a second display
 
 The reverse of mirroring (§11): the Mac draws, the phone shows.

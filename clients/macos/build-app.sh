@@ -49,10 +49,34 @@ cp Resources/Info.plist "$APP/Contents/Info.plist"
 mkdir -p "$APP/Contents/Resources"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
-# ponytail: ad-hoc signature — there is no Developer ID on this machine. The cdhash
-# changes every build, so macOS re-asks for local-network permission after a rebuild.
-# Sign with a real identity (or a self-signed cert in the login keychain) to make the
-# grant stick.
-codesign --force --sign - "$APP"
+# Sign with one self-signed identity that lives in its own keychain and is made on the
+# first build. The signature then names that certificate rather than this build's hash,
+# so macOS keeps Accessibility, Bluetooth and local-network grants across rebuilds —
+# with an ad-hoc signature every rebuild silently voided them (the switch in System
+# Settings stays on, the app is no longer trusted). No Apple account involved: the
+# certificate is not trusted by anyone, it only has to stay the same.
+# ponytail: the keychain password is fixed; it guards a local dev identity, not a secret.
+SIGN_NAME="FuseOS Local Signing"
+SIGN_DIR="$HOME/.fuseos"
+SIGN_KC="$SIGN_DIR/signing.keychain-db"
+SIGN_PASS="fuseos-local"
+if [ ! -f "$SIGN_KC" ]; then
+	mkdir -p "$SIGN_DIR"
+	TMP="$(mktemp -d)"
+	openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=$SIGN_NAME" \
+		-addext "basicConstraints=critical,CA:false" -addext "keyUsage=critical,digitalSignature" \
+		-addext "extendedKeyUsage=critical,codeSigning" -keyout "$TMP/key.pem" -out "$TMP/cert.pem" 2>/dev/null
+	openssl pkcs12 -export -legacy -inkey "$TMP/key.pem" -in "$TMP/cert.pem" -out "$TMP/id.p12" -passout pass:"$SIGN_PASS" 2>/dev/null ||
+		openssl pkcs12 -export -inkey "$TMP/key.pem" -in "$TMP/cert.pem" -out "$TMP/id.p12" -passout pass:"$SIGN_PASS"
+	security create-keychain -p "$SIGN_PASS" "$SIGN_KC"
+	security set-keychain-settings "$SIGN_KC" # no auto-lock
+	security unlock-keychain -p "$SIGN_PASS" "$SIGN_KC"
+	security import "$TMP/id.p12" -k "$SIGN_KC" -P "$SIGN_PASS" -T /usr/bin/codesign >/dev/null
+	security set-key-partition-list -S apple-tool:,apple: -s -k "$SIGN_PASS" "$SIGN_KC" >/dev/null
+	rm -rf "$TMP"
+	echo "made signing identity \"$SIGN_NAME\" in $SIGN_KC — grant permissions once more, then they stick"
+fi
+security unlock-keychain -p "$SIGN_PASS" "$SIGN_KC"
+codesign --force --keychain "$SIGN_KC" --sign "$SIGN_NAME" "$APP"
 
 echo "built $APP — open it with: open $APP"

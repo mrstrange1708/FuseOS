@@ -1,4 +1,5 @@
 import AppKit
+import FuseOSCore
 import ApplicationServices
 import IOKit.pwr_mgt
 import OpenDirectory
@@ -16,7 +17,8 @@ enum MacUnlock {
     static let enabledKey = "unlockWithPhone"
     private static let keychainService = "com.fuseos.mac-unlock"
 
-    static var isEnabled: Bool { UserDefaults.standard.bool(forKey: enabledKey) && storedPassword() != nil }
+    /// The switch only — reading the password here would raise a Keychain prompt at launch.
+    static var isEnabled: Bool { UserDefaults.standard.bool(forKey: enabledKey) }
 
     /// Whether the screen is locked right now.
     static var isScreenLocked: Bool {
@@ -63,21 +65,33 @@ enum MacUnlock {
 
     /// Wakes the display and types the password at the lock screen.
     static func unlock() {
-        guard isEnabled, isScreenLocked, AXIsProcessTrusted(), let password = storedPassword() else { return }
+        guard UserDefaults.standard.bool(forKey: enabledKey) else { return }
+        guard isScreenLocked else { return FuseLog.unlock.info("phone unlocked; Mac is not locked") }
+        guard AXIsProcessTrusted() else {
+            return FuseLog.unlock.error("no Accessibility grant — System Settings → Privacy & Security → Accessibility")
+        }
+        guard let password = storedPassword() else { return FuseLog.unlock.error("no stored password (or the Keychain is locked)") }
+        FuseLog.unlock.info("unlocking")
         var assertion: IOPMAssertionID = 0
         IOPMAssertionDeclareUserActivity("FuseOS: phone unlocked nearby" as CFString, kIOPMUserActiveLocal, &assertion)
-        // Give the lock screen a moment to come up and focus its password field.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            let source = CGEventSource(stateID: .hidSystemState)
-            let units = Array(password.utf16)
+        let source = CGEventSource(stateID: .hidSystemState)
+        func press(_ key: CGKeyCode, text: [UniChar] = []) {
             for keyDown in [true, false] {
-                let event = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: keyDown)
-                event?.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)
+                let event = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: keyDown)
+                if !text.isEmpty { event?.keyboardSetUnicodeString(stringLength: text.count, unicodeString: text) }
                 event?.post(tap: .cghidEventTap)
             }
-            for keyDown in [true, false] {
-                CGEvent(keyboardEventSource: source, virtualKey: 36, keyDown: keyDown)?.post(tap: .cghidEventTap)
+        }
+        // A display that was asleep shows the clock first; a Shift press brings up the
+        // password field without typing into it.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { press(56) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
+            // One event per character: a secure field drops a many-character event.
+            for unit in password.utf16 {
+                press(0, text: [unit])
+                usleep(8_000)
             }
+            press(36)
         }
     }
 
