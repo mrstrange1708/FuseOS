@@ -37,3 +37,6 @@ clients/macos/**/xcuserdata/
 .next/
 website/out/
 website/next-env.d.ts
+
+# The server's production environment (deploy/README.md)
+deploy/server.env

@@ -3,15 +3,26 @@ import Foundation
 /// Where the control plane lives. In core rather than the app target because
 /// `SignalClient` needs it and the app's networking does too.
 public enum Config {
-    /// The FuseOS control-plane server. `pnpm --filter server dev` runs it on :3000.
-    ///
-    /// `localhost` assumes the server runs on this Mac — which is also why Android's
-    /// `Config.BASE_URL` is built from this Mac's LAN IP rather than the same string
-    /// (injected by the `android` pane in `mprocs.yaml`). The two clients only reach
-    /// the same server under that assumption.
-    public static let baseURL = URL(string: "http://localhost:3000")!
-    /// The `/signal` presence WebSocket on the same server.
-    public static let signalURL = URL(string: "ws://localhost:3000/signal")!
+    /// The FuseOS control-plane server: `FuseServerURL` in Info.plist, which
+    /// `build-app.sh` writes from `FUSE_SERVER_URL` (the release workflow passes the
+    /// hosted https URL). Unset — a dev build, or the tests — it is this Mac, where
+    /// `pnpm --filter server dev` runs it on :3000; Android's dev URL is this Mac's LAN IP
+    /// for the same reason (`mprocs.yaml`).
+    public static let baseURL: URL = {
+        if let value = Bundle.main.object(forInfoDictionaryKey: "FuseServerURL") as? String,
+           let url = URL(string: value), url.scheme?.hasPrefix("http") == true {
+            return url
+        }
+        return URL(string: "http://localhost:3000")!
+    }()
+
+    /// The `/signal` presence WebSocket on the same server: ws for http, wss for https.
+    public static let signalURL: URL = {
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.scheme = components.scheme == "https" ? "wss" : "ws"
+        components.path = "/signal"
+        return components.url!
+    }()
 }
 
 
