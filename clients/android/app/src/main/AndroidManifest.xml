@@ -186,6 +186,19 @@
             </intent-filter>
         </activity>
 
+        <!-- The home-screen widget. -->
+        <receiver
+            android:name=".widget.FuseWidget"
+            android:exported="false"
+            android:label="FuseOS">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_fuse_info" />
+        </receiver>
+
         <receiver
             android:name=".actions.StopRingReceiver"
             android:exported="false" />

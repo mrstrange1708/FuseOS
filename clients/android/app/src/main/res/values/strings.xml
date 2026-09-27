@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">FuseOS</string>
     <string name="remote_control_description">Notices when you copy something, so FuseOS can offer to send it to your Mac — Gboard stays your keyboard. And, while you mirror this screen to your Mac, lets the Mac tap, swipe and type here. FuseOS only looks for Copy buttons and "Copied" confirmations, and the focused text field when typing from the Mac; it does not read or keep anything else other apps show.</string>
+    <string name="widget_description">Whether your Mac is linked, its battery, your last clip, and one-tap send.</string>
 </resources>
