@@ -133,6 +133,9 @@ fun FuseShell() {
                             context.startActivity(Intent(context, ScreenConsentActivity::class.java))
                         },
                         onStop = { ScreenShareService.stop(context) },
+                        onSidecar = {
+                            context.startActivity(Intent(context, com.fuseos.app.screen.SidecarActivity::class.java))
+                        },
                         onTrackpad = {
                             context.startActivity(Intent(context, com.fuseos.app.actions.TrackpadActivity::class.java))
                         },

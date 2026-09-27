@@ -50,6 +50,9 @@ message Envelope {
     NotificationReply notification_reply = 28;
     CallState call_state = 29;
     CallAction call_action = 30;
+    SidecarControl sidecar_control = 31;
+    ScreenFrame sidecar_frame = 32; // Mac -> phone: a frame of the Mac's extra display
+    SidecarInput sidecar_input = 33;
   }
 }
 
@@ -292,4 +295,41 @@ message CallAction {
     END                = 3; // an active call
   }
   Action action = 1;
+}
+
+// Sidecar: the phone as a second display for the Mac.
+// Phone -> Mac: START asks the Mac to add a display the shape of the phone's screen
+// (width x height pixels, landscape, at dpi); STOP removes it. Mac -> phone: START once
+// frames are about to flow; STOP when the Mac ended it (or could not start: no Screen
+// Recording permission). KEYFRAME (phone -> Mac) asks for a fresh keyframe after a gap.
+message SidecarControl {
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+    START              = 1;
+    STOP               = 2;
+    KEYFRAME           = 3;
+  }
+  Action action = 1;
+  uint32 width  = 2;
+  uint32 height = 3;
+  uint32 dpi    = 4;
+}
+
+// Phone -> Mac: a touch on the Sidecar display, at 0–1 of that display (top-left origin).
+// The Mac acts on these only with Accessibility access.
+message SidecarInput {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    TAP              = 1;
+    DOWN             = 2; // a drag begins
+    MOVE             = 3; // the drag continues
+    UP               = 4; // the drag ends
+    SCROLL           = 5; // by (dx, dy) points, at (x, y)
+    RIGHT_CLICK      = 6;
+  }
+  Kind  kind = 1;
+  float x    = 2;
+  float y    = 3;
+  float dx   = 4;
+  float dy   = 5;
 }

@@ -88,6 +88,9 @@ message Envelope {
 | `MEDIA_STATE` | phone → Mac | what the phone is playing (§13) |
 | `MEDIA_COMMAND` | Mac → phone | play/pause, next, previous, seek (§13) |
 | `POINTER_INPUT` | phone → Mac | the phone as the Mac's trackpad and keyboard (§14) |
+| `SIDECAR_CONTROL` | either | start / stop / keyframe for the phone as a second display (§16) |
+| `SIDECAR_FRAME` | Mac → phone | one H.264 access unit of the Mac's extra display (§16) |
+| `SIDECAR_INPUT` | phone → Mac | a touch on the second display (§16) |
 | `REMOTE_INPUT` | Mac → phone | a tap, swipe, long-press, Back/Home/Recents, text or key for the phone to perform (§11) |
 
 ## 4. Loop-prevention invariant (critical)
@@ -262,3 +265,13 @@ The Mac acts on `POINTER_INPUT` only when **both** gates are open: the user's *L
 ## 15. Lock the Mac when the phone leaves
 
 No message of its own: the Mac reads it from what it already knows. With *Lock this Mac when your phone leaves* on (Account; off by default), a dropped LAN channel to the phone starts a 20 s wait. If after that the channel is still down **and** `/signal` presence still shows the phone online, the phone is somewhere else — on mobile data or another network — and the Mac locks (the same lock as ⌃⌘Q, through the private `SACLockScreenImmediate`, looked up at run time). A phone that simply went quiet — asleep, app killed, battery dead — drops off `/signal` too and never locks anyone out. Proximity by Bluetooth signal strength, for "walked to the next room", is a later refinement.
+
+## 16. Sidecar — the phone as a second display
+
+The reverse of mirroring (§11): the Mac draws, the phone shows.
+
+1. *Use as a second display* on the phone's Screen tab opens a full-screen landscape view and sends `SIDECAR_CONTROL START` with its size in pixels and its density.
+2. The Mac adds a display of that shape — a CoreGraphics virtual display (`CGVirtualDisplay`, declared in the small `VirtualDisplay` target because it has no public header), HiDPI so it is sharp, capped at a 2400 px long side — captures it with ScreenCaptureKit at 30 fps, and encodes it with VideoToolbox: H.264 Main, realtime, no B-frames, 8 Mbit/s, a keyframe every 2 s, SPS/PPS ahead of every keyframe. Each access unit goes out Annex-B as `SIDECAR_FRAME` (a `ScreenFrame` on its own field). ScreenCaptureKit sends only changed frames, so a still display costs nothing. The Mac answers `START` once frames flow — or `STOP` if it cannot (Screen Recording not granted), so the phone is not left waiting.
+3. The phone decodes with MediaCodec straight onto a SurfaceView, starting at the first keyframe. If its queue backs up it drops the backlog and sends `KEYFRAME` to rejoin cleanly.
+4. Touches come back as `SIDECAR_INPUT` at 0–1 of the display: a tap clicks, a drag is `DOWN`/`MOVE`/`UP`, two fingers `SCROLL`, a long press `RIGHT_CLICK`. The Mac maps them onto the virtual display's bounds and posts real mouse events — only with Accessibility access, as for §14.
+5. Leaving the phone's screen sends `STOP`; the Mac stops capture and releases the display, which removes it. A dropped link removes it too.

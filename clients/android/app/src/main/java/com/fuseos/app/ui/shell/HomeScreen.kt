@@ -298,6 +298,7 @@ fun ScreenShareScreen(
     onStart: () -> Unit,
     onStop: () -> Unit,
     onTrackpad: () -> Unit = {},
+    onSidecar: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val mac = peerName ?: "your Mac"
@@ -353,6 +354,13 @@ fun ScreenShareScreen(
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth().height(52.dp),
         ) { Text("Use as trackpad for $mac") }
+        Spacer(Modifier.height(10.dp))
+        androidx.compose.material3.OutlinedButton(
+            onClick = onSidecar,
+            enabled = linked,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+        ) { Text("Use as a second display for $mac") }
         Spacer(Modifier.height(100.dp))
     }
 }
