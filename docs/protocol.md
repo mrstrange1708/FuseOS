@@ -91,6 +91,7 @@ message Envelope {
 | `SIDECAR_CONTROL` | either | start / stop / keyframe for the phone as a second display (§16) |
 | `SIDECAR_FRAME` | Mac → phone | one H.264 access unit of the Mac's extra display (§16) |
 | `SIDECAR_INPUT` | phone → Mac | a touch on the second display (§16) |
+| `DEVICE_STATUS` | either | battery and charging, live (§17) |
 | `REMOTE_INPUT` | Mac → phone | a tap, swipe, long-press, Back/Home/Recents, text or key for the phone to perform (§11) |
 
 ## 4. Loop-prevention invariant (critical)
@@ -271,3 +272,7 @@ The reverse of mirroring (§11): the Mac draws, the phone shows.
 3. The phone decodes with MediaCodec straight onto a SurfaceView, starting at the first keyframe. If its queue backs up it drops the backlog and sends `KEYFRAME` to rejoin cleanly.
 4. Touches come back as `SIDECAR_INPUT` at 0–1 of the display: a tap clicks, a drag is `DOWN`/`MOVE`/`UP`, two fingers `SCROLL`, a long press `RIGHT_CLICK`. The Mac maps them onto the virtual display's bounds and posts real mouse events — only with Accessibility access, as for §14.
 5. Leaving the phone's screen sends `STOP`; the Mac stops capture and releases the display, which removes it. A dropped link removes it too.
+
+## 17. Battery and charging
+
+Each device sends `DEVICE_STATUS` (battery 0–100, or -1 with no battery; charging) when a channel comes up and whenever it changes — Android from the system's sticky battery broadcast, macOS from IOKit's power-source notification; neither polls. The Mac shows the phone's with a bolt while charging (link card and menu bar ring); the phone shows the Mac's on its link card. The server's presence battery stays the fallback when there is no channel.

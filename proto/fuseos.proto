@@ -53,6 +53,7 @@ message Envelope {
     SidecarControl sidecar_control = 31;
     ScreenFrame sidecar_frame = 32; // Mac -> phone: a frame of the Mac's extra display
     SidecarInput sidecar_input = 33;
+    DeviceStatus device_status = 34;
   }
 }
 
@@ -332,4 +333,12 @@ message SidecarInput {
   float y    = 3;
   float dx   = 4;
   float dy   = 5;
+}
+
+// Either direction: this device's battery, sent when a channel comes up and whenever it
+// changes. Live over the LAN, so a charger plugged in shows on the other device at once
+// (the server's presence battery is the fallback when there is no channel).
+message DeviceStatus {
+  int32 battery  = 1; // 0–100; -1 when the device has no battery (a desktop Mac)
+  bool  charging = 2;
 }

@@ -63,17 +63,20 @@ struct DeviceCard: View {
 
 struct BatteryBadge: View {
     let percent: Int?
+    var charging = false
 
     var body: some View {
         if let percent {
             HStack(spacing: 5) {
-                Image(systemName: symbol(for: percent))
+                Image(systemName: charging ? "battery.100.bolt" : symbol(for: percent))
+                    .symbolRenderingMode(.hierarchical)
                     .font(.system(size: 13))
                 Text("\(percent)%")
                     .font(.system(size: 12, weight: .medium))
                     .monospacedDigit()
             }
-            .foregroundStyle(percent <= 20 ? FuseColor.error : FuseColor.muted)
+            .foregroundStyle(charging ? FuseColor.accent : (percent <= 20 ? FuseColor.error : FuseColor.muted))
+            .help(charging ? "Charging" : "Battery")
         } else {
             EmptyView()
         }

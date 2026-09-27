@@ -161,8 +161,8 @@ struct MenuBarContent: View {
                             .monospacedDigit()
                     }
                     Spacer(minLength: 0)
-                    if let battery = presence?.battery {
-                        BatteryRing(percent: battery)
+                    if let battery = viewModel.phoneStatus?.battery ?? presence?.battery {
+                        BatteryRing(percent: battery, charging: viewModel.phoneStatus?.charging ?? false)
                     }
                 }
             }
@@ -664,6 +664,7 @@ private struct ClipRowButton: View {
 /// The phone's battery as a ring, the way the menu bar's own widgets show it.
 private struct BatteryRing: View {
     let percent: Int
+    var charging = false
 
     var body: some View {
         ZStack {
@@ -672,13 +673,17 @@ private struct BatteryRing: View {
                 .trim(from: 0, to: CGFloat(max(0, min(100, percent))) / 100)
                 .stroke(percent <= 20 ? FuseColor.error : FuseColor.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-            Text("\(percent)")
-                .font(.system(size: 10, weight: .semibold))
-                .monospacedDigit()
-                .foregroundStyle(FuseColor.ink)
+            if charging {
+                Image(systemName: "bolt.fill").font(.system(size: 11, weight: .bold)).foregroundStyle(FuseColor.accent)
+            } else {
+                Text("\(percent)")
+                    .font(.system(size: 10, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(FuseColor.ink)
+            }
         }
         .frame(width: 34, height: 34)
-        .help("Phone battery \(percent)%")
+        .help(charging ? "Phone charging, \(percent)%" : "Phone battery \(percent)%")
     }
 }
 

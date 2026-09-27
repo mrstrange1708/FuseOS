@@ -58,6 +58,8 @@ object ServiceLocator {
         private set
     lateinit var mediaSync: MediaSync
         private set
+    lateinit var deviceStatus: com.fuseos.app.core.DeviceStatusSync
+        private set
 
     /** Outlives every screen and every service, so work that must not die with an
      *  Activity — a send fired from the island after its activity finished — runs here. */
@@ -114,6 +116,7 @@ object ServiceLocator {
         screenShare = ScreenShare(appContext, transport, appScope)
         phoneActions = PhoneActions(appContext, transport, appScope)
         mediaSync = MediaSync(appContext, transport, appScope)
+        deviceStatus = com.fuseos.app.core.DeviceStatusSync(appContext, transport, appScope)
         signalClient = SignalClient(
             client = httpClient,
             signalUrl = Config.SIGNAL_URL,
