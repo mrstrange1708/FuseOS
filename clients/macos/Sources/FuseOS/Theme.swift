@@ -5,6 +5,10 @@ import AppKit
 /// Colors resolve to light or dark automatically via the system appearance.
 enum FuseColor {
     static let accent = dynamic(0xE85D2A, 0xFF7A45)
+    /// The website's second warm note: tails, beads and the far end of every gradient.
+    static let amber = dynamic(0xD9831F, 0xFFB347)
+    /// Ember to amber — the headline gradient the website uses; for the one word per screen that earns it.
+    static let glow = LinearGradient(colors: [accent, amber], startPoint: .leading, endPoint: .trailing)
     static let bg = dynamic(0xF1F3F7, 0x0C0E14)
     static let surface = dynamic(0xFFFFFF, 0x161922)
     static let surfaceAlt = dynamic(0xF2F4F8, 0x1C202A)

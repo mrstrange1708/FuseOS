@@ -207,7 +207,7 @@ private struct HomePane: View {
                 // narrow — the window's width goes to content instead of margins.
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .top, spacing: 18) {
-                        clipboard.frame(minWidth: 360)
+                        clipboard(rows: 12).frame(minWidth: 360)
                         VStack(spacing: 18) {
                             nowPlaying
                             notificationsPanel
@@ -218,7 +218,7 @@ private struct HomePane: View {
                     HStack(alignment: .top, spacing: 18) {
                         VStack(spacing: 18) {
                             nowPlaying
-                            clipboard
+                            clipboard(rows: 6)
                             notificationsPanel
                         }
                         .frame(minWidth: 420)
@@ -226,7 +226,7 @@ private struct HomePane: View {
                     }
                     VStack(spacing: 18) {
                         nowPlaying
-                        clipboard
+                        clipboard(rows: 6)
                         notificationsPanel
                         files
                     }
@@ -278,7 +278,8 @@ private struct HomePane: View {
         }
     }
 
-    private var clipboard: some View {
+    /// Wide windows get a long list — the column is there to fill, not to leave empty.
+    private func clipboard(rows: Int) -> some View {
         Panel(title: "Clipboard", accessory: {
             Button("See all", action: onSeeAll)
                 .buttonStyle(.plain)
@@ -289,8 +290,7 @@ private struct HomePane: View {
                 EmptyNote(symbol: "doc.on.clipboard", text: "Copy something on either device and it shows up here.")
             } else {
                 VStack(spacing: 2) {
-                    // Six proves sync is alive without turning Home into History.
-                    ForEach(viewModel.history.prefix(6)) { entry in
+                    ForEach(viewModel.history.prefix(rows)) { entry in
                         ClipRow(entry: entry, peerName: viewModel.peerName) {
                             viewModel.copyToClipboard(entry)
                         }
@@ -508,7 +508,7 @@ private struct LinkHero: View {
         return HStack(spacing: 28) {
             HStack(spacing: 0) {
                 endpoint(symbol: "laptopcomputer", name: viewModel.selfDevice?.name ?? "This Mac", lit: true)
-                LiveFilament(linked: linked, pulse: viewModel.linkPulse)
+                LiveFilament(linked: linked, pulse: viewModel.linkPulse, stream: viewModel.streamToPhone)
                     .frame(height: 24)
                     .padding(.horizontal, 4)
                 endpoint(symbol: "iphone", name: peer?.name ?? "Your phone", lit: linked)
@@ -518,8 +518,8 @@ private struct LinkHero: View {
             VStack(alignment: .leading, spacing: 6) {
                 StatusPill(linked: linked, text: linked ? "Linked · direct" : status)
                 Text(peer?.name ?? "No phone yet")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(FuseColor.ink)
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(linked ? AnyShapeStyle(FuseColor.glow) : AnyShapeStyle(FuseColor.ink))
                     .lineLimit(1)
                 Text(detail)
                     .font(.system(size: 12.5))
@@ -567,6 +567,15 @@ private struct LinkHero: View {
                 )),
             )
             .overlay(shape.stroke(FuseColor.outline.opacity(0.55), lineWidth: 1))
+            // The website's glowing edge, lit while linked: ember top-left fading to amber.
+            .overlay(shape.stroke(LinearGradient(
+                colors: [FuseColor.accent.opacity(0.75), .clear, FuseColor.amber.opacity(0.45)],
+                startPoint: .topLeading, endPoint: .bottomTrailing,
+            ), lineWidth: 1).opacity(isLinked ? 1 : 0))
+    }
+
+    private var isLinked: Bool {
+        (viewModel.peers.first { viewModel.isConnected($0) }).map(viewModel.isConnected) ?? false
     }
 
     private var status: String {

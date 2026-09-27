@@ -1,17 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  IconArrowUpRight,
   IconBattery3,
-  IconBell,
   IconBrandApple,
   IconCheck,
+  IconCompass,
+  IconDeviceLaptop,
   IconDeviceMobile,
   IconFileUpload,
+  IconPlayerPauseFilled,
+  IconPlayerTrackNextFilled,
   IconPower,
   IconAlignLeft,
+  IconScreenShare,
   IconWifi,
   IconAppWindow,
 } from '@tabler/icons-react';
@@ -23,8 +26,10 @@ const CLIPS = [
   { id: 1, text: '4471 — buzz twice, 3rd floor', from: 'From Pixel 8', ago: '2m' },
   { id: 2, text: 'https://maps.app.goo.gl/tx8Qe', from: 'Copied here', ago: '9m' },
   { id: 3, text: 'Screenshot 09:41', from: 'From Pixel 8', ago: '14m', image: true },
-  { id: 4, text: 'ssh deploy@10.0.4.12', from: 'Copied here', ago: '1h' },
 ];
+
+/** One crossing of the link: a counter so each plays once, and which way it went. */
+type Shot = { n: number; toPhone: boolean };
 
 /**
  * The FuseOS menu bar item, live: the same popover the Mac app opens, on a Mac desktop.
@@ -33,6 +38,16 @@ const CLIPS = [
 export function MenuBarDemo() {
   const [open, setOpen] = useState(true);
   const [copied, setCopied] = useState<number | null>(null);
+  const [shot, setShot] = useState<Shot>({ n: 0, toPhone: true });
+  const fire = (toPhone: boolean) => setShot((s) => ({ n: s.n + 1, toPhone }));
+
+  // Something crosses every few seconds, both ways — as it does on a real desk. Not for
+  // people who asked for less motion.
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const id = setInterval(() => setShot((s) => ({ n: s.n + 1, toPhone: !s.toPhone })), 3200);
+    return () => clearInterval(id);
+  }, []);
 
   const copy = async (clip: (typeof CLIPS)[number]) => {
     try {
@@ -41,6 +56,7 @@ export function MenuBarDemo() {
       // Clipboard access can be refused (no focus, an old browser); the demo still reacts.
     }
     setCopied(clip.id);
+    fire(true); // copied on the Mac → it syncs to the phone
     setTimeout(() => setCopied((c) => (c === clip.id ? null : c)), 1300);
   };
 
@@ -53,9 +69,9 @@ export function MenuBarDemo() {
             Everything is one click from the menu bar.
           </h2>
           <p className="mt-6 max-w-[48ch] text-lg leading-relaxed text-muted">
-            It shows which phone is linked and its battery, your last clips, and any files on the
-            way. Click a clip to copy it back, or drop a file on the menu to send it. Your
-            phone&apos;s notifications will show up here next.
+            The link, live: a spark crosses every time something moves, in the direction it went.
+            Your phone&apos;s battery, what it is playing, your last clips and any file on the way.
+            Open the phone&apos;s link, mirror its screen, or send a file in one click.
           </p>
           <p className="mt-6 font-mono text-xs text-muted/80">
             Try it: click a clip, and it&apos;s on your clipboard.
@@ -112,15 +128,53 @@ export function MenuBarDemo() {
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-3 rounded-xl border border-white/[0.07] bg-surface p-3">
-                    <span className="grid h-10 w-10 place-items-center rounded-[10px] bg-ember/15 text-ember">
-                      <IconDeviceMobile size={21} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[14px] font-semibold text-ink">Pixel 8</p>
-                      <p className="font-mono text-[10.5px] text-muted">connected · direct</p>
+                  <div className="rounded-xl border border-ember/30 bg-surface p-3 shadow-[0_0_40px_-18px_rgb(255_122_69/0.6)]">
+                    <div className="flex items-center">
+                      <span className="grid h-9 w-9 place-items-center rounded-full bg-ember/15 text-ember">
+                        <IconDeviceLaptop size={18} />
+                      </span>
+                      <Filament shot={shot} />
+                      <span className="grid h-9 w-9 place-items-center rounded-full bg-ember/15 text-ember">
+                        <IconDeviceMobile size={18} />
+                      </span>
                     </div>
-                    <BatteryRing percent={82} />
+                    <div className="mt-2.5 flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="hero-grad text-[15px] font-bold">Pixel 8</p>
+                        <p className="font-mono text-[10.5px] text-muted">
+                          Linked · direct · 38 ms
+                        </p>
+                      </div>
+                      <BatteryRing percent={82} />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { icon: IconCompass, label: 'Open link' },
+                      { icon: IconScreenShare, label: 'Mirror' },
+                      { icon: IconFileUpload, label: 'Send file' },
+                    ].map(({ icon: Icon, label }) => (
+                      <span
+                        key={label}
+                        className="grid place-items-center gap-1 rounded-xl border border-white/[0.07] bg-surface py-2.5 text-[11.5px] font-semibold text-ink"
+                      >
+                        <Icon size={16} className="text-ember" />
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-3 rounded-xl border border-white/[0.07] bg-surface p-2.5">
+                    <Photo className="h-10 w-10 shrink-0 rounded-lg" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-semibold text-ink">Midnight City</p>
+                      <p className="font-mono text-[10px] text-muted">M83</p>
+                    </div>
+                    <span className="grid h-8 w-8 place-items-center rounded-full bg-ember text-white">
+                      <IconPlayerPauseFilled size={14} />
+                    </span>
+                    <IconPlayerTrackNextFilled size={16} className="mr-1 text-ink" />
                   </div>
 
                   <div className="rounded-xl border border-white/[0.07] bg-surface p-3">
@@ -182,22 +236,9 @@ export function MenuBarDemo() {
                     </ul>
                   </div>
 
-                  <div className="flex items-center gap-2.5 rounded-xl border border-white/[0.07] bg-surface p-3 opacity-75">
-                    <IconBell size={15} className="text-muted" />
-                    <p className="flex-1 text-[12px] text-muted">
-                      Your phone&apos;s notifications will appear here.
-                    </p>
-                    <span className="rounded-full bg-surface-alt px-1.5 py-0.5 font-mono text-[9.5px] font-semibold text-muted">
-                      SOON
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                    <span className="flex items-center justify-center gap-1.5 rounded-[9px] bg-ember px-3 py-2 text-[12px] font-semibold text-white">
-                      <IconFileUpload size={14} /> Send file…
-                    </span>
+                  <div className="grid grid-cols-[1fr_auto] gap-2">
                     <span className="flex items-center justify-center gap-1.5 rounded-[9px] border border-white/10 bg-surface px-3 py-2 text-[12px] font-semibold text-ink">
-                      <IconArrowUpRight size={14} /> Open
+                      <IconAppWindow size={14} /> Open FuseOS
                     </span>
                     <span className="grid place-items-center rounded-[9px] border border-white/10 bg-surface px-3 py-2 text-ink">
                       <IconPower size={14} />
@@ -236,5 +277,38 @@ function BatteryRing({ percent }: { percent: number }) {
       </svg>
       <span className="font-mono text-[10px] font-semibold text-ink">{percent}</span>
     </span>
+  );
+}
+
+/**
+ * The line between the Mac (left) and the phone (right), as the apps draw it: a resting
+ * dot, and for each crossing a comet with an amber tail that lands in a ring.
+ */
+function Filament({ shot }: { shot: Shot }) {
+  const from = shot.toPhone ? '-10%' : '110%';
+  const to = shot.toPhone ? '110%' : '-10%';
+  return (
+    <div className="relative mx-2 h-5 flex-1 overflow-visible">
+      <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-gradient-to-r from-ember/15 via-ember/55 to-ember/15" />
+      <span className="absolute top-1/2 left-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ember/80" />
+      <AnimatePresence>
+        {shot.n > 0 && (
+          <motion.span
+            key={shot.n}
+            className={cn(
+              'absolute top-1/2 h-[3px] w-12 -translate-y-1/2 rounded-full shadow-[0_0_14px_#ffb347]',
+              shot.toPhone
+                ? 'bg-gradient-to-r from-transparent to-amber'
+                : 'bg-gradient-to-l from-transparent to-amber',
+            )}
+            initial={{ left: from, opacity: 0 }}
+            animate={{ left: to, opacity: [0, 1, 1, 0] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.7, ease: 'easeInOut' }}
+            style={{ translateX: '-50%' }}
+          />
+        )}
+      </AnimatePresence>
+    </div>
   );
 }

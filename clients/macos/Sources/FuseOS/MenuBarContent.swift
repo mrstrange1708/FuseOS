@@ -66,7 +66,6 @@ struct MenuBarContent: View {
             if !viewModel.liveActivities.isEmpty { liveCard }
             if !activeTransfers.isEmpty { transfersCard }
             clipsCard
-            notificationsCard
             footer
         }
         .padding(12)
@@ -144,7 +143,7 @@ struct MenuBarContent: View {
             VStack(spacing: 10) {
                 HStack(spacing: 0) {
                     endpoint("laptopcomputer", lit: true)
-                    LiveFilament(linked: linked, pulse: viewModel.linkPulse)
+                    LiveFilament(linked: linked, pulse: viewModel.linkPulse, stream: viewModel.streamToPhone)
                         .frame(height: 20)
                         .padding(.horizontal, 6)
                     endpoint("iphone.gen3", lit: linked)
@@ -422,7 +421,7 @@ struct MenuBarContent: View {
                 VStack(spacing: 2) {
                     // Four keeps the popover within a small MacBook's screen even with music,
                     // a live activity and a file showing; the window has the rest.
-                    ForEach(viewModel.history.prefix(4)) { entry in
+                    ForEach(viewModel.history.prefix(3)) { entry in
                         ClipRowButton(
                             entry: entry,
                             peerName: viewModel.peerName,
@@ -434,44 +433,6 @@ struct MenuBarContent: View {
                                 try? await Task.sleep(nanoseconds: 1_300_000_000)
                                 if copiedId == entry.id { withAnimation { copiedId = nil } }
                             }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// The phone's latest notifications, the island's history.
-    private var notificationsCard: some View {
-        Card(title: "From your phone") {
-            if viewModel.recentNotifications.isEmpty {
-                HStack(spacing: 10) {
-                    Image(systemName: "bell.badge")
-                        .font(.system(size: 14))
-                        .foregroundStyle(FuseColor.muted)
-                    Text("Turn on notification sync in FuseOS on your phone, and they show up here.")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(FuseColor.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            } else {
-                VStack(spacing: 6) {
-                    ForEach(viewModel.recentNotifications.prefix(3)) { n in
-                        HStack(alignment: .top, spacing: 8) {
-                            if let data = n.iconPNG, let icon = NSImage(data: data) {
-                                Image(nsImage: icon).resizable().frame(width: 22, height: 22)
-                                    .clipShape(RoundedRectangle(cornerRadius: 5))
-                            } else {
-                                Image(systemName: "app.badge").frame(width: 22, height: 22).foregroundStyle(FuseColor.accent)
-                            }
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(n.title.isEmpty ? n.appName : n.title)
-                                    .font(.system(size: 12, weight: .medium)).foregroundStyle(FuseColor.ink).lineLimit(1)
-                                Text(n.text).font(.system(size: 11)).foregroundStyle(FuseColor.muted).lineLimit(2)
-                            }
-                            Spacer(minLength: 0)
-                            Text(n.postedAt, format: .relative(presentation: .numeric, unitsStyle: .narrow))
-                                .font(.system(size: 10)).foregroundStyle(FuseColor.muted)
                         }
                     }
                 }

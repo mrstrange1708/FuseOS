@@ -43,6 +43,8 @@ final class DashboardViewModel: ObservableObject {
     @Published var nowPlaying: NowPlaying?
     /// The latest crossing of the link, for the filament's spark.
     @Published var linkPulse: LinkPulse?
+    /// A file in flight, and which way (true toward the phone): the filament streams beads.
+    var streamToPhone: Bool? { transfers.first { $0.state == .active }?.outgoing }
     /// The phone's recent notifications, newest first, for the menu bar.
     @Published var recentNotifications: [PhoneNotification] = []
     private var lastPulseAt = Date.distantPast
@@ -213,7 +215,6 @@ final class DashboardViewModel: ObservableObject {
             // ponytail: newest 20 only; a record of every file ever sent belongs in a
             // history store, which files do not have yet.
             self.transfers = Array(([progress] + self.transfers.filter { $0.id != progress.id }).prefix(20))
-            if !progress.finished { self.pulse(toPhone: progress.outgoing) }
             // Files get the island too: it swells out of the notch and fills as bytes move.
             self.island.present(progress, peerName: self.peerName)
         }
