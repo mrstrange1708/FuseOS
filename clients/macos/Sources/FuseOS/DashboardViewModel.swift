@@ -41,6 +41,8 @@ final class DashboardViewModel: ObservableObject {
     /// What the phone is playing, and the controls for it.
     lazy var media = MediaRemote(transport: transport)
     @Published var nowPlaying: NowPlaying?
+    /// The phone's live activities by key, newest first when shown.
+    @Published var liveActivities: [String: PhoneNotification] = [:]
     /// The phone as this Mac's trackpad and keyboard, when the user allows it.
     private lazy var pointer = PointerReceiver(transport: transport)
     private let macPointer = MacPointer()
@@ -100,6 +102,11 @@ final class DashboardViewModel: ObservableObject {
         // Both ends send their history on every new channel, and each merges what it lacks.
         transport.onPeersJoined = { [weak self] _ in self?.clipboard.sendHistory() }
         notifications.onPosted = { [weak self] n in
+            // A live activity updates in place in its panel; it is not news to announce.
+            if n.ongoing {
+                self?.liveActivities[n.id] = n
+                return
+            }
             // A replyable one is a banner (that is where Reply is); the rest use the island.
             if !n.canReply { self?.island.present(n) }
             self?.notifier.post(n)
@@ -110,7 +117,10 @@ final class DashboardViewModel: ObservableObject {
             self.island.present(call, answer: self.notifications.answerCall, decline: self.notifications.declineCall,
                                 end: self.notifications.endCall)
         }
-        notifications.onRemoved = { [weak self] key in self?.notifier.remove(key: key) }
+        notifications.onRemoved = { [weak self] key in
+            self?.liveActivities.removeValue(forKey: key)
+            self?.notifier.remove(key: key)
+        }
         notifier.onUserDismissed = { [weak self] key in self?.notifications.dismiss(key: key) }
         screen.onStateChanged = { [weak self] state in self?.screenState = state }
         screen.onCanControlChanged = { [weak self] can in self?.canControlPhone = can }
@@ -125,7 +135,10 @@ final class DashboardViewModel: ObservableObject {
             let left = self.connected.subtracting(peers)
             self.connected = peers
             if !left.isEmpty { self.watchForAway() }
-            if peers.isEmpty { self.media.peerGone() }
+            if peers.isEmpty {
+                self.media.peerGone()
+                self.liveActivities = [:]
+            }
             self.files.peersChanged(peers)
         }
         clipboard.onHistoryChanged = { [weak self] entries in

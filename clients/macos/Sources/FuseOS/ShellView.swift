@@ -231,6 +231,9 @@ private struct HomePane: View {
         if let track = viewModel.nowPlaying {
             NowPlayingPanel(track: track, remote: viewModel.media)
         }
+        if !viewModel.liveActivities.isEmpty {
+            LiveActivitiesPanel(activities: viewModel.liveActivities.values.sorted { $0.postedAt > $1.postedAt })
+        }
     }
 
     private var clipboard: some View {
@@ -344,6 +347,51 @@ private struct NowPlayingPanel: View {
     private static func clock(_ ms: Int64) -> String {
         let seconds = Int(ms / 1000)
         return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+}
+
+/// The phone's live activities — a timer, a route, a delivery, a download — each updating
+/// in place, with its progress when it has one.
+private struct LiveActivitiesPanel: View {
+    let activities: [PhoneNotification]
+
+    var body: some View {
+        Panel(title: "Live on your phone") {
+            VStack(spacing: 10) {
+                ForEach(activities) { activity in
+                    HStack(spacing: 12) {
+                        if let data = activity.iconPNG, let icon = NSImage(data: data) {
+                            Image(nsImage: icon).resizable().frame(width: 30, height: 30)
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        } else {
+                            IconTile(symbol: "dot.radiowaves.left.and.right")
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(activity.title.isEmpty ? activity.appName : activity.title)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(FuseColor.ink)
+                                .lineLimit(1)
+                            if !activity.text.isEmpty {
+                                Text(activity.text)
+                                    .font(.system(size: 11.5))
+                                    .foregroundStyle(FuseColor.muted)
+                                    .lineLimit(1)
+                            }
+                            if let progress = activity.progress {
+                                ProgressBar(fraction: progress)
+                            } else if activity.indeterminate {
+                                ProgressView().progressViewStyle(.linear).tint(FuseColor.accent)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                        Text(activity.appName)
+                            .font(.system(size: 11))
+                            .foregroundStyle(FuseColor.muted)
+                            .lineLimit(1)
+                    }
+                }
+            }
+        }
     }
 }
 

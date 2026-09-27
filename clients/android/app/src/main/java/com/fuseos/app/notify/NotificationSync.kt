@@ -65,6 +65,8 @@ class NotificationSync(
     private val replyActions = object : LinkedHashMap<String, Notification.Action>() {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Notification.Action>) = size > 200
     }
+    private val liveSentAt = ConcurrentHashMap<String, Long>()
+
     /** The call notification being mirrored, and its actions (the fallback for answering). */
     @Volatile private var call: StatusBarNotification? = null
     /** Declared before `init`: its collector may run before later properties exist. */
@@ -129,6 +131,14 @@ class NotificationSync(
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val text = (extras.getCharSequence(Notification.EXTRA_BIG_TEXT)
             ?: extras.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
+        val progressMax = extras.getInt(Notification.EXTRA_PROGRESS_MAX)
+        val indeterminate = extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE)
+        val live = sbn.isOngoing && isLiveActivity(
+            category = n.category,
+            hasProgress = progressMax > 0 || indeterminate,
+            showsClock = extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER),
+            isMedia = extras.containsKey(Notification.EXTRA_MEDIA_SESSION),
+        )
         val forward = shouldForward(
             enabled = _enabled.value,
             linked = transport.connectedPeers.value.isNotEmpty(),
@@ -136,12 +146,20 @@ class NotificationSync(
             ongoing = sbn.isOngoing,
             groupSummary = n.flags and Notification.FLAG_GROUP_SUMMARY != 0,
             hasContent = title.isNotBlank() || text.isNotBlank(),
+            liveActivity = live,
         )
         if (n.category == Notification.CATEGORY_CALL && sbn.packageName != appContext.packageName) {
             if (_enabled.value) postedCall(sbn, title)
             return
         }
         if (!forward) return
+        // A download ticks its progress many times a second; the Mac needs about one a second.
+        if (live) {
+            val now = android.os.SystemClock.elapsedRealtime()
+            val last = liveSentAt[sbn.key] ?: 0L
+            if (now - last < LIVE_MIN_INTERVAL_MS) return
+            liveSentAt[sbn.key] = now
+        }
         val replyAction = n.actions?.firstOrNull { it.remoteInputs?.isNotEmpty() == true }
         if (replyAction != null) synchronized(replyActions) { replyActions[sbn.key] = replyAction }
         scope.launch(Dispatchers.IO) {
@@ -154,6 +172,10 @@ class NotificationSync(
                 .setIconPng(icon(sbn.packageName))
                 .setPostedAtUnixMs(sbn.postTime)
                 .setCanReply(replyAction != null)
+                .setOngoing(live)
+                .setProgress(extras.getInt(Notification.EXTRA_PROGRESS))
+                .setProgressMax(progressMax)
+                .setIndeterminate(indeterminate)
             transport.broadcast(transport.newEnvelope().setPhoneNotification(message).build())
         }
     }
@@ -165,6 +187,7 @@ class NotificationSync(
             return
         }
         synchronized(replyActions) { replyActions.remove(sbn.key) }
+        liveSentAt.remove(sbn.key)
         if (clearedByPeer.remove(sbn.key)) return
         if (!_enabled.value || transport.connectedPeers.value.isEmpty()) return
         scope.launch(Dispatchers.IO) {
@@ -199,12 +222,30 @@ class NotificationSync(
         private const val ICON_PX = 64
         /** A long chat is still one notification; the Mac shows a few lines of it. */
         private const val MAX_TEXT = 1_000
+        private const val LIVE_MIN_INTERVAL_MS = 1_000L
+
+        /** Categories whose ongoing notifications are activities worth watching. */
+        private val LIVE_CATEGORIES = setOf(
+            Notification.CATEGORY_NAVIGATION,
+            Notification.CATEGORY_PROGRESS,
+            Notification.CATEGORY_STOPWATCH,
+            Notification.CATEGORY_WORKOUT,
+            Notification.CATEGORY_ALARM,
+        )
+
+        /**
+         * Whether an ongoing notification is a live activity (a timer, a route, a delivery,
+         * a download) rather than a background service's placard: it shows progress or a
+         * running clock, or its category says so. Media is Now Playing's, not this.
+         */
+        fun isLiveActivity(category: String?, hasProgress: Boolean, showsClock: Boolean, isMedia: Boolean): Boolean =
+            !isMedia && (hasProgress || showsClock || category in LIVE_CATEGORIES)
 
         /**
          * Which notifications cross to the Mac. Pure, so the rules are pinned by a test.
-         * Not: our own (the service's ongoing one would mirror forever), ongoing ones
-         * (music, navigation, downloads — status, not news), group summaries (their
-         * children already went), or ones with nothing to read.
+         * Not: our own (the service's ongoing one would mirror forever), ongoing ones that
+         * are not live activities (a service's placard is status, not news), group
+         * summaries (their children already went), or ones with nothing to read.
          */
         fun shouldForward(
             enabled: Boolean,
@@ -213,7 +254,8 @@ class NotificationSync(
             ongoing: Boolean,
             groupSummary: Boolean,
             hasContent: Boolean,
-        ): Boolean = enabled && linked && !fromSelf && !ongoing && !groupSummary && hasContent
+            liveActivity: Boolean = false,
+        ): Boolean = enabled && linked && !fromSelf && (!ongoing || liveActivity) && !groupSummary && hasContent
     }
 }
 
