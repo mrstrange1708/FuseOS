@@ -40,6 +40,10 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -114,7 +118,7 @@ private fun Trackpad(send: (PointerInput) -> Unit, onDone: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                "Move with one finger · tap to click\nTwo fingers to scroll · two-finger tap to right-click\nHold, then move, to drag",
+                "Move with one finger · tap to click\nTwo fingers to scroll · two-finger tap to right-click\nHold, then move, to drag\nThree fingers: ← → switch desktops · ↑ Mission Control",
                 color = scheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -180,6 +184,16 @@ private fun TypingField(send: (PointerInput) -> Unit) {
                 value = sentinel
             },
             singleLine = true,
+            // Suggestions and autocorrect compose words and rewrite them, which fights a
+            // field that forwards every keystroke — so they are off, and Enter is Return.
+            keyboardOptions = KeyboardOptions(
+                autoCorrectEnabled = false,
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Send,
+            ),
+            keyboardActions = KeyboardActions(onSend = {
+                send(PointerInput.newBuilder().setKind(PointerInput.Kind.KEY).setKeyCode(36).build())
+            }),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp),
             modifier = Modifier.fillMaxWidth(),
@@ -201,12 +215,20 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.trackpad
         var dragging = false
         var last = first.position
         var lastTwo: Offset? = null
+        var threeStart: Offset? = null
+        var threeLast: Offset? = null
         while (true) {
             val event = awaitPointerEvent(PointerEventPass.Main)
             val pressed = event.changes.filter { it.pressed }
             maxFingers = maxOf(maxFingers, pressed.size)
             if (pressed.isEmpty()) break
-            if (pressed.size >= 2) {
+            if (pressed.size >= 3) {
+                // Three fingers are a gesture, not a pointer: measured, then sent once.
+                val centroid = pressed.map { it.position }.reduce { a, b -> a + b } / pressed.size.toFloat()
+                if (threeStart == null) threeStart = centroid
+                threeLast = centroid
+                moved += SLOP // never a click
+            } else if (pressed.size >= 2 && threeStart == null) {
                 val centroid = pressed.map { it.position }.reduce { a, b -> a + b } / pressed.size.toFloat()
                 lastTwo?.let { previous ->
                     val d = centroid - previous
@@ -216,7 +238,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.trackpad
                     }
                 }
                 lastTwo = centroid
-            } else {
+            } else if (threeStart == null) {
                 val change = pressed.first()
                 val d = change.position - last
                 last = change.position
@@ -231,6 +253,12 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.trackpad
             event.changes.forEach { it.consume() }
         }
         val upAt = System.currentTimeMillis()
+        val start = threeStart
+        val end = threeLast
+        if (start != null && end != null) {
+            swipe(end - start)?.let { key -> send(key) }
+            return@awaitEachGesture
+        }
         when {
             dragging -> send(pointer(PointerInput.Kind.DRAG_END))
             moved < SLOP && maxFingers >= 2 -> send(pointer(PointerInput.Kind.RIGHT_CLICK))
@@ -243,6 +271,26 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.trackpad
     }
 }
 
+/**
+ * A three-finger swipe as the Mac's own shortcut: left/right switch desktops (⌃← ⌃→), up
+ * is Mission Control (⌃↑), down is App Exposé (⌃↓) — what the same swipe does on a Mac
+ * trackpad. Null for a movement too small to mean anything.
+ */
+internal fun swipe(delta: Offset): PointerInput? {
+    val horizontal = abs(delta.x) >= abs(delta.y)
+    val distance = if (horizontal) abs(delta.x) else abs(delta.y)
+    if (distance < SWIPE_MIN) return null
+    val code = when {
+        horizontal && delta.x < 0 -> 124 // fingers left → the desktop to the right
+        horizontal -> 123
+        delta.y < 0 -> 126
+        else -> 125
+    }
+    return PointerInput.newBuilder().setKind(PointerInput.Kind.KEY).setKeyCode(code).setModifiers(CONTROL).build()
+}
+
+private const val SWIPE_MIN = 120f
+private const val CONTROL = 8
 private const val MOVE_GAIN = 1.6f
 private const val SCROLL_GAIN = 1.2f
 private const val SLOP = 18f
