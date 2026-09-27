@@ -14,6 +14,9 @@ import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.fuseos.app.BuildConfig
+import com.fuseos.app.capture.CaptureActivity
+import com.fuseos.app.capture.CopyDetector
+import com.fuseos.app.capture.CopyOffers
 import com.fuseos.proto.RemoteInput
 
 /**
@@ -66,7 +69,24 @@ class RemoteControlService : AccessibilityService() {
         return super.onUnbind(intent)
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
+    private var lastCopyOfferAt = 0L
+
+    /** A copy anywhere → the island offers it to the Mac (see [CopyDetector]). */
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        event ?: return
+        val texts = buildList {
+            event.text?.forEach { add(it.toString()) }
+            event.contentDescription?.let { add(it.toString()) }
+        }
+        if (!CopyDetector.looksLikeCopy(event.eventType, event.packageName?.toString(), packageName, texts)) return
+        if (!CopyOffers.isOn(this)) return
+        // One copy often fires both a tap and a confirmation; offer it once.
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastCopyOfferAt < 1_500) return
+        lastCopyOfferAt = now
+        // Let the copy land on the clipboard before the read.
+        android.os.Handler(mainLooper).postDelayed({ CaptureActivity.offerCopy(this) }, 250)
+    }
     override fun onInterrupt() = Unit
 
     /** One input from the Mac. The caller has already checked the screen is being shared. */

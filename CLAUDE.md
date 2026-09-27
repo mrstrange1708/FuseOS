@@ -129,12 +129,11 @@ on Android).
 
 Two constraints worth knowing before proposing anything in this area:
 
-- **Android clipboard capture stops at one tap.** Only the focused window may read the
-  clipboard (API 29+) and no permission lifts it, so the tile / notification / island route
-  through a focused `CaptureActivity`. The default-IME exemption is why `ime/` exists, but a
-  keyboard that replaces the user's own is a cost they have rejected for now — it is optional
-  (it has a clipboard strip), and an AccessibilityService cannot read the clipboard either — it
-  is used for remote control, not capture. See `docs/protocol.md` §5.1.
+- **Android clipboard capture needs a moment of focus.** Only the focused window (or the default
+  keyboard) may read the clipboard (API 29+). FuseOS no longer ships a keyboard — people keep
+  Gboard. Instead its accessibility service notices the *moment* of copying (a Copy tap or a
+  "Copied" confirmation) and opens the invisible `CaptureActivity`, which may read it, and the
+  island offers the copy. See `docs/protocol.md` §5.2.
 - **File transfer is not resumable.** A dropped link fails the transfer and the user re-sends;
   see `docs/protocol.md` §6.
 - **This Mac has no Xcode, and its macOS 27 Command Line Tools are incomplete.** The 27 SDK lacks

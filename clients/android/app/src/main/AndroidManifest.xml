@@ -115,21 +115,6 @@
             </intent-filter>
         </service>
 
-        <!-- The keyboard. It is here for one reason: the default input method is the
-             only thing Android exempts from the background clipboard-read block, so
-             being it is what makes auto-capture possible at all. -->
-        <service
-            android:name=".ime.FuseKeyboardService"
-            android:exported="true"
-            android:label="@string/app_name"
-            android:permission="android.permission.BIND_INPUT_METHOD">
-            <intent-filter>
-                <action android:name="android.view.InputMethod" />
-            </intent-filter>
-            <meta-data
-                android:name="android.view.im"
-                android:resource="@xml/method" />
-        </service>
 
         <!-- Notification sync. Does nothing until the user turns FuseOS on under
              Settings → Notification access. -->
@@ -153,7 +138,7 @@
         <service
             android:name=".screen.RemoteControlService"
             android:exported="true"
-            android:label="FuseOS remote control"
+            android:label="FuseOS"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />

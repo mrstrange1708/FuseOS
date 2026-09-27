@@ -147,13 +147,9 @@ The tile and the notification both launch `CaptureActivity`, an invisible activi
 
 **The island** (`ui/island/ClipIsland.kt`) is a `TYPE_APPLICATION_OVERLAY` capsule that drops from under the status bar: logo on the left, one line of content, tap to send. It is the Android twin of the macOS `ClipIsland` and exists for the same reason — sync is invisible, so without a signal the user cannot tell "it worked" from "it is broken". It draws over other apps because the moment worth confirming is always a moment the user is in *another* app. The window is `FLAG_NOT_FOCUSABLE`, so it never steals focus and correspondingly cannot read the clipboard itself; that is `CaptureActivity`'s job. Without the "Display over other apps" permission the same sends still happen, reported by a toast.
 
-### 5.2 The keyboard, and why FuseOS ships one
+### 5.2 The copy pop-up (and why FuseOS no longer ships a keyboard)
 
-The exemption that removes the tap is the **default input method**. `ClipboardService` allows the read when the calling package is the selected IME, and the check is on the package, not on whether the keyboard is currently on screen — so once FuseOS is the keyboard, the whole process may read the clipboard, including the listener `FuseConnectionService` holds open. `OnPrimaryClipChangedListener` starts firing for copies made in any app, and the island is driven straight from it: no tile, no activity, no tap to reach it.
-
-That is the only reason `ime/FuseKeyboardService` exists. It is a plain QWERTY — two layers, three shift states, no autocorrect, no suggestions, no gesture typing — because every feature it grew would be one to maintain forever in service of a permission workaround. Keystrokes go to the `InputConnection` and are neither stored nor sent.
-
-The alternatives were considered and are worse: `AccessibilityService` works but risks Play Store removal, and Shizuku needs the user to re-pair over wireless debugging after every reboot.
+FuseOS used to ship its own keyboard, because the default input method is the one thing Android exempts from the background clipboard-read block. People keep Gboard, so it went (2026-09-27). Instead, the FuseOS accessibility service (the same one remote control uses, §11) watches for the *moment* of copying — a tap on a control labelled Copy (selection toolbar, a chat's copy icon, "Copy link address") or a "Copied" confirmation from the system or the app (`CopyDetector`, pinned by a test). On that it opens `CaptureActivity` for an instant — focused, so it may read the clipboard — and the island offers the copy: "Copied · tap to send". It stays quiet when the clipboard is empty or holds what it just offered, fires once per copy (a tap and its confirmation within 1.5 s count once), and never for FuseOS's own events. Only control labels are looked at, never window content. The user can switch the pop-up off in Profile.
 
 ### 5.3 A copy is offered, not taken
 

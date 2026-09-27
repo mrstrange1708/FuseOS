@@ -12,7 +12,6 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.fuseos.app.MainActivity
-import com.fuseos.app.capture.CaptureActivity
 import com.fuseos.app.R
 import com.fuseos.app.data.ServiceLocator
 import kotlinx.coroutines.CoroutineScope
@@ -84,45 +83,38 @@ class FuseConnectionService : Service() {
         super.onDestroy()
     }
 
+    /**
+     * Android will not keep a background connection alive without a notification, so this
+     * one is as quiet as the platform allows: the lowest importance — silent, collapsed at
+     * the bottom of the shade, no status-bar icon — and no actions. Copies are offered by
+     * the copy pop-up now, not from here.
+     */
     private fun startForegroundNotification() {
         val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // A channel's importance cannot be lowered once created, hence a new id.
+            manager.deleteNotificationChannel(OLD_CHANNEL_ID)
             manager.createNotificationChannel(
-                NotificationChannel(
-                    CHANNEL_ID,
-                    "Device connection",
-                    // LOW: no sound, no heads-up. This notification is a permanent
-                    // status line, not an event worth interrupting anyone for.
-                    NotificationManager.IMPORTANCE_LOW,
-                ).apply { description = "Keeps FuseOS connected to your other devices." },
+                NotificationChannel(CHANNEL_ID, "Connection", NotificationManager.IMPORTANCE_MIN).apply {
+                    description = "Keeps FuseOS connected to your Mac. You can hide it."
+                    setShowBadge(false)
+                },
             )
         }
-
         val open = PendingIntent.getActivity(
             this,
             0,
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-
-        // The second route out of the phone, next to the Quick Settings tile. The
-        // ongoing notification is already in the shade whenever we are connected, so an
-        // action on it costs the user nothing and is reachable from inside any app.
-        val send = PendingIntent.getActivity(
-            this,
-            1,
-            CaptureActivity.intent(this),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("FuseOS is connected")
-            .setContentText("Your clipboard and files can reach this device.")
+            .setContentTitle("FuseOS")
+            .setContentText("Connected to your Mac")
             .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
+            .setSilent(true)
             .setContentIntent(open)
-            .addAction(R.drawable.ic_notification, "Send clipboard", send)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -133,7 +125,8 @@ class FuseConnectionService : Service() {
     }
 
     companion object {
-        private const val CHANNEL_ID = "fuseos_connection"
+        private const val OLD_CHANNEL_ID = "fuseos_connection"
+        private const val CHANNEL_ID = "fuseos_connection_quiet"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "com.fuseos.app.STOP"
 
