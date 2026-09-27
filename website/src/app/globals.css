@@ -103,6 +103,164 @@ h3 {
   }
 }
 
+/* Continuity tiles: each shows its feature doing the thing, quietly and on a loop. */
+@keyframes cx-type {
+  0%,
+  12% {
+    max-width: 0;
+  }
+  55%,
+  88% {
+    max-width: 16ch;
+  }
+  100% {
+    max-width: 16ch;
+  }
+}
+.cx-type {
+  animation: cx-type 4.2s steps(16, end) infinite;
+}
+@keyframes cx-caret {
+  50% {
+    opacity: 0;
+  }
+}
+.cx-caret {
+  animation: cx-caret 1s step-end infinite;
+}
+@keyframes cx-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+.cx-ring {
+  animation: cx-ring 1.4s ease-out infinite;
+}
+@keyframes cx-radar {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(3);
+    opacity: 0;
+  }
+}
+.cx-radar {
+  animation: cx-radar 2.4s ease-out infinite;
+}
+@keyframes cx-tap {
+  0%,
+  18% {
+    top: 22%;
+    left: 18%;
+    transform: scale(1);
+  }
+  24% {
+    transform: scale(0.7);
+  }
+  30%,
+  48% {
+    top: 52%;
+    left: 58%;
+    transform: scale(1);
+  }
+  54% {
+    transform: scale(0.7);
+  }
+  60%,
+  78% {
+    top: 74%;
+    left: 24%;
+    transform: scale(1);
+  }
+  84% {
+    transform: scale(0.7);
+  }
+  100% {
+    top: 22%;
+    left: 18%;
+    transform: scale(1);
+  }
+}
+.cx-tap {
+  animation: cx-tap 5s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@keyframes cx-swipe {
+  0%,
+  15% {
+    transform: translate(-10%, -50%);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  65% {
+    transform: translate(-120%, -50%);
+    opacity: 1;
+  }
+  80%,
+  100% {
+    transform: translate(-150%, -50%);
+    opacity: 0;
+  }
+}
+.cx-swipe {
+  animation: cx-swipe 2.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@keyframes cx-drag {
+  0%,
+  15% {
+    left: 8px;
+  }
+  60%,
+  85% {
+    left: 118px;
+  }
+  100% {
+    left: 8px;
+  }
+}
+.cx-drag {
+  animation: cx-drag 3.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@keyframes cx-eq {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.cx-eq {
+  animation: cx-eq 0.9s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cx-type,
+  .cx-caret,
+  .cx-ring,
+  .cx-radar,
+  .cx-tap,
+  .cx-swipe,
+  .cx-drag,
+  .cx-eq {
+    animation: none;
+  }
+  .cx-type {
+    max-width: 16ch;
+  }
+  .cx-tap {
+    top: 40%;
+    left: 40%;
+  }
+}
+
 @keyframes marquee {
   to {
     transform: translateX(-50%);

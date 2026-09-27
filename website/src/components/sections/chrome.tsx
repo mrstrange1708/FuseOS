@@ -9,7 +9,7 @@ const FAQ = [
   },
   {
     q: 'Why is sending from Android a tap and not automatic?',
-    a: 'Since Android 10, only the app on screen can read the clipboard. FuseOS gets sending down to a single tap from Quick Settings, the notification, the island or the share sheet. Copying on the Mac needs no tap at all.',
+    a: 'Since Android 10, only the app on screen can read the clipboard. So FuseOS watches for the moment you tap Copy, and a pop-up offers to send it — one tap, and you keep Gboard. Copying on the Mac needs no tap at all.',
   },
   {
     q: 'Why does macOS warn me when I first open it?',
@@ -18,6 +18,10 @@ const FAQ = [
   {
     q: 'Do my devices have to be on the same Wi-Fi?',
     a: "Yes, for now. That's what keeps it fast and keeps your data off the internet. Syncing between different networks is planned.",
+  },
+  {
+    q: 'Can my Mac unlock my phone?',
+    a: 'No — Android lets no app past its own lock screen, so unlocking the Mac only wakes the phone. The other way works: unlock the phone next to the Mac and the Mac unlocks. That part is experimental and opt-in: the Mac keeps your password in its Keychain and types it at the lock screen.',
   },
   {
     q: 'Is it open source?',

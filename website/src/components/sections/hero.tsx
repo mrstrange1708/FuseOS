@@ -62,9 +62,9 @@ export function Hero() {
             Copy on your phone. <span className="hero-grad">Paste</span> on your Mac.
           </h1>
           <p className="hero-fade mt-7 max-w-[52ch] text-lg leading-relaxed text-muted md:text-xl">
-            FuseOS makes an Android phone and a Mac work like one device. Your clipboard, your files
-            and the share sheet go both ways, straight across your Wi-Fi. Nothing you copy goes
-            through a server.
+            FuseOS makes an Android phone and a Mac work like one device. Your clipboard and files
+            go both ways; your notifications, calls, music and screen come to the Mac. All of it
+            goes straight across your Wi-Fi — nothing you copy touches a server.
           </p>
           <div className="hero-fade mt-9 flex flex-wrap gap-3">
             <a
