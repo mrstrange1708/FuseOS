@@ -60,14 +60,17 @@ struct MenuBarContent: View {
                 connectCard
             } else {
                 deviceCard
+                actionsRow
             }
+            if let track = viewModel.nowPlaying { nowPlayingCard(track) }
+            if !viewModel.liveActivities.isEmpty { liveCard }
             if !activeTransfers.isEmpty { transfersCard }
             clipsCard
             notificationsCard
             footer
         }
         .padding(12)
-        .frame(width: 340)
+        .frame(width: 360)
         .background(FuseColor.bg)
         .overlay {
             if dropTargeted {
@@ -111,10 +114,10 @@ struct MenuBarContent: View {
                 .renderingMode(.template)
                 .foregroundStyle(FuseColor.ink)
             Text("FuseOS")
-                .font(.system(size: 15, weight: .bold, design: .monospaced))
+                .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(FuseColor.ink)
             Text(linked ? "Linked" : "Not linked")
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .font(.system(size: 10.5, weight: .semibold))
                 .foregroundStyle(linked ? FuseColor.accent : FuseColor.muted)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 3)
@@ -132,32 +135,129 @@ struct MenuBarContent: View {
         .padding(.horizontal, 2)
     }
 
+    /// The link, live: this Mac and the phone, a spark crossing whenever anything does.
     private var deviceCard: some View {
         let peer = viewModel.peers.first { viewModel.connected.contains($0.id) } ?? viewModel.peers.first
         let presence = peer.map { viewModel.onlineState(for: $0) }
         let linked = peer.map { viewModel.isConnected($0) } ?? false
         return Card {
-            HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(FuseColor.accent.opacity(linked ? 0.16 : 0.06))
-                        .frame(width: 42, height: 42)
-                    Image(systemName: "iphone.gen3")
-                        .font(.system(size: 20))
-                        .foregroundStyle(linked ? FuseColor.accent : FuseColor.muted)
+            VStack(spacing: 10) {
+                HStack(spacing: 0) {
+                    endpoint("laptopcomputer", lit: true)
+                    LiveFilament(linked: linked, pulse: viewModel.linkPulse)
+                        .frame(height: 20)
+                        .padding(.horizontal, 6)
+                    endpoint("iphone.gen3", lit: linked)
                 }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(peer?.name ?? "No phone yet")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(FuseColor.ink)
-                        .lineLimit(1)
-                    Text(statusLine(linked: linked, online: presence?.online ?? false, hasPeer: peer != nil))
-                        .font(.system(size: 10.5, design: .monospaced))
-                        .foregroundStyle(FuseColor.muted)
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(peer?.name ?? "No phone yet")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(FuseColor.ink)
+                            .lineLimit(1)
+                        Text(statusLine(linked: linked, online: presence?.online ?? false, hasPeer: peer != nil))
+                            .font(.system(size: 11))
+                            .foregroundStyle(FuseColor.muted)
+                            .monospacedDigit()
+                    }
+                    Spacer(minLength: 0)
+                    if let battery = presence?.battery {
+                        BatteryRing(percent: battery)
+                    }
+                }
+            }
+        }
+    }
+
+    private func endpoint(_ symbol: String, lit: Bool) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 17, weight: .regular))
+            .foregroundStyle(lit ? FuseColor.accent : FuseColor.muted)
+            .frame(width: 38, height: 38)
+            .background(Circle().fill(FuseColor.accent.opacity(lit ? 0.14 : 0.05)))
+    }
+
+    /// The four things people open the popover to do with the phone.
+    private var actionsRow: some View {
+        HStack(spacing: 8) {
+            quickAction("Ring", "bell.and.waves.left.and.right.fill") { viewModel.phone.ring() }
+            quickAction("Photo", "camera.fill") { viewModel.phone.takePhoto() }
+            quickAction("Mirror", "rectangle.on.rectangle") {
+                openMain()
+                viewModel.screen.start()
+            }
+            quickAction("Send file", "arrow.up.doc.fill") { chooseFiles() }
+        }
+    }
+
+    private func quickAction(_ title: String, _ symbol: String, run: @escaping () -> Void) -> some View {
+        Button(action: run) {
+            VStack(spacing: 5) {
+                Image(systemName: symbol)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(FuseColor.accent)
+                Text(title)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(FuseColor.ink)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .background(FuseColor.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(FuseColor.outline.opacity(0.5), lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func nowPlayingCard(_ track: NowPlaying) -> some View {
+        Card {
+            HStack(spacing: 10) {
+                Group {
+                    if let data = track.artwork, let image = NSImage(data: data) {
+                        Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+                    } else {
+                        Image(systemName: "music.note").foregroundStyle(FuseColor.accent)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity).background(FuseColor.accent.opacity(0.12))
+                    }
+                }
+                .frame(width: 38, height: 38)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(track.title).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(FuseColor.ink).lineLimit(1)
+                    Text(track.artist.isEmpty ? track.appName : track.artist)
+                        .font(.system(size: 11)).foregroundStyle(FuseColor.muted).lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                if let battery = presence?.battery {
-                    BatteryRing(percent: battery)
+                Button { viewModel.media.playPause() } label: {
+                    Image(systemName: track.playing ? "pause.fill" : "play.fill")
+                        .font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
+                        .frame(width: 30, height: 30).background(Circle().fill(FuseColor.accent))
+                }
+                .buttonStyle(.plain)
+                Button { viewModel.media.next() } label: {
+                    Image(systemName: "forward.fill").font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(FuseColor.ink).frame(width: 26, height: 26)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var liveCard: some View {
+        Card(title: "Live on your phone") {
+            VStack(spacing: 8) {
+                ForEach(viewModel.liveActivities.values.sorted { $0.postedAt > $1.postedAt }) { activity in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(activity.title.isEmpty ? activity.appName : activity.title)
+                                .font(.system(size: 12, weight: .medium)).foregroundStyle(FuseColor.ink).lineLimit(1)
+                            Spacer(minLength: 4)
+                            Text(activity.appName).font(.system(size: 10.5)).foregroundStyle(FuseColor.muted).lineLimit(1)
+                        }
+                        if let progress = activity.progress {
+                            ProgressBar(fraction: progress)
+                        }
+                    }
                 }
             }
         }
@@ -183,7 +283,7 @@ struct MenuBarContent: View {
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(FuseColor.ink)
                             Text("Find your phone on this Wi-Fi")
-                                .font(.system(size: 10.5, design: .monospaced))
+                                .font(.system(size: 10.5))
                                 .foregroundStyle(FuseColor.muted)
                         }
                         Spacer(minLength: 0)
@@ -247,12 +347,12 @@ struct MenuBarContent: View {
                         } else if presence.online {
                             HStack(spacing: 5) {
                                 ProgressView().controlSize(.mini)
-                                Text("connecting").font(.system(size: 10.5, design: .monospaced))
+                                Text("connecting").font(.system(size: 10.5))
                             }
                             .foregroundStyle(FuseColor.muted)
                         } else {
                             Text("offline")
-                                .font(.system(size: 10.5, design: .monospaced))
+                                .font(.system(size: 10.5))
                                 .foregroundStyle(FuseColor.muted)
                         }
                     }
@@ -301,9 +401,7 @@ struct MenuBarContent: View {
                             .foregroundStyle(FuseColor.muted)
                             .help("Cancel")
                         }
-                        ProgressView(value: Double(t.bytes), total: Double(max(t.total, 1)))
-                            .progressViewStyle(.linear)
-                            .tint(FuseColor.accent)
+                        ProgressBar(fraction: Double(t.bytes) / Double(max(t.total, 1)))
                     }
                 }
             }
@@ -319,8 +417,9 @@ struct MenuBarContent: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 VStack(spacing: 2) {
-                    // Five fits without scrolling on every screen; the window has the rest.
-                    ForEach(viewModel.history.prefix(5)) { entry in
+                    // Four keeps the popover within a small MacBook's screen even with music,
+                    // a live activity and a file showing; the window has the rest.
+                    ForEach(viewModel.history.prefix(4)) { entry in
                         ClipRowButton(
                             entry: entry,
                             peerName: viewModel.peerName,
@@ -339,38 +438,50 @@ struct MenuBarContent: View {
         }
     }
 
-    /// The slot for the phone's notifications. Not built yet; the space is kept so the
-    /// popover's shape does not change under people when it lands.
+    /// The phone's latest notifications, the island's history.
     private var notificationsCard: some View {
-        Card(title: "From your phone", trailing: "Soon") {
-            HStack(spacing: 10) {
-                Image(systemName: "bell.badge")
-                    .font(.system(size: 14))
-                    .foregroundStyle(FuseColor.muted)
-                Text("Your phone's notifications will appear here.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(FuseColor.muted)
-                Spacer(minLength: 0)
+        Card(title: "From your phone") {
+            if viewModel.recentNotifications.isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: "bell.badge")
+                        .font(.system(size: 14))
+                        .foregroundStyle(FuseColor.muted)
+                    Text("Turn on notification sync in FuseOS on your phone, and they show up here.")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(FuseColor.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(viewModel.recentNotifications.prefix(3)) { n in
+                        HStack(alignment: .top, spacing: 8) {
+                            if let data = n.iconPNG, let icon = NSImage(data: data) {
+                                Image(nsImage: icon).resizable().frame(width: 22, height: 22)
+                                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                            } else {
+                                Image(systemName: "app.badge").frame(width: 22, height: 22).foregroundStyle(FuseColor.accent)
+                            }
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(n.title.isEmpty ? n.appName : n.title)
+                                    .font(.system(size: 12, weight: .medium)).foregroundStyle(FuseColor.ink).lineLimit(1)
+                                Text(n.text).font(.system(size: 11)).foregroundStyle(FuseColor.muted).lineLimit(2)
+                            }
+                            Spacer(minLength: 0)
+                            Text(n.postedAt, format: .relative(presentation: .numeric, unitsStyle: .narrow))
+                                .font(.system(size: 10)).foregroundStyle(FuseColor.muted)
+                        }
+                    }
+                }
             }
         }
-        .opacity(0.75)
     }
 
     private var footer: some View {
         HStack(spacing: 8) {
             Button {
-                chooseFiles()
-            } label: {
-                Label("Send file…", systemImage: "arrow.up.doc")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(PillButtonStyle(prominent: true))
-            .disabled(viewModel.connected.isEmpty)
-
-            Button {
                 openMain()
             } label: {
-                Label("Open", systemImage: "macwindow")
+                Label("Open FuseOS", systemImage: "macwindow")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(PillButtonStyle())
@@ -399,8 +510,11 @@ struct MenuBarContent: View {
 
     private func statusLine(linked: Bool, online: Bool, hasPeer: Bool) -> String {
         if !hasPeer { return "Sign in on your phone to link it" }
-        if linked { return "connected · direct" }
-        return online ? "online · connecting…" : "offline"
+        if linked {
+            if let latency = viewModel.syncLatency { return "Linked · direct · \(latency.lastMs) ms" }
+            return "Linked · direct"
+        }
+        return online ? "Online · connecting…" : "Offline"
     }
 
     private func openMain() {
@@ -455,14 +569,13 @@ private struct Card<Content: View>: View {
         VStack(alignment: .leading, spacing: 8) {
             if let title {
                 HStack {
-                    Text(title.uppercased())
-                        .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
-                        .tracking(1.1)
-                        .foregroundStyle(FuseColor.muted)
+                    Text(title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(FuseColor.ink)
                     Spacer()
                     if let trailing {
                         Text(trailing)
-                            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                                .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(FuseColor.muted)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -513,7 +626,7 @@ private struct ClipRowButton: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Text(entry.fromSelf ? "Copied here" : "From \(peerName ?? "your phone")")
-                        .font(.system(size: 9.5, design: .monospaced))
+                        .font(.system(size: 10.5))
                         .foregroundStyle(FuseColor.muted)
                 }
                 Spacer(minLength: 0)
@@ -524,7 +637,7 @@ private struct ClipRowButton: View {
                         .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 } else {
                     Text(entry.at, format: .relative(presentation: .numeric, unitsStyle: .narrow))
-                        .font(.system(size: 9.5, design: .monospaced))
+                        .font(.system(size: 10.5))
                         .foregroundStyle(FuseColor.muted)
                 }
             }
@@ -557,7 +670,8 @@ private struct BatteryRing: View {
                 .stroke(percent <= 20 ? FuseColor.error : FuseColor.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             Text("\(percent)")
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .font(.system(size: 10, weight: .semibold))
+                .monospacedDigit()
                 .foregroundStyle(FuseColor.ink)
         }
         .frame(width: 34, height: 34)

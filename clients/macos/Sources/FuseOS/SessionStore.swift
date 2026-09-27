@@ -27,11 +27,12 @@ final class SessionStore: ObservableObject {
 
     private init() {
         // Tokens used to live in defaults; move one across once, then forget it there.
-        if let legacy = defaults.string(forKey: tokenKey) {
+        // The demo never touches the Keychain: a rebuilt binary would make macOS ask.
+        if !DemoMode.isOn, let legacy = defaults.string(forKey: tokenKey) {
             TokenKeychain.write(legacy)
             defaults.removeObject(forKey: tokenKey)
         }
-        token = TokenKeychain.read()
+        token = DemoMode.isOn ? nil : TokenKeychain.read()
         email = defaults.string(forKey: emailKey)
         deviceName = defaults.string(forKey: deviceNameKey)
         deviceId = defaults.string(forKey: deviceIdKey)
