@@ -26,7 +26,7 @@ public final class PointerReceiver {
         onEvent?(event)
     }
 
-    static func event(from input: FusePointerInput) -> PointerEvent? {
+    nonisolated static func event(from input: FusePointerInput) -> PointerEvent? {
         switch input.kind {
         case .move: return .move(dx: Double(input.dx), dy: Double(input.dy))
         case .click: return .click

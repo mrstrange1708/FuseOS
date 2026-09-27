@@ -166,7 +166,7 @@ public final class ScreenReceiver {
     // MARK: - H.264 reframing
 
     /// Splits an Annex-B buffer on 3- and 4-byte start codes.
-    static func nalUnits(in data: Data) -> [Data] {
+    nonisolated static func nalUnits(in data: Data) -> [Data] {
         let bytes = [UInt8](data)
         var starts: [(at: Int, codeLength: Int)] = []
         var i = 0
@@ -187,7 +187,7 @@ public final class ScreenReceiver {
     }
 
     /// Length-prefixed (4-byte big-endian) NAL units, as Core Media expects.
-    static func avcc(_ nals: [Data]) -> Data {
+    nonisolated static func avcc(_ nals: [Data]) -> Data {
         var out = Data()
         for nal in nals {
             var length = UInt32(nal.count).bigEndian

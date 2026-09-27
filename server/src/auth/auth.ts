@@ -60,6 +60,10 @@ function createAuth() {
     // A continuity app that signs you out every week is not worth having: 90 days,
     // extended at most once a day while the app is used.
     session: { expiresIn: 60 * 60 * 24 * 90, updateAge: 60 * 60 * 24 },
+    // Password guessing: Better Auth's limiter (sign-in: 3 tries per 10 s per IP) is on by
+    // default only when NODE_ENV=production. Always on outside tests, so a host started
+    // without NODE_ENV is still covered. In memory — fine for the single instance we run.
+    rateLimit: { enabled: env.NODE_ENV !== 'test', window: 60, max: 100 },
     // Native clients send `Authorization: Bearer <token>`; there are no cookies.
     plugins: [bearer()],
     // Observability sees only what we choose to send (CLAUDE.md principle 6).

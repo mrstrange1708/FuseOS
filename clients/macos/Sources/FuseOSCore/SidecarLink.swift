@@ -67,7 +67,7 @@ public final class SidecarLink {
         }
     }
 
-    static func touch(from input: FuseSidecarInput) -> SidecarTouch? {
+    nonisolated static func touch(from input: FuseSidecarInput) -> SidecarTouch? {
         let x = Double(min(max(input.x, 0), 1)), y = Double(min(max(input.y, 0), 1))
         switch input.kind {
         case .tap: return .tap(x: x, y: y)
