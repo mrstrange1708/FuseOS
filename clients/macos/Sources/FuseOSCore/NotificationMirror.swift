@@ -12,6 +12,27 @@ public struct PhoneNotification: Identifiable, Equatable {
     public let postedAt: Date
     /// The app offers an inline reply (a chat, an SMS), so the Mac can offer one too.
     public let canReply: Bool
+    /// A live activity (timer, route, delivery, download): shown live, never as a banner.
+    public let ongoing: Bool
+    /// 0–1 when it shows progress, nil when it does not; `indeterminate` for a spinner.
+    public let progress: Double?
+    public let indeterminate: Bool
+
+    public init(
+        id: String, appName: String, title: String, text: String, iconPNG: Data?, postedAt: Date,
+        canReply: Bool = false, ongoing: Bool = false, progress: Double? = nil, indeterminate: Bool = false,
+    ) {
+        self.id = id
+        self.appName = appName
+        self.title = title
+        self.text = text
+        self.iconPNG = iconPNG
+        self.postedAt = postedAt
+        self.canReply = canReply
+        self.ongoing = ongoing
+        self.progress = progress
+        self.indeterminate = indeterminate
+    }
 }
 
 /// A phone call, as the phone's dialer notification describes it.
@@ -79,6 +100,9 @@ public final class NotificationMirror {
                 iconPNG: n.iconPng.isEmpty ? nil : n.iconPng,
                 postedAt: Date(timeIntervalSince1970: Double(n.postedAtUnixMs) / 1000),
                 canReply: n.canReply,
+                ongoing: n.ongoing,
+                progress: n.progressMax > 0 ? min(1, Double(n.progress) / Double(n.progressMax)) : nil,
+                indeterminate: n.indeterminate,
             ))
         case .callState(let call):
             let state: PhoneCall.State

@@ -30,6 +30,12 @@ enum DemoMode {
         vm.connected = [phone.id]
         let now = Date()
         vm.syncLatency = SyncLatency(lastMs: 38, p95Ms: 64, samples: 50)
+        vm.liveActivities = [
+            "uber": PhoneNotification(
+                id: "uber", appName: "Uber", title: "Driver arriving in 4 min", text: "White Swift · KA 01 AB 1234",
+                iconPNG: nil, postedAt: now, canReply: false, ongoing: true, progress: 0.7, indeterminate: false,
+            ),
+        ]
         vm.nowPlaying = NowPlaying(
             appName: "Spotify", title: "Midnight City", artist: "M83", playing: true,
             positionMs: 95_000, positionAt: now, durationMs: 243_000, artwork: sampleImage(),

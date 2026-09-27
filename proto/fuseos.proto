@@ -104,6 +104,13 @@ message PhoneNotification {
   bytes  icon_png          = 6; // the app's icon, small; may be empty
   int64  posted_at_unix_ms = 7;
   bool   can_reply         = 8; // the app offers an inline reply (a chat, an SMS)
+  // A live activity: an ongoing notification that is really an activity (a timer, a
+  // navigation, a delivery, a download) rather than a background service's placard. The
+  // Mac shows these in a live panel, updated in place, never as a banner.
+  bool   ongoing           = 9;
+  int32  progress          = 10;
+  int32  progress_max      = 11; // 0 = no progress bar
+  bool   indeterminate     = 12;
 }
 
 // A mirrored notification went away. The phone sends it when one is removed there; the
