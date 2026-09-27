@@ -1,5 +1,6 @@
 package com.fuseos.app.share
 
+import com.fuseos.app.clipboard.SendOutcome
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -81,8 +82,11 @@ class ShareActivity : ComponentActivity() {
         if (uris.isEmpty() || clipImage) {
             val bytes = single?.let { readBytes(it) }
             if (single != null && bytes == null) return "Couldn't read that."
-            val ok = ServiceLocator.clipboardSync.share(text = text, imageBytes = bytes, mime = singleMime)
-            return if (ok) "On your Mac's clipboard." else "Couldn't send that."
+            return when (ServiceLocator.clipboardSync.share(text = text, imageBytes = bytes, mime = singleMime)) {
+                SendOutcome.Sent -> "On your Mac's clipboard."
+                SendOutcome.NotLinked -> "Your Mac isn't linked. Kept in History."
+                SendOutcome.Nothing -> "Couldn't send that."
+            }
         }
 
         // Files. Text riding along (a caption, a link) still goes to the clipboard.

@@ -33,6 +33,10 @@ class FuseWidget : AppWidgetProvider() {
     companion object {
         @Volatile private var last: WidgetState? = null
 
+        /** The connection is going away: a widget left saying "Linked" would be a lie. */
+        fun markOffline(context: Context) =
+            update(context, (last ?: WidgetState(false, null, null, false, null)).copy(linked = false, macBattery = null))
+
         fun update(context: Context, state: WidgetState) {
             if (state == last) return
             last = state

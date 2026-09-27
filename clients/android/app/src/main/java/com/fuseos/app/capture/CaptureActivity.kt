@@ -1,5 +1,6 @@
 package com.fuseos.app.capture
 
+import com.fuseos.app.clipboard.SendOutcome
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -61,7 +62,9 @@ class CaptureActivity : ComponentActivity() {
         val clip = ServiceLocator.clipboardSync.capture()
         val automatic = intent.getBooleanExtra(EXTRA_AUTOMATIC, false)
         // An offer nobody asked for stays quiet when there is nothing new to offer.
-        if (automatic && (clip == null || clip == lastOffered)) {
+        // Nor does it offer to send to a Mac that is not there.
+        val linked = ServiceLocator.lanTransport.connectedPeers.value.isNotEmpty()
+        if (automatic && (clip == null || clip == lastOffered || !linked)) {
             finish()
             overridePendingTransition(0, 0)
             return
@@ -69,6 +72,8 @@ class CaptureActivity : ComponentActivity() {
         lastOffered = clip
         if (clip == null) {
             island.status(title = "Nothing to send", subtitle = "Your clipboard is empty")
+        } else if (!linked) {
+            island.status(title = "Mac isn't linked", subtitle = "Open FuseOS on your Mac, on the same Wi-Fi")
         } else {
             island.prompt(clip) { pending ->
                 // On the app scope, not this activity's: the tap happens seconds after
@@ -97,7 +102,7 @@ class CaptureActivity : ComponentActivity() {
                 if (peers.isNullOrEmpty()) return@withContext "No device connected."
                 val clip = ServiceLocator.clipboardSync.capture()
                     ?: return@withContext "Your clipboard is empty."
-                if (!ServiceLocator.clipboardSync.send(clip)) return@withContext "Couldn't send that."
+                if (ServiceLocator.clipboardSync.send(clip) != SendOutcome.Sent) return@withContext "Couldn't send that."
                 // Naming the missing permission, because from here the send looks like it
                 // worked and the island looks broken — and the fix is two taps away.
                 "Sent. Turn on the island in FuseOS → Profile."

@@ -31,6 +31,12 @@ import java.io.File
  * encoded image otherwise — the same bytes that crossed the wire, so re-copying an old
  * item needs no re-encode. Mirrors `ClipEntry` on macOS.
  */
+/**
+ * What became of a send. [NotLinked] still keeps the clip in History — the Mac gets it
+ * with the history catch-up when they link — but nothing crossed, and the UI must say so.
+ */
+enum class SendOutcome { Sent, NotLinked, Nothing }
+
 data class ClipEntry(
     val id: Long,
     val text: String?,
@@ -273,10 +279,11 @@ class ClipboardSync(
      * Returns false when the payload is unusable — an oversized image, or empty text — so
      * the caller can tell the user rather than silently dropping it.
      */
-    fun share(text: String?, imageBytes: ByteArray?, mime: String?): Boolean {
+    fun share(text: String?, imageBytes: ByteArray?, mime: String?): SendOutcome {
         if (imageBytes != null) {
-            if (imageBytes.isEmpty() || imageBytes.size > MAX_INLINE_IMAGE_BYTES) return false
+            if (imageBytes.isEmpty() || imageBytes.size > MAX_INLINE_IMAGE_BYTES) return SendOutcome.Nothing
             record(text = null, imageBytes = imageBytes, mime = mime, fromSelf = true)
+            if (transport.connectedPeers.value.isEmpty()) return SendOutcome.NotLinked
             broadcast {
                 it.setClipImage(
                     ClipImage.newBuilder()
@@ -284,12 +291,13 @@ class ClipboardSync(
                         .setData(ByteString.copyFrom(imageBytes)),
                 )
             }
-            return true
+            return SendOutcome.Sent
         }
-        val body = text?.takeIf { it.isNotEmpty() } ?: return false
+        val body = text?.takeIf { it.isNotEmpty() } ?: return SendOutcome.Nothing
         record(text = body, imageBytes = null, mime = null, fromSelf = true)
+        if (transport.connectedPeers.value.isEmpty()) return SendOutcome.NotLinked
         broadcast { it.setClipText(ClipText.newBuilder().setText(body)) }
-        return true
+        return SendOutcome.Sent
     }
 
     /**
@@ -299,7 +307,7 @@ class ClipboardSync(
      * on screen — the same reason automatic capture only works in the foreground.
      * Returns false when there is nothing readable to send.
      */
-    fun sendCurrent(): Boolean {
+    fun sendCurrent(): SendOutcome {
         val image = currentImage()
         if (image != null) {
             val (mime, bytes) = image
@@ -327,7 +335,7 @@ class ClipboardSync(
     }
 
     /** Sends a clip taken earlier by [capture]. Same path as a Share-sheet send. */
-    fun send(clip: PendingClip): Boolean = share(clip.text, clip.imageBytes, clip.mime)
+    fun send(clip: PendingClip): SendOutcome = share(clip.text, clip.imageBytes, clip.mime)
 
     /**
      * Offered a local copy, decides what it does next.

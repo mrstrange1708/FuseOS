@@ -154,7 +154,9 @@ object ServiceLocator {
         // A copy asks before it travels. With no overlay permission there is nowhere to
         // ask, so it travels — losing the prompt should not lose the sync.
         clipboardSync.onLocalCopy = { clip ->
-            if (island.canDraw()) {
+            if (transport.connectedPeers.value.isEmpty()) {
+                // Nothing to send it to; offering would promise what cannot happen.
+            } else if (island.canDraw()) {
                 island.prompt(clip) { clipboardSync.send(it) }
             } else {
                 clipboardSync.send(clip)

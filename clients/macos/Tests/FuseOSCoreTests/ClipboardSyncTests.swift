@@ -23,7 +23,9 @@ final class ClipboardSyncTests: XCTestCase {
         pasteboard = NSPasteboard(name: .init("com.fuseos.tests.\(UUID().uuidString)"))
         pasteboard.clearContents()
         transport = LanTransport()
-        sync = ClipboardSync(transport: transport, pasteboard: pasteboard)
+        // And a private history: the default is the real one in Application Support.
+        let history = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("fuse-history-\(UUID().uuidString)")
+        sync = ClipboardSync(transport: transport, pasteboard: pasteboard, store: ClipHistoryStore(directory: history))
         sync.start(selfDeviceId: "self-device")
     }
 

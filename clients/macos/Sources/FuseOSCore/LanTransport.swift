@@ -107,20 +107,19 @@ public final class LanTransport {
                 Task { @MainActor in self?.accept(connection) }
             }
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                // Resumed exactly once: a continuation resumed twice traps, and this
-                // handler fires again on every later state change.
-                var resumed = false
-                listener.stateUpdateHandler = { state in
+                // Resumed exactly once: a continuation resumed twice traps. The handler
+                // removes itself on the first settled state, on a serial queue, so there is
+                // no shared flag for two callbacks to race on.
+                listener.stateUpdateHandler = { [weak listener] state in
                     switch state {
                     case .ready, .failed, .cancelled:
-                        guard !resumed else { return }
-                        resumed = true
+                        listener?.stateUpdateHandler = nil
                         continuation.resume()
                     default:
                         break
                     }
                 }
-                listener.start(queue: .global(qos: .userInitiated))
+                listener.start(queue: DispatchQueue(label: "com.fuseos.lan.listener", qos: .userInitiated))
             }
             heartbeatTask = Task { [weak self] in await self?.heartbeatLoop() }
         } catch {

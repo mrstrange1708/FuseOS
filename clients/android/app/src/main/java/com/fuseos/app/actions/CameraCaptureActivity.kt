@@ -1,5 +1,6 @@
 package com.fuseos.app.actions
 
+import com.fuseos.app.clipboard.SendOutcome
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -32,11 +33,15 @@ class CameraCaptureActivity : ComponentActivity() {
         }
         lifecycleScope.launch {
             val jpeg = withContext(Dispatchers.Default) { fitForClipboard(photo) }
-            val sent = jpeg != null && ServiceLocator.clipboardSync.share(null, jpeg, "image/jpeg")
+            val outcome = jpeg?.let { ServiceLocator.clipboardSync.share(null, it, "image/jpeg") }
             photo.delete()
             Toast.makeText(
                 this@CameraCaptureActivity,
-                if (sent) "Sent to your Mac" else "Couldn't send that photo",
+                when (outcome) {
+                    SendOutcome.Sent -> "Sent to your Mac"
+                    SendOutcome.NotLinked -> "Your Mac isn't linked. The photo wasn't sent."
+                    else -> "Couldn't send that photo"
+                },
                 Toast.LENGTH_SHORT,
             ).show()
             finish()

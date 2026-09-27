@@ -86,6 +86,9 @@ enum MacUnlock {
         // password field without typing into it.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { press(56) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
+            // Checked again at the last moment: unlocked meanwhile (Touch ID, the user
+            // typing), the password would go into whatever app is in front — with Return.
+            guard isScreenLocked else { return FuseLog.unlock.info("unlocked before typing; nothing typed") }
             // One event per character: a secure field drops a many-character event.
             for unit in password.utf16 {
                 press(0, text: [unit])

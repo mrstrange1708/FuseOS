@@ -79,13 +79,15 @@ public final class ClipboardSync {
     public var onLocalCopy: ((ClipOffer) -> Void)?
 
     private var nextId = 0
-    private let store = ClipHistoryStore()
+    private let store: ClipHistoryStore
 
-    /// The pasteboard is injectable so tests can drive a private one — exercising this
-    /// against `NSPasteboard.general` would fight whoever is using the machine.
-    public init(transport: LanTransport, pasteboard: NSPasteboard = .general) {
+    /// The pasteboard and the history store are injectable so tests drive private ones —
+    /// against `NSPasteboard.general` and Application Support they would fight, and
+    /// overwrite, whoever is using the machine.
+    public init(transport: LanTransport, pasteboard: NSPasteboard = .general, store: ClipHistoryStore = ClipHistoryStore()) {
         self.transport = transport
         self.pasteboard = pasteboard
+        self.store = store
         lastChangeCount = pasteboard.changeCount
     }
 
@@ -178,9 +180,17 @@ public final class ClipboardSync {
         } else {
             return
         }
-        awaitingAck[envelope.seq] = DispatchTime.now().uptimeNanoseconds
+        markAwaitingAck(envelope.seq)
         transport.broadcast(envelope)
         onClipEvent?(entry)
+    }
+
+    /// Times a clip until its Ack. Bounded: with no peer, nothing ever acks.
+    private func markAwaitingAck(_ seq: UInt64) {
+        awaitingAck[seq] = DispatchTime.now().uptimeNanoseconds
+        if awaitingAck.count > 64, let oldest = awaitingAck.keys.min() {
+            awaitingAck.removeValue(forKey: oldest)
+        }
     }
 
     /// Sends our recent history to peers that just connected (`HistorySync` in the proto),
@@ -315,11 +325,7 @@ public final class ClipboardSync {
             guard let self else { return }
             self.record(text: entry.text, imageData: entry.image, mime: entry.mime, fromSelf: true)
             let envelope = body(self.transport.newEnvelope())
-            self.awaitingAck[envelope.seq] = DispatchTime.now().uptimeNanoseconds
-            // Bounded: a peer that never acks (an older build) must not grow this forever.
-            if self.awaitingAck.count > 64, let oldest = self.awaitingAck.keys.min() {
-                self.awaitingAck.removeValue(forKey: oldest)
-            }
+            self.markAwaitingAck(envelope.seq)
             self.transport.broadcast(envelope)
         }
         if let offer = onLocalCopy {

@@ -1,5 +1,6 @@
 package com.fuseos.app.ui.dashboard
 
+import com.fuseos.app.clipboard.SendOutcome
 import com.fuseos.app.ui.DemoMode
 
 import androidx.lifecycle.ViewModel
@@ -87,7 +88,7 @@ class DashboardViewModel(
     fun copyToClipboard(entry: ClipEntry) = clipboard.copyToClipboard(entry)
 
     /** The nav bar's centre action: push this device's clipboard to the peer now. */
-    fun sendCurrentClipboard(): Boolean = clipboard.sendCurrent()
+    fun sendCurrentClipboard(): SendOutcome = clipboard.sendCurrent()
 
     init {
         if (DemoMode.isOn) {

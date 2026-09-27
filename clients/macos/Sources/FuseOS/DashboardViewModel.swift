@@ -152,10 +152,15 @@ final class DashboardViewModel: ObservableObject {
             self?.notifier.post(n)
         }
         notifier.onUserReplied = { [weak self] key, text in self?.notifications.reply(key: key, text: text) }
-        island.reply = { [weak self] key, text in self?.notifications.reply(key: key, text: text) }
+        island.reply = { [weak self] key, text in
+            guard let self else { return }
+            guard !self.connected.isEmpty else { return self.notLinked("Your reply wasn't sent.") }
+            self.notifications.reply(key: key, text: text)
+        }
         island.recentClips = { [weak self] in self?.history.filter(\.fromSelf) ?? [] }
         island.sendRecent = { [weak self] entry in
-            guard let self, !self.connected.isEmpty else { return }
+            guard let self else { return }
+            guard !self.connected.isEmpty else { return self.notLinked("Nothing was sent. Open FuseOS on your phone, on the same Wi-Fi.") }
             self.clipboard.resend(entry)
         }
         notifications.onCall = { [weak self] call in
@@ -234,6 +239,11 @@ final class DashboardViewModel: ObservableObject {
             // Named after whichever peer is actually reachable — with one other device
             // that is always the right name, and with several the connected one is the
             // only one the clip can have come from or gone to.
+            // A copy made here with nothing linked went nowhere; saying "→ phone" would be a lie.
+            if entry.fromSelf && self.connected.isEmpty {
+                self.notLinked("Kept in History. It reaches your phone's history when they link.", quietly: true)
+                return
+            }
             self.island.present(entry, peerName: self.peerName)
             self.pulse(toPhone: entry.fromSelf)
         }
@@ -475,6 +485,7 @@ final class DashboardViewModel: ObservableObject {
         }
         guard !connected.isEmpty else {
             fileNotice = "No device connected. Open FuseOS on your phone."
+            notLinked("Nothing was sent. Open FuseOS on your phone, on the same Wi-Fi.")
             return
         }
         fileNotice = nil
@@ -511,8 +522,22 @@ final class DashboardViewModel: ObservableObject {
 
     /// Handoff, Mac → phone, for a link picked from anywhere (Services, the Phone panel).
     func openOnPhone(_ url: URL) {
-        guard !connected.isEmpty, phone.openOnPhone(url) else { return }
+        guard !connected.isEmpty else { return notLinked("The link wasn't opened. Open FuseOS on your phone, on the same Wi-Fi.") }
+        guard phone.openOnPhone(url) else { return }
         island.present(symbol: "iphone", title: "Opening on \(peerName ?? "your phone")", detail: url.host ?? url.absoluteString)
+    }
+
+    private var lastNotLinkedAt = Date.distantPast
+
+    /// Something was meant for the phone and there is no channel: say so where the user is
+    /// looking. `quietly` (every copy) says it at most once a minute — copying on a Mac with
+    /// no phone around must not turn into an island per copy.
+    func notLinked(_ detail: String, quietly: Bool = false) {
+        if quietly {
+            guard Date().timeIntervalSince(lastNotLinkedAt) > 60 else { return }
+        }
+        lastNotLinkedAt = Date()
+        island.present(symbol: "iphone.slash", title: "\(peerName ?? "Your phone") isn't linked", detail: detail)
     }
 
     /// Clicking a history entry puts it back on this Mac's clipboard.
