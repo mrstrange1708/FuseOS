@@ -18,7 +18,75 @@ import FuseOSCore
 final class ClipIsland {
     private let model = IslandModel()
     private var panel: NSPanel?
+    private var hoverZone: NSPanel?
     private var dismissTask: Task<Void, Never>?
+    /// What hovering the notch shows; set by the owner, read at hover time.
+    var recentClips: () -> [ClipEntry] = { [] }
+    var sendRecent: (ClipEntry) -> Void = { _ in }
+    var reply: (String, String) -> Void = { _, _ in }
+
+    init() {
+        model.onSendRecent = { [weak self] entry in
+            self?.sendRecent(entry)
+            self?.dismiss()
+        }
+        model.onReply = { [weak self] key, text in
+            self?.reply(key, text)
+            self?.model.replyDraft = nil
+            self?.dismiss()
+        }
+        model.onHoverChange = { [weak self] inside in self?.hoverChanged(inside) }
+        model.onReplyTap = { [weak self] in self?.beginReply() }
+        DispatchQueue.main.async { [weak self] in self?.installHoverZone() }
+    }
+
+    /// Hovering the notch opens the island on the last three things copied on this Mac,
+    /// each with Send — so a copy that went unsent (or "Ask before sending" was off and the
+    /// moment passed) is one hover away.
+    private func installHoverZone() {
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+        let notch = Self.notchSize(of: screen)
+        let zone = NSPanel(
+            contentRect: NSRect(x: screen.frame.midX - notch.width / 2, y: screen.frame.maxY - notch.height,
+                                width: notch.width, height: notch.height),
+            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false,
+        )
+        zone.level = .statusBar + 1
+        zone.backgroundColor = .clear
+        zone.isOpaque = false
+        zone.hasShadow = false
+        zone.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        let tracker = HoverView { [weak self] inside in if inside { self?.showRecent() } }
+        zone.contentView = tracker
+        zone.orderFrontRegardless()
+        hoverZone = zone
+    }
+
+    private func showRecent() {
+        // Only when nothing more important is on show.
+        if panel?.isVisible == true, model.expanded { if case .recent = model.content {} else { return } }
+        let clips = Array(recentClips().prefix(3))
+        guard !clips.isEmpty else { return }
+        dismissTask?.cancel()
+        show(.recent(clips), peerName: nil, restart: true)
+    }
+
+    /// The pointer on the island holds it open; leaving lets it go — quickly for the
+    /// hover list, after a beat for anything else. A ringing call, a file in progress and a
+    /// reply being typed stay regardless.
+    private func hoverChanged(_ inside: Bool) {
+        if inside {
+            dismissTask?.cancel()
+            return
+        }
+        guard model.replyDraft == nil, panel?.isVisible == true else { return }
+        switch model.content {
+        case .recent: scheduleDismiss(after: 0.35)
+        case let .call(call) where call.state == .ringing: return
+        case let .transfer(t) where !t.finished: return
+        default: scheduleDismiss(after: 1.5)
+        }
+    }
 
     /// Shows one clip. A second event replaces the first rather than queueing — a backlog
     /// of stale animations is noise, and only the newest event is still true.
@@ -87,6 +155,14 @@ final class ClipIsland {
         scheduleDismiss(after: Self.notificationSeconds)
     }
 
+    /// Starts a reply to a notification: the island becomes a text field, and takes the
+    /// keyboard without activating FuseOS (the app you were in stays in front).
+    func beginReply() {
+        dismissTask?.cancel()
+        model.replyDraft = ""
+        panel?.makeKey()
+    }
+
     func dismiss() {
         dismissTask?.cancel()
         dismissTask = nil
@@ -125,7 +201,7 @@ final class ClipIsland {
     }
 
     private func makePanel() -> NSPanel {
-        let panel = NSPanel(
+        let panel = KeyablePanel(
             contentRect: NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -143,9 +219,11 @@ final class ClipIsland {
         // one desktop is worse than none, because you learn not to trust it.
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
 
-        panel.contentView = NSHostingView(rootView: IslandView(model: model, onTap: { [weak self] in
+        let host = HoverHostingView(rootView: IslandView(model: model, onTap: { [weak self] in
             self?.dismiss()
         }))
+        host.onHover = { [weak self] inside in self?.model.onHoverChange?(inside) }
+        panel.contentView = host
         return panel
     }
 
@@ -177,7 +255,7 @@ final class ClipIsland {
     }
 
     private static let panelWidth: CGFloat = 440
-    private static let panelHeight: CGFloat = 150
+    private static let panelHeight: CGFloat = 250
     private static let visibleSeconds: Double = 2.8
     /// Longer than a clip: a notification is read, a clip only confirmed.
     private static let notificationSeconds: Double = 4.5
@@ -194,12 +272,20 @@ private final class IslandModel: ObservableObject {
         case offer(ClipOffer)
         case message(symbol: String, title: String, detail: String)
         case call(PhoneCall)
+        /// Hovering the notch: the last few things copied here, to send on demand.
+        case recent([ClipEntry])
     }
 
     @Published var content: Content?
     @Published var peerName: String?
     @Published var expanded = false
     @Published var notch = CGSize(width: 180, height: 32)
+    /// The reply being typed to a notification, while the island is a reply field.
+    @Published var replyDraft: String?
+    var onReply: ((String, String) -> Void)?
+    var onSendRecent: ((ClipEntry) -> Void)?
+    var onHoverChange: ((Bool) -> Void)?
+    var onReplyTap: (() -> Void)?
     enum CallButton { case answer, decline, end }
     var onCall: ((CallButton) -> Void)?
 }
@@ -260,6 +346,10 @@ private struct IslandView: View {
 
     private var expandedSize: CGSize {
         let top = model.notch.height
+        if case let .recent(clips) = model.content {
+            return CGSize(width: 420, height: top + 44 + CGFloat(clips.count) * 46)
+        }
+        if model.replyDraft != nil { return CGSize(width: 420, height: top + 120) }
         if case let .transfer(t) = model.content, !t.finished {
             return CGSize(width: 400, height: top + 84)
         }
@@ -323,13 +413,62 @@ private struct IslandView: View {
         case let .message(symbol, title, detail):
             row(icon: symbol, title: title, detail: detail, thumbnail: nil, incoming: true)
         case let .notification(n):
-            row(
-                icon: "bell.fill",
-                title: n.appName.isEmpty ? "Your phone" : n.appName,
-                detail: [n.title, n.text].filter { !$0.isEmpty }.joined(separator: " · "),
-                thumbnail: n.iconPNG.flatMap(NSImage.init(data:)),
-                incoming: true,
-            )
+            VStack(spacing: 10) {
+                HStack(spacing: 10) {
+                    row(
+                        icon: "bell.fill",
+                        title: n.appName.isEmpty ? "Your phone" : n.appName,
+                        detail: [n.title, n.text].filter { !$0.isEmpty }.joined(separator: " · "),
+                        thumbnail: n.iconPNG.flatMap(NSImage.init(data:)),
+                        incoming: true,
+                        trailing: n.canReply ? "" : nil,
+                    )
+                    if n.canReply && model.replyDraft == nil {
+                        pill("Reply") { model.onReplyTap?() }
+                    }
+                }
+                if model.replyDraft != nil {
+                    HStack(spacing: 8) {
+                        TextField("Reply…", text: Binding(get: { model.replyDraft ?? "" }, set: { model.replyDraft = $0 }))
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .frame(height: 32)
+                            .background(Capsule().fill(Color.white.opacity(0.12)))
+                            .onSubmit { model.onReply?(n.id, model.replyDraft ?? "") }
+                        pill("Send") { model.onReply?(n.id, model.replyDraft ?? "") }
+                    }
+                }
+            }
+        case let .recent(clips):
+            VStack(alignment: .leading, spacing: 8) {
+                Text("RECENT COPIES")
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .tracking(0.8)
+                    .foregroundStyle(.white.opacity(0.5))
+                ForEach(clips) { entry in
+                    HStack(spacing: 10) {
+                        Group {
+                            if let data = entry.imageData, let image = NSImage(data: data) {
+                                Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+                            } else {
+                                Image(systemName: "doc.on.clipboard").foregroundStyle(.white.opacity(0.8))
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                    .background(Color.white.opacity(0.1))
+                            }
+                        }
+                        .frame(width: 30, height: 30)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                        Text(entry.isImage ? "Image" : (entry.text ?? "").replacingOccurrences(of: "\n", with: " "))
+                            .font(.system(size: 12.5))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Spacer(minLength: 6)
+                        pill("Send") { model.onSendRecent?(entry) }
+                    }
+                }
+            }
         case let .transfer(t):
             VStack(spacing: 10) {
                 row(
@@ -406,6 +545,19 @@ private struct IslandView: View {
         }
     }
 
+    private func pill(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .frame(height: 28)
+                .background(Capsule().fill(Color(red: 0.91, green: 0.36, blue: 0.16)))
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+    }
+
     private func callButton(_ symbol: String, color: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
@@ -443,4 +595,49 @@ private struct IslandView: View {
     private func percent(_ t: TransferProgress) -> Int {
         t.total > 0 ? min(100, t.bytes * 100 / t.total) : 0
     }
+}
+
+/// A panel that can take the keyboard (for a reply) while staying non-activating, so the
+/// app the user was in keeps its place in front.
+private final class KeyablePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+}
+
+/// Reports the pointer entering and leaving, whether or not FuseOS is active — which a
+/// SwiftUI hover in a non-activating panel does not reliably do.
+private final class HoverView: NSView {
+    private let onChange: (Bool) -> Void
+
+    init(onChange: @escaping (Bool) -> Void) {
+        self.onChange = onChange
+        super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { onChange(true) }
+    override func mouseExited(with event: NSEvent) { onChange(false) }
+}
+
+/// The island's hosting view, with the same always-on hover reporting.
+private final class HoverHostingView<Content: View>: NSHostingView<Content> {
+    var onHover: ((Bool) -> Void)?
+    private var hoverArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        hoverArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { onHover?(true) }
+    override func mouseExited(with event: NSEvent) { onHover?(false) }
 }

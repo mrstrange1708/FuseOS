@@ -46,14 +46,12 @@ final class PhoneNotifier: NSObject, UNUserNotificationCenterDelegate {
         center.removeDeliveredNotifications(withIdentifiers: [key])
     }
 
-    // The island already showed a plain one; a banner too would say it twice. A replyable
-    // one skips the island and shows as a banner, because the banner is where Reply lives.
+    // The island is the banner (with its own Reply); a system banner too would say it twice.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void,
     ) {
-        let replyable = notification.request.content.categoryIdentifier == Self.replyCategory
-        completionHandler(replyable ? [.banner, .list, .sound] : [.list])
+        completionHandler([.list])
     }
 
     nonisolated func userNotificationCenter(

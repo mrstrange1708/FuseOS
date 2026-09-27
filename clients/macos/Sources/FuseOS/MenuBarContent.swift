@@ -180,8 +180,11 @@ struct MenuBarContent: View {
     /// The four things people open the popover to do with the phone.
     private var actionsRow: some View {
         HStack(spacing: 8) {
-            quickAction("Ring", "bell.and.waves.left.and.right.fill") { viewModel.phone.ring() }
-            quickAction("Photo", "camera.fill") { viewModel.phone.takePhoto() }
+            quickAction("Open link", "safari.fill") {
+                if let url = viewModel.clipboardLink { viewModel.openOnPhone(url) }
+            }
+            .disabled(viewModel.clipboardLink == nil)
+            .help("Opens the link you copied on this Mac in your phone's browser")
             quickAction("Mirror", "rectangle.on.rectangle") {
                 openMain()
                 viewModel.screen.start()
