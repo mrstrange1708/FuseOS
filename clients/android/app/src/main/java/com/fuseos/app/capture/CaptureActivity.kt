@@ -59,6 +59,14 @@ class CaptureActivity : ComponentActivity() {
         }
 
         val clip = ServiceLocator.clipboardSync.capture()
+        val automatic = intent.getBooleanExtra(EXTRA_AUTOMATIC, false)
+        // An offer nobody asked for stays quiet when there is nothing new to offer.
+        if (automatic && (clip == null || clip == lastOffered)) {
+            finish()
+            overridePendingTransition(0, 0)
+            return
+        }
+        lastOffered = clip
         if (clip == null) {
             island.status(title = "Nothing to send", subtitle = "Your clipboard is empty")
         } else {
@@ -100,6 +108,19 @@ class CaptureActivity : ComponentActivity() {
     }
 
     companion object {
+        private const val EXTRA_AUTOMATIC = "automatic"
+        /** The last clip offered, so a detected copy of the same thing is not re-offered. */
+        @Volatile private var lastOffered: com.fuseos.app.clipboard.PendingClip? = null
+
+        /** A copy was noticed (see [CopyDetector]): read it and let the island offer it. */
+        fun offerCopy(context: Context) {
+            context.startActivity(
+                Intent(context, CaptureActivity::class.java)
+                    .putExtra(EXTRA_AUTOMATIC, true)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION),
+            )
+        }
+
         /** Long enough to dial a peer on a LAN, short enough not to feel hung. */
         private const val CONNECT_TIMEOUT_MS = 6_000L
 

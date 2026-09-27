@@ -52,8 +52,8 @@ fun ProfileScreen(
     islandEnabled: Boolean,
     onEnableIsland: () -> Unit,
     onAddTile: (() -> Unit)?,
-    keyboardActive: Boolean,
-    onKeyboardSetup: () -> Unit,
+    copyPopupOn: Boolean,
+    onCopyPopup: () -> Unit,
     selfBattery: Int?,
     onRename: (String) -> Unit,
     onBatterySettings: () -> Unit,
@@ -190,14 +190,12 @@ fun ProfileScreen(
                 trailingLit = islandEnabled,
             )
             SettingItem(
-                "Auto-capture",
-                // Naming the real reason, because "install a keyboard to sync your
-                // clipboard" is otherwise a bizarre thing to be asked.
-                if (keyboardActive) "FuseOS is your keyboard, so a copy anywhere brings up the island."
-                else "Android only lets your keyboard read the clipboard in the background.",
-                onKeyboardSetup,
-                trailing = if (keyboardActive) "On" else "Off",
-                trailingLit = keyboardActive,
+                "Copy pop-up",
+                if (copyPopupOn) "Copy anything, in any app, and the island offers to send it to your Mac."
+                else "Turn on FuseOS in Accessibility, and every copy pops up an offer to send it to your Mac — Gboard stays your keyboard.",
+                onCopyPopup,
+                trailing = if (copyPopupOn) "On" else "Set up",
+                trailingLit = copyPopupOn,
             )
             // Null below Android 13, where there is no API to offer this. A row that
             // cannot do anything is worse than no row.
