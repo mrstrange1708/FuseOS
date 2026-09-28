@@ -2,6 +2,7 @@ import { Navbar } from '@/components/navbar';
 import { Download } from '@/components/sections/download';
 import { Faq, Footer } from '@/components/sections/chrome';
 import { Features } from '@/components/sections/features';
+import { Film } from '@/components/sections/film';
 import { Continuity } from '@/components/sections/continuity';
 import { Hero } from '@/components/sections/hero';
 import { MacbookSection } from '@/components/sections/macbook';
@@ -17,6 +18,7 @@ export default function Home() {
       <Navbar />
       <main>
         <Hero />
+        <Film />
         <SyncStory />
         <NotchStage />
         <MenuBarDemo />

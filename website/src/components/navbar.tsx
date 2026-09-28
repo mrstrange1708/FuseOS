@@ -6,6 +6,7 @@ import { FuseMark, Wordmark } from '@/components/fuse-mark';
 import { cn } from '@/lib/utils';
 
 const LINKS = [
+  { href: '#film', label: 'Watch' },
   { href: '#notch', label: 'The island' },
   { href: '#story', label: 'How it feels' },
   { href: '#menubar', label: 'Menu bar' },
