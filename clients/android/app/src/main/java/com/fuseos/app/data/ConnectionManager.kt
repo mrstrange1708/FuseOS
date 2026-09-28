@@ -58,6 +58,29 @@ class ConnectionManager(
     }
 
     /**
+     * [ensureStarted], again and again with backoff until it works: the server being down
+     * (or the phone offline) at launch must not strand the app until someone force-quits
+     * it. [onFailure] hears each miss, so the screen can say why while it waits.
+     *
+     * ponytail: time-based backoff, capped at 30 s; a network-change callback is the
+     * event-driven upgrade if the wait ever shows.
+     */
+    suspend fun startRetrying(onFailure: (Exception) -> Unit = {}): String {
+        var wait = 2_000L
+        while (true) {
+            try {
+                return ensureStarted()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onFailure(e)
+                kotlinx.coroutines.delay(wait)
+                wait = (wait * 2).coerceAtMost(30_000L)
+            }
+        }
+    }
+
+    /**
      * Tears the stack down; the next [ensureStarted] rebuilds it. Sign-out forgets the
      * history from disk too; an expired session keeps it ([keepHistory]).
      */

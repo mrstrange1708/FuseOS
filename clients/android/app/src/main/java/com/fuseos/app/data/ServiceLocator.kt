@@ -88,8 +88,8 @@ object ServiceLocator {
                 execute(request)
             } catch (e: IOException) {
                 throw AuthException(
-                    "Can't reach the FuseOS server at ${Config.BASE_URL}. Check that it's " +
-                        "running, and that the USB cable is still connected.",
+                    "Can't reach the FuseOS server. Check this phone's internet connection; " +
+                        "FuseOS keeps trying and links by itself once it's back.",
                 )
             }
         }
