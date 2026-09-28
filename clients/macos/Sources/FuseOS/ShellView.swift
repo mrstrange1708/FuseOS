@@ -802,12 +802,12 @@ private struct AccountPane: View {
                         )
                         Divider().opacity(0.5)
                         SettingSwitch(
-                            title: "Show in Dock",
-                            detail: "Off, FuseOS lives in the menu bar only.",
+                            title: "Keep in Dock when closed",
+                            detail: "Off: the Dock icon shows only while this window is open; FuseOS keeps running in the menu bar.",
                             isOn: $showInDock,
                         )
-                        .onChange(of: showInDock) { shown in
-                            DockIcon.apply(shown)
+                        .onChange(of: showInDock) { _ in
+                            DockIcon.update()
                             // Leaving the Dock deactivates the app; keep this window in front
                             // of the user who is still looking at it.
                             DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
