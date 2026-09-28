@@ -207,7 +207,10 @@ private struct HomePane: View {
                 // narrow — the window's width goes to content instead of margins.
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .top, spacing: 18) {
-                        clipboard(rows: 12).frame(minWidth: 360)
+                        // An ideal width, not the text's: ViewThatFits measures ideal sizes,
+                        // and one long copied line (a code snippet) otherwise "doesn't fit"
+                        // and drops the whole Home to a single column.
+                        clipboard(rows: 12).frame(minWidth: 360, idealWidth: 460, maxWidth: .infinity)
                         VStack(spacing: 18) {
                             nowPlaying
                             notificationsPanel
@@ -221,7 +224,7 @@ private struct HomePane: View {
                             clipboard(rows: 6)
                             notificationsPanel
                         }
-                        .frame(minWidth: 420)
+                        .frame(minWidth: 420, idealWidth: 480, maxWidth: .infinity)
                         files.frame(width: 340)
                     }
                     VStack(spacing: 18) {
