@@ -62,6 +62,7 @@ fun ProfileScreen(
     onNotifications: () -> Unit,
     nearbyOn: Boolean,
     onNearby: () -> Unit,
+    nearbyState: com.fuseos.app.proximity.Proximity.Beacon = com.fuseos.app.proximity.Proximity.Beacon.WaitingForMac,
     callsOn: Boolean,
     onCalls: () -> Unit,
     remoteControlOn: Boolean,
@@ -167,13 +168,28 @@ fun ProfileScreen(
                 },
                 trailingLit = notificationAccess && notificationsOn,
             )
+            // Says what the beacon is actually doing — "On" used to mean only "permitted",
+            // which read as working while the Mac heard nothing.
+            val beaconing = nearbyOn && nearbyState == com.fuseos.app.proximity.Proximity.Beacon.Broadcasting
             SettingItem(
                 "Nearby lock & unlock",
-                if (nearbyOn) "Your Mac can tell how close this phone is: it locks when you walk away, and wakes this phone when it unlocks."
-                else "Allow Bluetooth so your Mac can tell how close this phone is — to lock when you walk away.",
+                when {
+                    !nearbyOn -> "Allow Bluetooth so your Mac can tell how close this phone is — to lock when you walk away."
+                    nearbyState == com.fuseos.app.proximity.Proximity.Beacon.BluetoothOff ->
+                        "Bluetooth is off, so your Mac can't tell this phone is near. Tap to turn it on."
+                    nearbyState == com.fuseos.app.proximity.Proximity.Beacon.WaitingForMac ->
+                        "Waiting for your Mac: link once and it hands this phone its private beacon key."
+                    nearbyState == com.fuseos.app.proximity.Proximity.Beacon.Refused ->
+                        "Android refused to start the Bluetooth beacon (error ${com.fuseos.app.data.ServiceLocator.proximity.refusal}). Turn Bluetooth off and on."
+                    else -> "Your Mac can tell how close this phone is: it locks when you walk away, and wakes this phone when it unlocks."
+                },
                 onNearby,
-                trailing = if (nearbyOn) "On" else "Set up",
-                trailingLit = nearbyOn,
+                trailing = when {
+                    !nearbyOn -> "Set up"
+                    beaconing -> "On"
+                    else -> "Not working"
+                },
+                trailingLit = beaconing,
             )
             SettingItem(
                 "Calls on your Mac",

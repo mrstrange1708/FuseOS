@@ -258,14 +258,20 @@ private fun LinkHero(
             .padding(horizontal = 18.dp, vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // Top-aligned, with the line offset to the circles' centre: centring on the whole
+        // endpoint (circle + name) put it half a label below the line between the devices.
+        Row(verticalAlignment = Alignment.Top) {
             Endpoint(Icons.Filled.Smartphone, selfName, lit = true, catchKey = caught?.takeIf { !it.first })
             Filament(
                 linked,
                 crossing,
                 streamToMac,
                 onArrive = { toMac -> caught = toMac to Any() },
-                modifier = Modifier.weight(1f).height(24.dp).padding(horizontal = 4.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(top = (ENDPOINT_CIRCLE - FILAMENT_HEIGHT) / 2)
+                    .height(FILAMENT_HEIGHT)
+                    .padding(horizontal = 4.dp),
             )
             Endpoint(Icons.Filled.Computer, peerName ?: "Your Mac", lit = linked, catchKey = caught?.takeIf { it.first })
         }
@@ -318,7 +324,7 @@ private fun Endpoint(icon: ImageVector, name: String, lit: Boolean, catchKey: An
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(92.dp)) {
         Box(
             Modifier
-                .size(58.dp)
+                .size(ENDPOINT_CIRCLE)
                 .scale(bump.value)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = if (lit) 0.16f else 0.06f)),
@@ -498,3 +504,7 @@ fun ScreenShareScreen(
         Spacer(Modifier.height(100.dp))
     }
 }
+
+/** The device circles on the link card, and the line between them, centred on each other. */
+private val ENDPOINT_CIRCLE = 58.dp
+private val FILAMENT_HEIGHT = 24.dp

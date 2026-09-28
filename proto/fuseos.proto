@@ -381,6 +381,7 @@ message Outcome {
     OPEN_NOTIFICATION = 2;
     UNLOCK            = 3;
     OPEN_LINK         = 4;
+    CALL              = 5; // answer / decline / end, as the Mac asked
   }
   Kind   kind   = 1;
   bool   ok     = 2;

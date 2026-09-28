@@ -407,14 +407,16 @@ final class DashboardViewModel: ObservableObject {
     /// this Mac unlocked → wake the phone.
     private func startProximity() {
         proximityLink.onBeaconKeyChanged = { [weak self] key in self?.proximity.key = key }
+        // The key from the last link, so the phone is recognised before this run's first channel.
+        proximity.key = proximityLink.beaconKey
         proximity.onRangeChanged = { [weak self] range in
             guard let self else { return }
             self.farLock?.cancel()
             guard range == .far, UserDefaults.standard.bool(forKey: ScreenLock.enabledKey) else { return }
             self.farLock = Task { [weak self] in
                 try? await Task.sleep(nanoseconds: 10_000_000_000)
-                guard !Task.isCancelled, let self, self.proximityRangeIsFar, !MacUnlock.isScreenLocked else { return }
-                ScreenLock.lockNow()
+                guard !Task.isCancelled, let self, !MacUnlock.isScreenLocked else { return }
+                self.lockIfAway()
             }
         }
         proximity.onChange = { [weak self] in
@@ -461,20 +463,25 @@ final class DashboardViewModel: ObservableObject {
 
     private var awayCheck: Task<Void, Never>?
 
-    /// The phone's direct link just dropped. If it is still gone after the grace period
-    /// while the server sees it online elsewhere, it has left — lock (when the user asked).
+    /// The phone's direct link just dropped. That alone never locks (see `AwayLock`) — it
+    /// only asks again after the grace period, when Bluetooth may have caught up.
     private func watchForAway() {
         guard UserDefaults.standard.bool(forKey: ScreenLock.enabledKey) else { return }
         awayCheck?.cancel()
         awayCheck = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(AwayLock.grace * 1_000_000_000))
-            guard !Task.isCancelled, let self else { return }
-            let online = self.allPeers.contains { self.onlineState(for: $0).online && $0.platform == "android" }
-            if AwayLock.shouldLock(enabled: UserDefaults.standard.bool(forKey: ScreenLock.enabledKey),
-                                   linkedNow: !self.connected.isEmpty, phoneOnlineViaServer: online) {
-                ScreenLock.lockNow()
-            }
+            guard !Task.isCancelled else { return }
+            self?.lockIfAway()
         }
+    }
+
+    /// Locks when the phone has really left: Bluetooth far, and its app still alive.
+    private func lockIfAway() {
+        let online = allPeers.contains { onlineState(for: $0).online && $0.platform == "android" }
+        guard AwayLock.shouldLock(enabled: UserDefaults.standard.bool(forKey: ScreenLock.enabledKey),
+                                  bluetoothFar: proximityRangeIsFar,
+                                  linkedNow: !connected.isEmpty, phoneOnlineViaServer: online) else { return }
+        ScreenLock.lockNow()
     }
 
     /// Removes a stale (offline) device from the account, then reloads the list.
@@ -597,6 +604,7 @@ final class DashboardViewModel: ObservableObject {
         case .reply: what = outcome.ok ? "Reply sent" : "Reply not sent"
         case .openNotification: what = outcome.ok ? "Opened on \(phone)" : "Couldn't open it on \(phone)"
         case .openLink: what = outcome.ok ? "Opened on \(phone)" : "Link not opened"
+        case .call: what = outcome.ok ? "Call" : "The call didn't change"
         default: what = outcome.ok ? "Done" : "That didn't work"
         }
         if outcome.ok {

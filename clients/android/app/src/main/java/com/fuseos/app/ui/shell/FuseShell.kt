@@ -84,6 +84,7 @@ fun FuseShell() {
         nearbyGranted = granted
         if (granted) ServiceLocator.proximity.permissionChanged()
     }
+    val beacon by ServiceLocator.proximity.state.collectAsState()
     var showPairing by remember { mutableStateOf(false) }
 
     if (showPairing) {
@@ -217,9 +218,13 @@ fun FuseShell() {
                             }
                         },
                         nearbyOn = nearbyGranted,
+                        nearbyState = beacon,
                         onNearby = {
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                                askNearby.launch(android.Manifest.permission.BLUETOOTH_ADVERTISE)
+                            when {
+                                !nearbyGranted && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S ->
+                                    askNearby.launch(android.Manifest.permission.BLUETOOTH_ADVERTISE)
+                                beacon == com.fuseos.app.proximity.Proximity.Beacon.BluetoothOff ->
+                                    runCatching { context.startActivity(Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS)) }
                             }
                         },
                         callsOn = callsGranted,

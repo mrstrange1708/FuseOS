@@ -973,7 +973,7 @@ private struct AccountPane: View {
                         SettingSwitch(
                             symbol: "lock",
                             title: "Lock this Mac when your phone leaves",
-                            detail: "When your phone walks away (Bluetooth distance) or leaves this Wi-Fi, the Mac locks.",
+                            detail: "When your phone walks away — Bluetooth hears it go — the Mac locks. A dropped Wi-Fi link alone never locks it.",
                             isOn: $lockWhenPhoneLeaves,
                         )
                         .onChange(of: lockWhenPhoneLeaves) { _ in viewModel.proximitySettingsChanged() }
@@ -985,13 +985,22 @@ private struct AccountPane: View {
                             isOn: $unlockWithPhone,
                         )
                         .onChange(of: unlockWithPhone) { on in
-                            if on {
-                                if !MacUnlock.setUp() { unlockWithPhone = false }
-                                MacPointer.accessibilityGranted(prompt: true)
-                            } else {
+                            guard on else {
                                 MacUnlock.forget()
+                                viewModel.proximitySettingsChanged()
+                                return
                             }
-                            viewModel.proximitySettingsChanged()
+                            // After this view update, not inside it: a modal password prompt
+                            // run from the switch's own change handler reset the switch, so
+                            // it would not stay on.
+                            DispatchQueue.main.async {
+                                if MacUnlock.setUp() {
+                                    MacPointer.accessibilityGranted(prompt: true)
+                                } else {
+                                    unlockWithPhone = false
+                                }
+                                viewModel.proximitySettingsChanged()
+                            }
                         }
                         if lockWhenPhoneLeaves || unlockWithPhone {
                             // Both switches rest on hearing the phone; say plainly whether

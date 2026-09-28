@@ -34,7 +34,9 @@ enum MacUnlock {
         return (try? record.verifyPassword(password)) != nil
     }
 
-    static func store(_ password: String) {
+    /// False when the Keychain refused it — the switch must not claim to be on then.
+    @discardableResult
+    static func store(_ password: String) -> Bool {
         forget()
         let item: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -44,7 +46,9 @@ enum MacUnlock {
             // Must be readable while the screen is locked — that is when it is needed.
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
-        SecItemAdd(item as CFDictionary, nil)
+        let status = SecItemAdd(item as CFDictionary, nil)
+        if status != errSecSuccess { FuseLog.unlock.error("keychain refused the password: \(status, privacy: .public)") }
+        return status == errSecSuccess
     }
 
     static func forget() {
@@ -131,7 +135,13 @@ enum MacUnlock {
             wrong.runModal()
             return false
         }
-        store(field.stringValue)
+        guard store(field.stringValue) else {
+            let failed = NSAlert()
+            failed.messageText = "Couldn't save the password"
+            failed.informativeText = "macOS's Keychain refused it, so unlocking can't work. Unlock your login keychain (Keychain Access) and try again."
+            failed.runModal()
+            return false
+        }
         return true
     }
 }

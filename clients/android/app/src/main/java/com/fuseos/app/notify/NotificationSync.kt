@@ -9,6 +9,7 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationManagerCompat
 import com.fuseos.app.net.LanTransport
+import com.fuseos.proto.CallAction
 import com.fuseos.proto.CallState
 import com.fuseos.proto.Envelope
 import com.fuseos.proto.NotificationDismiss
@@ -92,7 +93,7 @@ class NotificationSync(
                     Envelope.BodyCase.NOTIFICATION_REPLY ->
                         reply(envelope.notificationReply.key, envelope.notificationReply.text)
                     Envelope.BodyCase.NOTIFICATION_OPEN -> open(envelope.notificationOpen.key)
-                    Envelope.BodyCase.CALL_ACTION -> calls.perform(envelope.callAction.action, call)
+                    Envelope.BodyCase.CALL_ACTION -> callAction(envelope.callAction.action)
                     else -> Unit
                 }
             }
@@ -155,6 +156,44 @@ class NotificationSync(
                 else -> ""
             },
         )
+    }
+
+    /**
+     * Carries out the Mac's Answer / Decline / End and checks it happened: telecom first,
+     * then — if the call has not changed a moment later — the dialer's own button, and the
+     * Mac hears which. The check reads the mirrored call notification: answered shows a
+     * running timer, declined or ended removes it.
+     */
+    private fun callAction(action: CallAction.Action) {
+        val key = call?.key ?: return outcome(Outcome.Kind.CALL, false, "There's no call on the phone any more.")
+        fun done(): Boolean {
+            val now = call
+            return if (action == CallAction.Action.ANSWER) {
+                now == null || now.key != key || now.notification.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER)
+            } else {
+                now == null || now.key != key
+            }
+        }
+        scope.launch {
+            calls.viaTelecom(action)
+            kotlinx.coroutines.delay(CALL_CHECK_MS)
+            if (!done()) {
+                calls.viaNotification(action, call)
+                kotlinx.coroutines.delay(CALL_CHECK_MS)
+            }
+            val ok = done()
+            outcome(
+                Outcome.Kind.CALL, ok,
+                when {
+                    ok && action == CallAction.Action.ANSWER -> "Answered. It's on the phone's speaker."
+                    ok -> ""
+                    action == CallAction.Action.ANSWER ->
+                        "The phone's dialer didn't take it. Answer on the phone" +
+                            if (calls.hasPermission()) "." else ", or allow Calls on your Mac in FuseOS → You."
+                    else -> "The phone's dialer didn't take it. End it on the phone."
+                },
+            )
+        }
     }
 
     private fun outcome(kind: Outcome.Kind, ok: Boolean, detail: String) {
@@ -287,6 +326,9 @@ class NotificationSync(
     }
 
     companion object {
+        /** How long a dialer gets to act before the other route is tried, then judged. */
+        const val CALL_CHECK_MS = 1_500L
+
         private const val KEY_ENABLED = "enabled"
         private const val ICON_PX = 64
         /** A long chat is still one notification; the Mac shows a few lines of it. */
