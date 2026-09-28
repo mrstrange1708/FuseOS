@@ -6,7 +6,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import com.fuseos.app.clipboard.ClipboardSync
@@ -42,7 +41,7 @@ class ShareActivity : ComponentActivity() {
         val text = intent?.getStringExtra(Intent.EXTRA_TEXT)
         val uris = intent?.let { streams(it) }.orEmpty()
         if (text == null && uris.isEmpty()) {
-            finishWith("Nothing to send.")
+            finishWith(false, "There was nothing in it to send.")
             return
         }
 
@@ -52,26 +51,27 @@ class ShareActivity : ComponentActivity() {
         FuseConnectionService.start(this)
 
         lifecycleScope.launch {
-            val message = withContext(Dispatchers.IO) { send(text, uris) }
+            val (ok, message) = withContext(Dispatchers.IO) { send(text, uris) }
             Log.i(TAG, "share result: $message")
-            finishWith(message)
+            finishWith(ok, message)
         }
     }
 
-    private suspend fun send(text: String?, uris: List<Uri>): String {
+    /** Whether it went, and the sentence that says so. */
+    private suspend fun send(text: String?, uris: List<Uri>): Pair<Boolean, String> {
         val transport = ServiceLocator.lanTransport
         // Registration can hit the network; without a bound deadline a share started on a
         // dead network would hang this activity over the user's screen indefinitely.
         withTimeoutOrNull(CONNECT_TIMEOUT_MS) {
             runCatching { ServiceLocator.connectionManager.ensureStarted() }.getOrNull()
-        } ?: return "Couldn't send that."
+        } ?: return false to "FuseOS couldn't reach its server. Check your connection."
 
         // A channel is dialled, not instant. Waiting beats failing on a peer that is about
         // to be there — but only briefly, because the user is staring at a frozen share.
         val connected = withTimeoutOrNull(CONNECT_TIMEOUT_MS) {
             transport.connectedPeers.first { it.isNotEmpty() }
         }
-        if (connected.isNullOrEmpty()) return "No device connected. Open FuseOS on your Mac."
+        if (connected.isNullOrEmpty()) return false to "Your Mac isn't linked. Open FuseOS on your Mac, on the same Wi-Fi."
 
         val single = uris.singleOrNull()
         val singleMime = single?.let { contentResolver.getType(it) }
@@ -81,11 +81,11 @@ class ShareActivity : ComponentActivity() {
 
         if (uris.isEmpty() || clipImage) {
             val bytes = single?.let { readBytes(it) }
-            if (single != null && bytes == null) return "Couldn't read that."
+            if (single != null && bytes == null) return false to READ_FAILED
             return when (ServiceLocator.clipboardSync.share(text = text, imageBytes = bytes, mime = singleMime)) {
-                SendOutcome.Sent -> "On your Mac's clipboard."
-                SendOutcome.NotLinked -> "Your Mac isn't linked. Kept in History."
-                SendOutcome.Nothing -> "Couldn't send that."
+                SendOutcome.Sent -> true to "On your Mac's clipboard."
+                SendOutcome.NotLinked -> false to "Your Mac isn't linked. Kept in History."
+                SendOutcome.Nothing -> false to "There was nothing in it to send."
             }
         }
 
@@ -101,10 +101,10 @@ class ShareActivity : ComponentActivity() {
             }
         }
         return when {
-            started == 0 && tooLarge > 0 -> "That's over the 1 GB limit."
-            started == 0 -> "Couldn't read that."
-            started == 1 -> "Sending to your Mac."
-            else -> "Sending $started files to your Mac."
+            started == 0 && tooLarge > 0 -> false to "That's over the 1 GB limit."
+            started == 0 -> false to READ_FAILED
+            started == 1 -> true to "Sending to your Mac."
+            else -> true to "Sending $started files to your Mac."
         }
     }
 
@@ -157,12 +157,15 @@ class ShareActivity : ComponentActivity() {
             )
         }
 
-    private fun finishWith(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    /** Said in the island, like every other outcome (a toast when it can't draw). */
+    private fun finishWith(ok: Boolean, message: String) {
+        val island = ServiceLocator.clipIsland
+        if (ok) island.status("Sent", message) else island.error("Not sent", message)
         finish()
     }
 
     private companion object {
+        const val READ_FAILED = "FuseOS couldn't read that. Share it again from the app it's in."
         const val TAG = "FuseShare"
 
         /** Long enough to dial a peer on a LAN, short enough not to feel hung. */

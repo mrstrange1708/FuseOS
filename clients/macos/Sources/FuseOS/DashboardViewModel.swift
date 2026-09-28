@@ -196,7 +196,7 @@ final class DashboardViewModel: ObservableObject {
             self.status.send(force: true)
             let why = UserDefaults.standard.bool(forKey: MacPointer.enabledKey)
                 ? "Allow FuseOS in System Settings → Privacy & Security → Accessibility."
-                : "Turn on Settings → Let your phone control this Mac."
+                : "Turn on FuseOS → Account → Let your phone control this Mac."
             self.fail("\(self.peerName ?? "Your phone") can't control this Mac", why, symbol: "cursorarrow.slash", quietly: true)
         }
         // Accessibility is granted in System Settings, outside FuseOS; macOS posts this when

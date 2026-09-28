@@ -70,6 +70,8 @@ class NotificationSync(
     private val contentIntents = object : LinkedHashMap<String, android.app.PendingIntent>() {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, android.app.PendingIntent>) = size > 200
     }
+    /** Forwarded notifications that have no tap action at all — "gone" would be a lie. */
+    private val withoutTapAction = ConcurrentHashMap.newKeySet<String>()
     private val liveSentAt = ConcurrentHashMap<String, Long>()
 
     /** The call notification being mirrored, and its actions (the fallback for answering). */
@@ -124,7 +126,11 @@ class NotificationSync(
      */
     private fun open(key: String) {
         val intent = synchronized(contentIntents) { contentIntents[key] }
-            ?: return outcome(Outcome.Kind.OPEN_NOTIFICATION, false, "That notification is gone from the phone.")
+            ?: return outcome(
+                Outcome.Kind.OPEN_NOTIFICATION, false,
+                if (key in withoutTapAction) "It doesn't open anything on the phone. Its app gave it no tap action."
+                else "That notification is gone from the phone.",
+            )
         if (!Settings.canDrawOverlays(appContext)) {
             return outcome(
                 Outcome.Kind.OPEN_NOTIFICATION, false,
@@ -217,7 +223,12 @@ class NotificationSync(
         }
         val replyAction = n.actions?.firstOrNull { it.remoteInputs?.isNotEmpty() == true }
         if (replyAction != null) synchronized(replyActions) { replyActions[sbn.key] = replyAction }
-        n.contentIntent?.let { synchronized(contentIntents) { contentIntents[sbn.key] = it } }
+        if (n.contentIntent != null) {
+            synchronized(contentIntents) { contentIntents[sbn.key] = n.contentIntent }
+            withoutTapAction.remove(sbn.key)
+        } else {
+            withoutTapAction.add(sbn.key)
+        }
         scope.launch(Dispatchers.IO) {
             val message = PhoneNotification.newBuilder()
                 .setKey(sbn.key)
@@ -244,6 +255,7 @@ class NotificationSync(
         }
         synchronized(replyActions) { replyActions.remove(sbn.key) }
         synchronized(contentIntents) { contentIntents.remove(sbn.key) }
+        withoutTapAction.remove(sbn.key)
         liveSentAt.remove(sbn.key)
         if (clearedByPeer.remove(sbn.key)) return
         if (!_enabled.value || transport.connectedPeers.value.isEmpty()) return

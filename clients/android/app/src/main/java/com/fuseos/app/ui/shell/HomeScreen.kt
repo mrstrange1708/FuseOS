@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -144,10 +145,8 @@ fun HomeScreen(
                     )
                 }
             }
-            transfers.take(4).forEach { transfer ->
-                TransferListRow(transfer, peerName, onCancelTransfer, onOpenTransfer)
-            }
-            // Handoff, phone → Mac: the link on this phone's clipboard, in the Mac's browser.
+            // Handoff, phone → Mac, right under the send row — the list of transfers follows.
+            // the link on this phone's clipboard, in the Mac's browser.
             // Enabled even unlinked, so a tap is answered (in the island) rather than ignored.
             Row(
                 modifier = Modifier
@@ -177,6 +176,9 @@ fun HomeScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+            transfers.take(4).forEach { transfer ->
+                TransferListRow(transfer, peerName, onCancelTransfer, onOpenTransfer)
             }
         }
 
@@ -484,15 +486,15 @@ fun ScreenShareScreen(
             onClick = onTrackpad,
             enabled = linked,
             shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) { Text("Use as trackpad for $mac") }
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+        ) { Text("Use as trackpad for $mac", textAlign = TextAlign.Center) }
         Spacer(Modifier.height(10.dp))
         androidx.compose.material3.OutlinedButton(
             onClick = onSidecar,
             enabled = linked,
             shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) { Text("Use as a second display for $mac") }
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+        ) { Text("Use as a second display for $mac", textAlign = TextAlign.Center) }
         Spacer(Modifier.height(100.dp))
     }
 }
