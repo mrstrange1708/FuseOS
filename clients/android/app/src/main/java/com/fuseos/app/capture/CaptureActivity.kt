@@ -79,7 +79,9 @@ class CaptureActivity : ComponentActivity() {
                 // On the app scope, not this activity's: the tap happens seconds after
                 // this activity has finished, so its scope is long gone by then.
                 ServiceLocator.appScope.launch(Dispatchers.IO) {
-                    ServiceLocator.clipboardSync.send(pending)
+                    if (ServiceLocator.clipboardSync.send(pending) == SendOutcome.Nothing) {
+                        island.error(ServiceLocator.TOO_BIG, ServiceLocator.TOO_BIG_HOW)
+                    }
                 }
             }
         }

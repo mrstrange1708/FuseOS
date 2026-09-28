@@ -19,9 +19,13 @@ final class PhoneProximity: NSObject, CBCentralManagerDelegate {
     static let silence: TimeInterval = 25
 
     private(set) var range: Range = .unknown {
-        didSet { if range != oldValue { onRangeChanged?(range) } }
+        didSet { if range != oldValue { onRangeChanged?(range); onChange?() } }
     }
     var onRangeChanged: ((Range) -> Void)?
+    /// Range or Bluetooth itself changed — for the settings line that says what is wrong.
+    var onChange: (() -> Void)?
+    /// Bluetooth on this Mac, as CoreBluetooth last said; `.unknown` while not scanning.
+    private(set) var bluetooth: CBManagerState = .unknown
     /// The key the beacon is derived from; nil until the phone has linked once.
     var key: Data?
 
@@ -43,13 +47,32 @@ final class PhoneProximity: NSObject, CBCentralManagerDelegate {
         central = nil
         silenceCheck?.invalidate()
         silenceCheck = nil
+        bluetooth = .unknown
         range = .unknown
+        onChange?()
+    }
+
+    /// Why this Mac cannot tell the phone is close, in words for the user; nil when it can.
+    var problem: String? {
+        switch bluetooth {
+        case .poweredOff: return "Bluetooth is off on this Mac."
+        case .unauthorized: return "Allow FuseOS in System Settings → Privacy & Security → Bluetooth."
+        case .unsupported: return "This Mac has no Bluetooth LE."
+        default: break
+        }
+        switch range {
+        case .near: return nil
+        case .far: return "Your phone is too far away (or its Bluetooth is off)."
+        case .unknown: return "Can't hear your phone yet. Open FuseOS on it and allow Nearby devices."
+        }
     }
 
     /// Heard recently and close.
     var isNear: Bool { range == .near }
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        bluetooth = central.state
+        onChange?()
         guard central.state == .poweredOn else { return }
         central.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
     }

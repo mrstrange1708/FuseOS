@@ -48,7 +48,7 @@ public final class LanTransport {
     /// Now Playing: `MediaState`, `MediaCommand`.
     var onMediaEnvelope: ((FuseEnvelope) -> Void)?
 
-    /// Phone actions and links: `PhoneCommand`, `OpenLink`.
+    /// Phone actions and links: `PhoneCommand`, `OpenLink`, and `Outcome` — how they went.
     var onActionEnvelope: ((FuseEnvelope) -> Void)?
 
     /// Fires with the peers that just gained a channel — the moment to exchange history.
@@ -278,11 +278,11 @@ public final class LanTransport {
                 case .some(.clipText), .some(.clipImage), .some(.historySync):
                     onEnvelope?(envelope)
                 case .some(.phoneNotification), .some(.notificationDismiss), .some(.notificationReply),
-                     .some(.callState), .some(.callAction):
+                     .some(.callState), .some(.callAction), .some(.notificationOpen):
                     onNotificationEnvelope?(envelope)
                 case .some(.screenControl), .some(.screenFrame), .some(.remoteInput):
                     onScreenEnvelope?(envelope)
-                case .some(.phoneCommand), .some(.openLink):
+                case .some(.phoneCommand), .some(.openLink), .some(.outcome):
                     onActionEnvelope?(envelope)
                 case .some(.mediaState), .some(.mediaCommand):
                     onMediaEnvelope?(envelope)

@@ -69,7 +69,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ pboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString>,
     ) {
         let text = pboard.string(forType: .URL) ?? pboard.string(forType: .string) ?? ""
-        guard let url = PhoneCommands.firstLink(in: text) else { return }
+        guard let url = PhoneCommands.firstLink(in: text) else {
+            dashboard?.fail("No link to open", "The selection has no web link in it.")
+            return
+        }
         dashboard?.openOnPhone(url)
     }
 
@@ -79,6 +82,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ pboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString>,
     ) {
         guard let text = pboard.string(forType: .string), !text.isEmpty else { return }
+        // Asked for by name, so said every time — not the once-a-minute copy warning.
+        if dashboard?.connected.isEmpty == true {
+            dashboard?.notLinked("The text wasn't sent. Open FuseOS on your phone, on the same Wi-Fi.")
+            return
+        }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
     }

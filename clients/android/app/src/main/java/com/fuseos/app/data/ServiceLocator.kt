@@ -3,6 +3,7 @@ package com.fuseos.app.data
 import android.content.Context
 import com.fuseos.app.core.Config
 import com.fuseos.app.clipboard.ClipboardSync
+import com.fuseos.app.clipboard.SendOutcome
 import com.fuseos.app.core.DeviceInfo
 import com.fuseos.app.file.FileTransfer
 import com.fuseos.app.file.TransferProgress
@@ -157,7 +158,9 @@ object ServiceLocator {
             if (transport.connectedPeers.value.isEmpty()) {
                 // Nothing to send it to; offering would promise what cannot happen.
             } else if (island.canDraw()) {
-                island.prompt(clip) { clipboardSync.send(it) }
+                island.prompt(clip) { pending ->
+                    if (clipboardSync.send(pending) == SendOutcome.Nothing) island.error(TOO_BIG, TOO_BIG_HOW)
+                }
             } else {
                 clipboardSync.send(clip)
             }
@@ -196,4 +199,8 @@ object ServiceLocator {
             deviceRepository, signalClient, sessionStore, transport, clipboardSync,
         )
     }
+
+    /** Said when a copy can't ride one clip frame (an image over the inline cap). */
+    const val TOO_BIG = "Not sent"
+    const val TOO_BIG_HOW = "That's too big for the clipboard. Send it as a file from FuseOS Home."
 }
