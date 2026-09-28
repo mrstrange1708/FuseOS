@@ -244,7 +244,11 @@ private struct HomePane: View {
     @ViewBuilder private var notificationsPanel: some View {
         Panel(title: "From your phone") {
             if viewModel.recentNotifications.isEmpty {
-                EmptyNote(symbol: "bell.badge", text: "Turn on notification sync in FuseOS on your phone, and they land here.")
+                // Nothing since this Mac started listening — sync may well be on already, so
+                // say both things rather than implying it is off.
+                EmptyNote(symbol: "bell.badge", text: viewModel.connected.isEmpty
+                    ? "Your phone's notifications land here while it's linked."
+                    : "Nothing new yet. If sync is on in FuseOS on \(viewModel.peerName ?? "your phone") (You → Notification sync), the next one lands here.")
             } else {
                 VStack(spacing: 8) {
                     ForEach(viewModel.recentNotifications) { n in
@@ -540,7 +544,9 @@ private struct LinkHero: View {
     // MARK: The stage
 
     private func stage(peer: DeviceItem?, linked: Bool) -> some View {
-        HStack(spacing: 0) {
+        // Aligned on the circles' centres, not the stack's: the names under the circles
+        // would otherwise pull the wave off the line between the two devices.
+        HStack(alignment: .deviceCentre, spacing: 0) {
             ZStack {
                 if !linked {
                     if search == .searching {
@@ -556,7 +562,7 @@ private struct LinkHero: View {
                 LiveFilament(linked: true, pulse: viewModel.linkPulse, stream: viewModel.streamToPhone)
                     .frame(height: 44)
                     .padding(.horizontal, 4)
-                    .offset(y: -12)
+                    .alignmentGuide(.deviceCentre) { $0[VerticalAlignment.center] }
                     .transition(.opacity.combined(with: .scale(scale: 0.2, anchor: .leading)))
                 phoneEndpoint(name: peer?.name ?? "Your phone")
                     .frame(width: 120)
@@ -583,6 +589,8 @@ private struct LinkHero: View {
                     .font(.system(size: 27, weight: .light))
                     .foregroundStyle(lit ? FuseColor.accent : FuseColor.muted)
             }
+            .frame(width: 86, height: 86)
+            .alignmentGuide(.deviceCentre) { $0[VerticalAlignment.center] }
             Text(name)
                 .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(FuseColor.ink.opacity(0.85))
@@ -626,6 +634,8 @@ private struct LinkHero: View {
                         .transition(.scale.combined(with: .opacity))
                 }
             }
+            .frame(width: 86, height: 86)
+            .alignmentGuide(.deviceCentre) { $0[VerticalAlignment.center] }
             .animation(.spring(response: 0.4, dampingFraction: 0.7), value: charging)
             Text(name)
                 .font(.system(size: 11.5, weight: .semibold))
@@ -741,6 +751,14 @@ private struct LinkHero: View {
                 startPoint: .topLeading, endPoint: .bottomTrailing,
             ), lineWidth: 1).opacity(linked ? 1 : 0))
     }
+}
+
+extension VerticalAlignment {
+    /// The centre line of the device circles on the link card, which the wave follows.
+    private enum DeviceCentre: AlignmentID {
+        static func defaultValue(in d: ViewDimensions) -> CGFloat { d[VerticalAlignment.center] }
+    }
+    static let deviceCentre = VerticalAlignment(DeviceCentre.self)
 }
 
 /// A slow glow round a device that is waiting: present, not broken.
