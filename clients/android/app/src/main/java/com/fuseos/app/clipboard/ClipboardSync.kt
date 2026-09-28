@@ -351,9 +351,23 @@ class ClipboardSync(
      */
     var onLocalCopy: ((PendingClip) -> Unit)? = null
 
+    /**
+     * True when this content arrived from the Mac — so offering to send it would bounce the
+     * Mac's own clip back to it. The loop guard's 3 s window covers the clipboard listener;
+     * the copy detector can fire later (the system's clipboard preview, another app's
+     * "copied" toast while the Mac's clip is still on the clipboard), so automatic offers
+     * check history too: anything that came from a peer in the last day is not a new copy.
+     */
+    fun cameFromPeer(clip: PendingClip, nowMs: Long = System.currentTimeMillis()): Boolean =
+        _history.value.any { entry ->
+            !entry.fromSelf && nowMs - entry.atUnixMs < ECHO_MEMORY_MS &&
+                if (clip.imageBytes != null) entry.imageBytes?.contentEquals(clip.imageBytes) == true else entry.text == clip.text
+        }
+
     /** A local copy — offer it unless it is the echo of something we just injected. */
     private fun onLocalChange(guard: LoopGuard) {
         val clip = capture() ?: return
+        if (cameFromPeer(clip)) return
         // Images hash by bytes and text by string, exactly as the emit path always has;
         // getting this wrong would either loop injected content back or silence a real copy.
         val hash = clip.imageBytes?.let { LoopGuard.hash(it) } ?: LoopGuard.hash(clip.text.orEmpty())
@@ -471,6 +485,9 @@ class ClipboardSync(
     }.getOrNull()
 
     companion object {
+        /** How long a clip from the Mac is remembered as "not a new copy". */
+        const val ECHO_MEMORY_MS = 24L * 60 * 60 * 1000
+
         /**
          * Images ride inline in a single `ClipImage` frame rather than being chunked.
          * A screenshot is typically 1–2 MB, one frame on a LAN is faster than a chunked
