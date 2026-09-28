@@ -169,11 +169,7 @@ final class DashboardViewModel: ObservableObject {
             guard !self.connected.isEmpty else { return self.notLinked("Your reply wasn't sent.") }
             self.notifications.reply(key: key, text: text)
         }
-        island.openNotification = { [weak self] key in
-            guard let self else { return }
-            guard !self.connected.isEmpty else { return self.notLinked("It can't open there right now.") }
-            self.notifications.open(key: key)
-        }
+        island.openNotification = { [weak self] key in self?.openNotificationOnPhone(key) }
         phone.onOutcome = { [weak self] outcome in self?.presentOutcome(outcome) }
         notifications.onCall = { [weak self] call in
             guard let self else { return }
@@ -445,6 +441,12 @@ final class DashboardViewModel: ObservableObject {
 
     private var proximityRangeIsFar: Bool { proximity.range == .far }
 
+    /// A mirrored notification clicked anywhere on the Mac: open it on the phone.
+    func openNotificationOnPhone(_ key: String) {
+        guard !connected.isEmpty else { return notLinked("It can't open there right now.") }
+        notifications.open(key: key)
+    }
+
     /// "Let your phone control this Mac" changed: tell the phone now, so its trackpad says so.
     func pointerSettingsChanged() { status.send(force: false) }
 
@@ -602,6 +604,12 @@ final class DashboardViewModel: ObservableObject {
         } else {
             fail(what, outcome.detail.isEmpty ? "\(phone.capitalized) couldn't do it." : outcome.detail)
         }
+    }
+
+    /// Send an earlier copy from this Mac to the phone again (the popover's Send).
+    func sendToPhone(_ entry: ClipEntry) {
+        guard !connected.isEmpty else { return notLinked("Nothing was sent. Open FuseOS on your phone, on the same Wi-Fi.") }
+        clipboard.resend(entry)
     }
 
     /// Clicking a history entry puts it back on this Mac's clipboard.
