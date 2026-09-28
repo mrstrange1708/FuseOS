@@ -36,7 +36,7 @@ final class DashboardViewModel: ObservableObject {
     /// The phone's screen. Created up front: it registers the transport's screen hook.
     lazy var screen = ScreenReceiver(transport: transport)
     private lazy var notifications = NotificationMirror(transport: transport)
-    /// Ring the phone, ask it for a photo, hand links across.
+    /// Ring the phone, hand links across.
     lazy var phone = PhoneCommands(transport: transport)
     /// What the phone is playing, and the controls for it.
     lazy var media = MediaRemote(transport: transport)

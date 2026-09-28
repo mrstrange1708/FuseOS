@@ -437,7 +437,7 @@ private struct LiveActivitiesPanel: View {
     }
 }
 
-/// One-click things to do with the phone: find it, borrow its camera, hand it a link, see
+/// One-click things to do with the phone: find it, hand it a link, see
 /// its screen. Each is a message on the LAN channel; none waits on the server.
 private struct PhoneActionsPanel: View {
     @ObservedObject var viewModel: DashboardViewModel
@@ -462,8 +462,6 @@ private struct PhoneActionsPanel: View {
                         }
                     }
                 }
-                action("Take photo", symbol: "camera.fill") { viewModel.phone.takePhoto() }
-                    .help("Opens the camera on your phone; the photo lands on this Mac's clipboard")
                 action("Open copied link", symbol: "safari.fill") {
                     if let url = viewModel.clipboardLink { viewModel.openOnPhone(url) }
                 }

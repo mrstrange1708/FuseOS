@@ -27,7 +27,7 @@ import kotlinx.coroutines.launch
 
 /**
  * What the Mac can ask this phone to do (`PhoneCommand`, `OpenLink` in the proto): ring it,
- * open its camera, open a link — and the phone's side of Handoff, sending a link the other
+ * open a link — and the phone's side of Handoff, sending a link the other
  * way.
  */
 class PhoneActions(
@@ -47,13 +47,6 @@ class PhoneActions(
                     Envelope.BodyCase.PHONE_COMMAND -> when (envelope.phoneCommand.action) {
                         PhoneCommand.Action.RING -> ring()
                         PhoneCommand.Action.STOP_RING -> stopRing()
-                        PhoneCommand.Action.TAKE_PHOTO -> BackgroundLaunch.start(
-                            app,
-                            Intent(app, CameraCaptureActivity::class.java),
-                            title = "Your Mac wants a photo",
-                            text = "Tap to open the camera",
-                            notificationId = PHOTO_ID,
-                        )
                         else -> Unit
                     }
                     Envelope.BodyCase.OPEN_LINK -> openLink(envelope.openLink.url)
@@ -145,7 +138,6 @@ class PhoneActions(
     companion object {
         private const val RING_CHANNEL = "fuseos_ring"
         private const val RING_ID = 51
-        private const val PHOTO_ID = 52
         private const val LINK_ID = 53
         private const val RING_MS = 30_000L
 

@@ -5,7 +5,6 @@ import {
   IconBatteryCharging,
   IconBell,
   IconBrandWhatsapp,
-  IconCamera,
   IconCopy,
   IconDeviceDesktop,
   IconExternalLink,
@@ -21,7 +20,6 @@ import {
   IconBellRinging,
 } from '@tabler/icons-react';
 import { GlowingEffect } from '@/components/ui/glowing-effect';
-import { Photo } from '@/components/devices';
 import { cn } from '@/lib/utils';
 import { gsap, useGSAP } from '@/lib/gsap';
 
@@ -185,25 +183,10 @@ const TILES: Tile[] = [
     ),
   },
   {
-    Icon: IconCamera,
-    title: 'The phone as a camera',
-    body: "Click Take photo on the Mac. The phone's camera opens, and the shot lands on the Mac's clipboard.",
-    className: 'md:col-span-2',
-    art: (
-      <div className="mt-6 flex items-center gap-3 rounded-xl border border-white/[0.07] bg-white/[0.03] p-2.5">
-        <Photo className="h-10 w-14 shrink-0 rounded-md" />
-        <div className="min-w-0">
-          <p className="text-[13px] text-ink">Photo from Pixel 8</p>
-          <p className="font-mono text-[10.5px] text-ember">on your clipboard · ⌘V</p>
-        </div>
-      </div>
-    ),
-  },
-  {
     Icon: IconMusic,
     title: 'Now Playing',
     body: 'See what the phone is playing on the Mac and control it: play, pause, skip, scrub.',
-    className: 'md:col-span-2',
+    className: 'md:col-span-4',
     art: (
       <div className="mt-6 flex items-end gap-1.5 px-1">
         {[0.5, 0.9, 0.35, 0.75, 0.6, 1, 0.45, 0.8].map((h, i) => (
@@ -308,7 +291,7 @@ export function Continuity() {
         </h2>
         <p className="mt-5 max-w-[58ch] text-lg text-muted">
           The things an iPhone does with a Mac, for an Android phone: messages, calls, the screen,
-          the camera, the music, and a Mac that locks when you walk away.
+          the music, and a Mac that locks when you walk away.
         </p>
         <ul className="mt-14 grid grid-cols-1 gap-4 md:auto-rows-[minmax(13rem,auto)] md:grid-cols-6">
           {TILES.map((t) => (

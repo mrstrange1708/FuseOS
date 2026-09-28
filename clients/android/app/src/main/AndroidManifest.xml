@@ -156,14 +156,6 @@
                 android:resource="@xml/remote_control" />
         </service>
 
-        <!-- Continuity Camera: opens the phone's camera for a photo the Mac asked for. -->
-        <activity
-            android:name=".actions.CameraCaptureActivity"
-            android:exported="false"
-            android:excludeFromRecents="true"
-            android:taskAffinity=""
-            android:theme="@style/Theme.FuseOS.Transparent" />
-
         <!-- Sidecar: this phone as a second display for the Mac. -->
         <activity
             android:name=".screen.SidecarActivity"
