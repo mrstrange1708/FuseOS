@@ -53,9 +53,11 @@ class FuseWidget : AppWidgetProvider() {
                     R.id.widget_status,
                     if (state.linked) "Linked · direct over Wi-Fi" else "Not linked — open FuseOS on your Mac",
                 )
-                setTextViewText(
+                setTextViewText(R.id.widget_battery, state.macBattery?.let { "$it%" } ?: "")
+                // A drawn bolt, not an emoji: emoji render in each phone's own style and colour.
+                setTextViewCompoundDrawablesRelative(
                     R.id.widget_battery,
-                    state.macBattery?.let { if (state.macCharging) "⚡ $it%" else "$it%" } ?: "",
+                    if (state.macCharging && state.macBattery != null) R.drawable.ic_widget_charging else 0, 0, 0, 0,
                 )
                 setTextViewText(
                     R.id.widget_clip,
