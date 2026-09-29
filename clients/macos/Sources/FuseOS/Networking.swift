@@ -14,6 +14,10 @@ struct SignInRequest: Encodable {
     let password: String
 }
 
+struct GoogleSignInRequest: Encodable {
+    let idToken: String
+}
+
 struct AuthUser: Decodable {
     let id: String
     let email: String
@@ -46,6 +50,11 @@ struct AuthError: LocalizedError {
 struct AuthAPI {
     func signIn(email: String, password: String) async throws -> AuthResponse {
         try await post(path: "/auth/sign-in/email", body: SignInRequest(email: email, password: password))
+    }
+
+    /// Signs in, or up, with an ID token from `GoogleSignIn`.
+    func signInWithGoogle(idToken: String) async throws -> AuthResponse {
+        try await post(path: "/auth/google", body: GoogleSignInRequest(idToken: idToken))
     }
 
     func signUp(email: String, password: String, name: String) async throws -> AuthResponse {
@@ -95,6 +104,12 @@ struct AuthRepository {
     @MainActor
     func signIn(email: String, password: String) async throws {
         let result = try await api.signIn(email: email, password: password)
+        SessionStore.shared.save(token: result.token, email: result.user.email)
+    }
+
+    @MainActor
+    func signInWithGoogle(idToken: String) async throws {
+        let result = try await api.signInWithGoogle(idToken: idToken)
         SessionStore.shared.save(token: result.token, email: result.user.email)
     }
 

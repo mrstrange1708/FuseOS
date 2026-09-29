@@ -1,5 +1,6 @@
 package com.fuseos.app.ui.auth
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -88,6 +89,24 @@ class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
                 // On success the session flow updates and AppRoot swaps to Home.
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.message ?: "Unable to continue. Try again.") }
+            } finally {
+                _state.update { it.copy(isSubmitting = false) }
+            }
+        }
+    }
+
+    /** The account picker, then the server. [context] must be the Activity. */
+    fun continueWithGoogle(context: Context) {
+        if (_state.value.isSubmitting) return
+        _state.update { it.copy(isSubmitting = true, error = null) }
+        viewModelScope.launch {
+            try {
+                val idToken = googleIdToken(context) ?: return@launch // backed out: nothing to say
+                repository.signInWithGoogle(idToken)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.message ?: "Google sign-in failed. Try again.") }
             } finally {
                 _state.update { it.copy(isSubmitting = false) }
             }

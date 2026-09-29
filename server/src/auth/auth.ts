@@ -44,6 +44,7 @@ function createAuth() {
   return betterAuth({
     // Mounted where dev-auth was, so both clients' paths are unchanged.
     basePath: '/auth',
+    baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,
     database: drizzleAdapter(getDb(), {
       provider: 'pg',
@@ -59,6 +60,19 @@ function createAuth() {
     },
     // A continuity app that signs you out every week is not worth having: 90 days,
     // extended at most once a day while the app is used.
+    // Both apps get a Google ID token on the device and send it here (`/auth/google`);
+    // either client id is a valid audience. Linking to an existing account needs that
+    // account's email verified (Better Auth's default) — otherwise whoever registered
+    // someone's address first would share their account, and trust their devices.
+    socialProviders:
+      env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_MAC_CLIENT_ID
+        ? {
+            google: {
+              clientId: [env.GOOGLE_CLIENT_ID, env.GOOGLE_MAC_CLIENT_ID],
+              clientSecret: env.GOOGLE_CLIENT_SECRET,
+            },
+          }
+        : {},
     session: { expiresIn: 60 * 60 * 24 * 90, updateAge: 60 * 60 * 24 },
     // Password guessing: Better Auth's limiter (sign-in: 3 tries per 10 s per IP) is on by
     // default only when NODE_ENV=production. Always on outside tests, so a host started
