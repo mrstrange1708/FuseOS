@@ -24,6 +24,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.geometry.Offset
@@ -87,6 +88,7 @@ fun HomeScreen(
     onOpenTransfer: (String) -> Unit,
     latency: SyncLatency? = null,
     macStatus: com.fuseos.app.core.PeerStatus? = null,
+    onOpenLinkOnMac: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val connect = state.connect
@@ -144,6 +146,37 @@ fun HomeScreen(
             }
             transfers.take(4).forEach { transfer ->
                 TransferListRow(transfer, peerName, onCancelTransfer, onOpenTransfer)
+            }
+            // Handoff, phone → Mac: the link on this phone's clipboard, in the Mac's browser.
+            // Enabled even unlinked, so a tap is answered (in the island) rather than ignored.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = if (linked) 0.10f else 0.04f))
+                    .clickable(onClick = onOpenLinkOnMac)
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconTile(
+                    Icons.Filled.OpenInBrowser,
+                    tint = if (linked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.size(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Open copied link on ${peer?.name ?: "your Mac"}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        "Copy a link here, tap, and it opens in the Mac's browser.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 

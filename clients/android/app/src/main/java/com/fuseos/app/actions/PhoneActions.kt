@@ -18,6 +18,7 @@ import com.fuseos.app.core.BackgroundLaunch
 import com.fuseos.app.net.LanTransport
 import com.fuseos.proto.Envelope
 import com.fuseos.proto.OpenLink
+import com.fuseos.proto.Outcome
 import com.fuseos.proto.PhoneCommand
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -50,9 +51,41 @@ class PhoneActions(
                         else -> Unit
                     }
                     Envelope.BodyCase.OPEN_LINK -> openLink(envelope.openLink.url)
+                    Envelope.BodyCase.OUTCOME -> showOutcome(envelope.outcome)
                     else -> Unit
                 }
             }
+        }
+    }
+
+    /**
+     * "Open copied link" on the phone: the first web link on this phone's clipboard opens
+     * in the Mac's browser. `clipText` is read by the caller, which has focus (Android lets
+     * only the focused app read the clipboard). Every outcome is said in the island.
+     */
+    fun openCopiedLinkOnMac(clipText: String?) {
+        val island = com.fuseos.app.data.ServiceLocator.clipIsland
+        val url = clipText?.let(::firstLink)
+            ?: return island.error("No link on your clipboard", "Copy a web link first, then tap Open on Mac.")
+        if (transport.connectedPeers.value.isEmpty()) {
+            return island.error("Mac isn't linked", "Open FuseOS on your Mac, on the same Wi-Fi.")
+        }
+        sendLink(url)
+        island.status("Opening on your Mac", android.net.Uri.parse(url).host ?: url)
+    }
+
+    /** The Mac's word on something this phone asked of it — an unlock, a link. */
+    private fun showOutcome(outcome: Outcome) {
+        val island = com.fuseos.app.data.ServiceLocator.clipIsland
+        val title = when (outcome.kind) {
+            Outcome.Kind.UNLOCK -> if (outcome.ok) "Mac unlocked" else "Mac didn't unlock"
+            Outcome.Kind.OPEN_LINK -> if (outcome.ok) "Opened on your Mac" else "Link not opened"
+            else -> if (outcome.ok) "Done" else "That didn't work"
+        }
+        if (outcome.ok) {
+            island.status(title, outcome.detail.ifEmpty { "On your Mac" })
+        } else {
+            island.error(title, outcome.detail.ifEmpty { "Your Mac couldn't do it." })
         }
     }
 

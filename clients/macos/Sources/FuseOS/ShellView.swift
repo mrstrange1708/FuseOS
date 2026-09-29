@@ -838,6 +838,12 @@ private struct AccountPane: View {
                             }
                             viewModel.proximitySettingsChanged()
                         }
+                        if lockWhenPhoneLeaves || unlockWithPhone {
+                            // Both switches rest on hearing the phone; say plainly whether
+                            // this Mac can, and what to fix when it can't.
+                            ProximityStatus(problem: viewModel.proximityProblem, near: viewModel.phoneIsNear,
+                                            needsAccessibility: unlockWithPhone && !MacPointer.accessibilityGranted(prompt: false))
+                        }
                         Divider().opacity(0.5)
                         SettingSwitch(
                             title: "Let your phone control this Mac",
@@ -849,6 +855,7 @@ private struct AccountPane: View {
                         .onChange(of: phoneControlsMac) { on in
                             // macOS decides; this only asks it to show its own prompt.
                             if on { MacPointer.accessibilityGranted(prompt: true) }
+                            viewModel.pointerSettingsChanged()
                         }
                     }
                 }
@@ -888,6 +895,32 @@ private struct AccountPane: View {
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
         }
+    }
+}
+
+/// One line under the lock/unlock switches: is the phone close, and if this Mac can't tell,
+/// why not and what to do.
+private struct ProximityStatus: View {
+    let problem: String?
+    let near: Bool
+    let needsAccessibility: Bool
+
+    var body: some View {
+        let (symbol, text, ok): (String, String, Bool) = {
+            if needsAccessibility {
+                return ("exclamationmark.triangle.fill", "Unlocking needs Accessibility: System Settings → Privacy & Security → Accessibility.", false)
+            }
+            if let problem { return ("exclamationmark.triangle.fill", problem, false) }
+            return ("dot.radiowaves.left.and.right", near ? "Your phone is close by." : "Listening for your phone…", true)
+        }()
+        Label(text, systemImage: symbol)
+            .font(.system(size: 11.5, weight: .medium))
+            .foregroundStyle(ok ? FuseColor.accent : FuseColor.error)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 8).fill((ok ? FuseColor.accent : FuseColor.error).opacity(0.08)))
+            .padding(.bottom, 6)
     }
 }
 

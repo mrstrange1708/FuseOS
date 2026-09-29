@@ -16,6 +16,9 @@ final class MacPointer {
 
     var isEnabled: Bool { UserDefaults.standard.bool(forKey: Self.enabledKey) }
 
+    /// Both gates open: what the phone is told (`DeviceStatus.pointer_allowed`).
+    static var isAllowed: Bool { UserDefaults.standard.bool(forKey: enabledKey) && AXIsProcessTrusted() }
+
     /// Whether macOS lets FuseOS post input; with `prompt`, asks the user if not.
     @discardableResult
     static func accessibilityGranted(prompt: Bool) -> Bool {
@@ -23,8 +26,10 @@ final class MacPointer {
         return AXIsProcessTrustedWithOptions(options)
     }
 
-    func handle(_ event: PointerEvent) {
-        guard isEnabled, AXIsProcessTrusted() else { return }
+    /// False when a gate is shut and the event was dropped — the caller says so.
+    @discardableResult
+    func handle(_ event: PointerEvent) -> Bool {
+        guard isEnabled, AXIsProcessTrusted() else { return false }
         switch event {
         case let .move(dx, dy): move(dx: dx, dy: dy)
         case .click: click(.left, count: 1)
@@ -43,6 +48,7 @@ final class MacPointer {
         case let .text(text): type(text)
         case let .key(code, modifiers): key(code, modifiers: modifiers)
         }
+        return true
     }
 
     // MARK: - Mouse

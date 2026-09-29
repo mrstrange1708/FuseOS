@@ -56,6 +56,8 @@ message Envelope {
     DeviceStatus device_status = 34;
     BeaconKey beacon_key = 35;
     Unlocked unlocked = 36;
+    NotificationOpen notification_open = 37;
+    Outcome outcome = 38;
   }
 }
 
@@ -343,6 +345,10 @@ message SidecarInput {
 message DeviceStatus {
   int32 battery  = 1; // 0–100; -1 when the device has no battery (a desktop Mac)
   bool  charging = 2;
+  // Mac -> phone: the Mac will act on POINTER_INPUT — its "Let your phone control this
+  // Mac" switch is on and macOS granted Accessibility. The phone's trackpad says so
+  // instead of sending input into nothing. Sent again whenever either changes.
+  bool  pointer_allowed = 3;
 }
 
 // Mac -> phone, on every new channel: a fresh random key for the phone's Bluetooth
@@ -358,3 +364,25 @@ message BeaconKey {
 // unlocks. The Mac sends it on unlock, and the phone wakes its screen (an app cannot get
 // past the phone's own lock).
 message Unlocked {}
+
+// Mac -> phone: the user clicked a mirrored notification; open it on the phone, as a tap
+// in the shade would (its app's own content intent).
+message NotificationOpen {
+  string key = 1;
+}
+
+// Either direction: what became of something the other device asked for — a reply, an
+// opened notification, an unlock — so the asker's island can say so instead of assuming.
+// `detail` is a short sentence for a person (why it failed, what to do), shown as-is.
+message Outcome {
+  enum Kind {
+    KIND_UNSPECIFIED  = 0;
+    REPLY             = 1;
+    OPEN_NOTIFICATION = 2;
+    UNLOCK            = 3;
+    OPEN_LINK         = 4;
+  }
+  Kind   kind   = 1;
+  bool   ok     = 2;
+  string detail = 3;
+}

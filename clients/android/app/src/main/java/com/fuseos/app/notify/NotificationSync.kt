@@ -12,6 +12,7 @@ import com.fuseos.app.net.LanTransport
 import com.fuseos.proto.CallState
 import com.fuseos.proto.Envelope
 import com.fuseos.proto.NotificationDismiss
+import com.fuseos.proto.Outcome
 import com.fuseos.proto.PhoneNotification
 import com.google.protobuf.ByteString
 import java.io.ByteArrayOutputStream
@@ -65,6 +66,10 @@ class NotificationSync(
     private val replyActions = object : LinkedHashMap<String, Notification.Action>() {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Notification.Action>) = size > 200
     }
+    /** Each forwarded notification's tap action, by key, for "open it" from the Mac. */
+    private val contentIntents = object : LinkedHashMap<String, android.app.PendingIntent>() {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, android.app.PendingIntent>) = size > 200
+    }
     private val liveSentAt = ConcurrentHashMap<String, Long>()
 
     /** The call notification being mirrored, and its actions (the fallback for answering). */
@@ -84,6 +89,7 @@ class NotificationSync(
                     }
                     Envelope.BodyCase.NOTIFICATION_REPLY ->
                         reply(envelope.notificationReply.key, envelope.notificationReply.text)
+                    Envelope.BodyCase.NOTIFICATION_OPEN -> open(envelope.notificationOpen.key)
                     Envelope.BodyCase.CALL_ACTION -> calls.perform(envelope.callAction.action, call)
                     else -> Unit
                 }
@@ -96,14 +102,63 @@ class NotificationSync(
      * is how an SMS or chat reply goes out with no SMS permission at all.
      */
     private fun reply(key: String, text: String) {
-        val action = synchronized(replyActions) { replyActions[key] } ?: return
-        val inputs = action.remoteInputs ?: return
         if (text.isBlank()) return
-        runCatching {
+        val action = synchronized(replyActions) { replyActions[key] }
+        val inputs = action?.remoteInputs
+        if (action == null || inputs == null) {
+            return outcome(Outcome.Kind.REPLY, false, "That notification is gone from the phone, so there's nothing to reply to.")
+        }
+        val sent = runCatching {
             val results = android.os.Bundle().apply { inputs.forEach { putCharSequence(it.resultKey, text) } }
             val intent = android.content.Intent()
             android.app.RemoteInput.addResultsToIntent(inputs, intent, results)
             action.actionIntent.send(appContext, 0, intent)
+        }.isSuccess
+        outcome(Outcome.Kind.REPLY, sent, if (sent) "" else "The app on the phone refused the reply.")
+    }
+
+    /**
+     * Opens a notification as a tap in the shade would: its app's own content intent. A
+     * background start needs FuseOS's overlay permission (the exemption Android grants it),
+     * so without it this says so rather than firing an intent Android will quietly drop.
+     */
+    private fun open(key: String) {
+        val intent = synchronized(contentIntents) { contentIntents[key] }
+            ?: return outcome(Outcome.Kind.OPEN_NOTIFICATION, false, "That notification is gone from the phone.")
+        if (!Settings.canDrawOverlays(appContext)) {
+            return outcome(
+                Outcome.Kind.OPEN_NOTIFICATION, false,
+                "On the phone, allow FuseOS to display over other apps so it can open things for your Mac.",
+            )
+        }
+        val options = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            android.app.ActivityOptions.makeBasic()
+                .setPendingIntentBackgroundActivityStartMode(android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
+                .toBundle()
+        } else {
+            null
+        }
+        val opened = runCatching { intent.send(appContext, 0, null, null, null, null, options) }.isSuccess
+        val locked = appContext.getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked == true
+        outcome(
+            Outcome.Kind.OPEN_NOTIFICATION,
+            opened,
+            when {
+                !opened -> "The app didn't open. It may have closed that notification."
+                locked -> "Unlock your phone to see it."
+                else -> ""
+            },
+        )
+    }
+
+    private fun outcome(kind: Outcome.Kind, ok: Boolean, detail: String) {
+        if (transport.connectedPeers.value.isEmpty()) return
+        scope.launch(Dispatchers.IO) {
+            transport.broadcast(
+                transport.newEnvelope()
+                    .setOutcome(Outcome.newBuilder().setKind(kind).setOk(ok).setDetail(detail))
+                    .build(),
+            )
         }
     }
 
@@ -162,6 +217,7 @@ class NotificationSync(
         }
         val replyAction = n.actions?.firstOrNull { it.remoteInputs?.isNotEmpty() == true }
         if (replyAction != null) synchronized(replyActions) { replyActions[sbn.key] = replyAction }
+        n.contentIntent?.let { synchronized(contentIntents) { contentIntents[sbn.key] = it } }
         scope.launch(Dispatchers.IO) {
             val message = PhoneNotification.newBuilder()
                 .setKey(sbn.key)
@@ -187,6 +243,7 @@ class NotificationSync(
             return
         }
         synchronized(replyActions) { replyActions.remove(sbn.key) }
+        synchronized(contentIntents) { contentIntents.remove(sbn.key) }
         liveSentAt.remove(sbn.key)
         if (clearedByPeer.remove(sbn.key)) return
         if (!_enabled.value || transport.connectedPeers.value.isEmpty()) return

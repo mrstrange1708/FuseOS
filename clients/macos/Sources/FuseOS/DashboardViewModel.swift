@@ -11,7 +11,14 @@ final class DashboardViewModel: ObservableObject {
     @Published var presence: [String: PeerPresence] = [:]
     /// Peers reachable over a direct LAN channel, not merely online.
     @Published var connected: Set<String> = []
-    @Published var errorMessage: String?
+    /// The last control-plane failure (server unreachable, session refused). Also said in
+    /// the island — once per distinct message — because the window is usually closed.
+    @Published var errorMessage: String? {
+        didSet {
+            guard let errorMessage, errorMessage != oldValue else { return }
+            fail("FuseOS couldn't reach its server", errorMessage, symbol: "icloud.slash", quietly: true)
+        }
+    }
     @Published var isLoading = false
     /// Everything copied here or received from a peer, newest first.
     @Published var history: [ClipEntry] = []
@@ -73,6 +80,11 @@ final class DashboardViewModel: ObservableObject {
     /// Nearby lock and unlock: the phone's beacon key and "unlocked" both ways.
     private lazy var proximityLink = ProximityLink(transport: transport)
     private let proximity = PhoneProximity()
+    /// Why the Mac can't tell whether the phone is close, for the lock/unlock settings;
+    /// nil when it can (or when neither feature is on and nothing is scanning).
+    @Published var proximityProblem: String?
+    /// Whether the phone is close by Bluetooth right now.
+    @Published var phoneIsNear = false
     private var farLock: Task<Void, Never>?
     private var screenObservers: [NSObjectProtocol] = []
     private let notifier = PhoneNotifier()
@@ -157,12 +169,12 @@ final class DashboardViewModel: ObservableObject {
             guard !self.connected.isEmpty else { return self.notLinked("Your reply wasn't sent.") }
             self.notifications.reply(key: key, text: text)
         }
-        island.recentClips = { [weak self] in self?.history.filter(\.fromSelf) ?? [] }
-        island.sendRecent = { [weak self] entry in
+        island.openNotification = { [weak self] key in
             guard let self else { return }
-            guard !self.connected.isEmpty else { return self.notLinked("Nothing was sent. Open FuseOS on your phone, on the same Wi-Fi.") }
-            self.clipboard.resend(entry)
+            guard !self.connected.isEmpty else { return self.notLinked("It can't open there right now.") }
+            self.notifications.open(key: key)
         }
+        phone.onOutcome = { [weak self] outcome in self?.presentOutcome(outcome) }
         notifications.onCall = { [weak self] call in
             guard let self else { return }
             self.island.present(call, answer: self.notifications.answerCall, decline: self.notifications.declineCall,
@@ -173,13 +185,31 @@ final class DashboardViewModel: ObservableObject {
             self?.notifier.remove(key: key)
         }
         notifier.onUserDismissed = { [weak self] key in self?.notifications.dismiss(key: key) }
+        notifier.onUserOpened = { [weak self] key in self?.island.openNotification(key) }
         screen.onStateChanged = { [weak self] state in self?.screenState = state }
         screen.onCanControlChanged = { [weak self] can in self?.canControlPhone = can }
         media.onChange = { [weak self] playing in
             if playing != nil { self?.pulse(toPhone: false) }
             self?.nowPlaying = playing
         }
-        pointer.onEvent = { [weak self] event in self?.macPointer.handle(event) }
+        status.pointerAllowed = { MacPointer.isAllowed }
+        pointer.onEvent = { [weak self] event in
+            guard let self, !self.macPointer.handle(event) else { return }
+            // The phone should already know (pointer_allowed) — say it here too, and resend
+            // in case what the phone was told is stale.
+            self.status.send(force: true)
+            let why = UserDefaults.standard.bool(forKey: MacPointer.enabledKey)
+                ? "Allow FuseOS in System Settings → Privacy & Security → Accessibility."
+                : "Turn on Settings → Let your phone control this Mac."
+            self.fail("\(self.peerName ?? "Your phone") can't control this Mac", why, symbol: "cursorarrow.slash", quietly: true)
+        }
+        // Accessibility is granted in System Settings, outside FuseOS; macOS posts this when
+        // the list changes. The trust flag settles a moment after, hence the delay.
+        screenObservers.append(DistributedNotificationCenter.default().addObserver(
+            forName: .init("com.apple.accessibility.api"), object: nil, queue: .main,
+        ) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self?.status.send(force: false) }
+        })
         sidecar = SidecarHost(link: sidecarLink) { [weak self] active in
             guard let self else { return }
             self.sidecarActive = active
@@ -391,12 +421,20 @@ final class DashboardViewModel: ObservableObject {
                 ScreenLock.lockNow()
             }
         }
+        proximity.onChange = { [weak self] in
+            guard let self else { return }
+            self.phoneIsNear = self.proximity.isNear
+            self.proximityProblem = self.proximity.problem
+        }
         proximityLink.onPeerUnlocked = { [weak self] in
             guard let self else { return }
+            // Every phone unlock lands here; only a locked Mac with the feature on is a request.
+            guard MacUnlock.isEnabled, MacUnlock.isScreenLocked else { return }
             guard self.proximity.isNear else {
-                return FuseLog.unlock.info("phone unlocked but not near by Bluetooth (\(String(describing: self.proximity.range), privacy: .public))")
+                FuseLog.unlock.info("phone unlocked but not near by Bluetooth (\(String(describing: self.proximity.range), privacy: .public))")
+                return self.phone.sendOutcome(.unlock, ok: false, detail: self.proximity.problem ?? "Your phone isn't close enough to your Mac.")
             }
-            MacUnlock.unlock()
+            MacUnlock.unlock { [weak self] ok, why in self?.phone.sendOutcome(.unlock, ok: ok, detail: why) }
         }
         let center = DistributedNotificationCenter.default()
         screenObservers.append(center.addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in
@@ -406,6 +444,9 @@ final class DashboardViewModel: ObservableObject {
     }
 
     private var proximityRangeIsFar: Bool { proximity.range == .far }
+
+    /// "Let your phone control this Mac" changed: tell the phone now, so its trackpad says so.
+    func pointerSettingsChanged() { status.send(force: false) }
 
     /// The Account switches changed: scan only while something needs the distance.
     func proximitySettingsChanged() {
@@ -527,17 +568,40 @@ final class DashboardViewModel: ObservableObject {
         island.present(symbol: "iphone", title: "Opening on \(peerName ?? "your phone")", detail: url.host ?? url.absoluteString)
     }
 
-    private var lastNotLinkedAt = Date.distantPast
+    private var lastQuietFailure: [String: Date] = [:]
 
-    /// Something was meant for the phone and there is no channel: say so where the user is
-    /// looking. `quietly` (every copy) says it at most once a minute — copying on a Mac with
-    /// no phone around must not turn into an island per copy.
-    func notLinked(_ detail: String, quietly: Bool = false) {
+    /// Something did not happen: say what and why in the island, where the user is
+    /// looking. Every failure goes through here, so none is silent. `quietly` (a failure
+    /// that repeats on its own — every copy, every trackpad move) says the same title at
+    /// most once a minute.
+    func fail(_ title: String, _ detail: String, symbol: String = "exclamationmark.triangle.fill", quietly: Bool = false) {
         if quietly {
-            guard Date().timeIntervalSince(lastNotLinkedAt) > 60 else { return }
+            if let last = lastQuietFailure[title], Date().timeIntervalSince(last) < 60 { return }
+            lastQuietFailure[title] = Date()
         }
-        lastNotLinkedAt = Date()
-        island.present(symbol: "iphone.slash", title: "\(peerName ?? "Your phone") isn't linked", detail: detail)
+        island.present(symbol: symbol, title: title, detail: detail, error: true)
+    }
+
+    /// Something was meant for the phone and there is no channel.
+    func notLinked(_ detail: String, quietly: Bool = false) {
+        fail("\(peerName ?? "Your phone") isn't linked", detail, symbol: "iphone.slash", quietly: quietly)
+    }
+
+    /// The phone's word on something this Mac asked of it.
+    private func presentOutcome(_ outcome: Outcome) {
+        let phone = peerName ?? "your phone"
+        let what: String
+        switch outcome.kind {
+        case .reply: what = outcome.ok ? "Reply sent" : "Reply not sent"
+        case .openNotification: what = outcome.ok ? "Opened on \(phone)" : "Couldn't open it on \(phone)"
+        case .openLink: what = outcome.ok ? "Opened on \(phone)" : "Link not opened"
+        default: what = outcome.ok ? "Done" : "That didn't work"
+        }
+        if outcome.ok {
+            island.present(symbol: "checkmark", title: what, detail: outcome.detail.isEmpty ? phone : outcome.detail)
+        } else {
+            fail(what, outcome.detail.isEmpty ? "\(phone.capitalized) couldn't do it." : outcome.detail)
+        }
     }
 
     /// Clicking a history entry puts it back on this Mac's clipboard.

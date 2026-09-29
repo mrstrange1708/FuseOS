@@ -17,6 +17,8 @@ final class PhoneNotifier: NSObject, UNUserNotificationCenterDelegate {
     var onUserDismissed: ((String) -> Void)?
     /// Called with a notification's key and what the user typed in its Reply field.
     var onUserReplied: ((String, String) -> Void)?
+    /// Clicked in Notification Center: open it on the phone.
+    var onUserOpened: ((String) -> Void)?
 
     override init() {
         super.init()
@@ -62,6 +64,8 @@ final class PhoneNotifier: NSObject, UNUserNotificationCenterDelegate {
         if let reply = response as? UNTextInputNotificationResponse {
             let text = reply.userText
             Task { @MainActor in self.onUserReplied?(key, text) }
+        } else if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+            Task { @MainActor in self.onUserOpened?(key) }
         } else {
             Task { @MainActor in self.onUserDismissed?(key) }
         }

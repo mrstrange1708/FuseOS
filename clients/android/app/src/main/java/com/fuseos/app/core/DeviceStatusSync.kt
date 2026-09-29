@@ -15,8 +15,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** The other device's battery and charging, as it last said. */
-data class PeerStatus(val battery: Int?, val charging: Boolean)
+/**
+ * The other device's battery and charging, as it last said — and, from a Mac, whether it
+ * acts on this phone's trackpad (its switch is on and macOS granted Accessibility).
+ */
+data class PeerStatus(val battery: Int?, val charging: Boolean, val pointerAllowed: Boolean = false)
 
 /**
  * This phone's battery and charging to the Mac — when a channel comes up and whenever
@@ -59,7 +62,7 @@ class DeviceStatusSync(
             transport.incoming.collect { envelope ->
                 if (envelope.bodyCase == Envelope.BodyCase.DEVICE_STATUS) {
                     val s = envelope.deviceStatus
-                    _peer.value = PeerStatus(s.battery.takeIf { it >= 0 }, s.charging)
+                    _peer.value = PeerStatus(s.battery.takeIf { it >= 0 }, s.charging, s.pointerAllowed)
                 }
             }
         }
