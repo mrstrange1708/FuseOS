@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -144,10 +145,8 @@ fun HomeScreen(
                     )
                 }
             }
-            transfers.take(4).forEach { transfer ->
-                TransferListRow(transfer, peerName, onCancelTransfer, onOpenTransfer)
-            }
-            // Handoff, phone → Mac: the link on this phone's clipboard, in the Mac's browser.
+            // Handoff, phone → Mac, right under the send row — the list of transfers follows.
+            // the link on this phone's clipboard, in the Mac's browser.
             // Enabled even unlinked, so a tap is answered (in the island) rather than ignored.
             Row(
                 modifier = Modifier
@@ -177,6 +176,9 @@ fun HomeScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+            transfers.take(4).forEach { transfer ->
+                TransferListRow(transfer, peerName, onCancelTransfer, onOpenTransfer)
             }
         }
 
@@ -256,14 +258,20 @@ private fun LinkHero(
             .padding(horizontal = 18.dp, vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // Top-aligned, with the line offset to the circles' centre: centring on the whole
+        // endpoint (circle + name) put it half a label below the line between the devices.
+        Row(verticalAlignment = Alignment.Top) {
             Endpoint(Icons.Filled.Smartphone, selfName, lit = true, catchKey = caught?.takeIf { !it.first })
             Filament(
                 linked,
                 crossing,
                 streamToMac,
                 onArrive = { toMac -> caught = toMac to Any() },
-                modifier = Modifier.weight(1f).height(24.dp).padding(horizontal = 4.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(top = (ENDPOINT_CIRCLE - FILAMENT_HEIGHT) / 2)
+                    .height(FILAMENT_HEIGHT)
+                    .padding(horizontal = 4.dp),
             )
             Endpoint(Icons.Filled.Computer, peerName ?: "Your Mac", lit = linked, catchKey = caught?.takeIf { it.first })
         }
@@ -316,7 +324,7 @@ private fun Endpoint(icon: ImageVector, name: String, lit: Boolean, catchKey: An
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(92.dp)) {
         Box(
             Modifier
-                .size(58.dp)
+                .size(ENDPOINT_CIRCLE)
                 .scale(bump.value)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = if (lit) 0.16f else 0.06f)),
@@ -484,15 +492,19 @@ fun ScreenShareScreen(
             onClick = onTrackpad,
             enabled = linked,
             shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) { Text("Use as trackpad for $mac") }
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+        ) { Text("Use as trackpad for $mac", textAlign = TextAlign.Center) }
         Spacer(Modifier.height(10.dp))
         androidx.compose.material3.OutlinedButton(
             onClick = onSidecar,
             enabled = linked,
             shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) { Text("Use as a second display for $mac") }
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+        ) { Text("Use as a second display for $mac", textAlign = TextAlign.Center) }
         Spacer(Modifier.height(100.dp))
     }
 }
+
+/** The device circles on the link card, and the line between them, centred on each other. */
+private val ENDPOINT_CIRCLE = 58.dp
+private val FILAMENT_HEIGHT = 24.dp

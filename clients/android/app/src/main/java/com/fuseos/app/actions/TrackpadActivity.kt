@@ -85,7 +85,7 @@ class TrackpadActivity : ComponentActivity() {
                         // Null until the Mac's status arrives; only its explicit "no" blocks.
                         mac?.pointerAllowed == false -> Blocked(
                             title = "Turned off on your Mac",
-                            body = "On your Mac, open FuseOS → Settings and turn on \"Let your phone control this Mac\". " +
+                            body = "On your Mac, open FuseOS → Account and turn on \"Let your phone control this Mac\". " +
                                 "macOS then asks you to allow FuseOS under Privacy & Security → Accessibility. " +
                                 "This screen unlocks by itself once both are on.",
                             onDone = ::finish,

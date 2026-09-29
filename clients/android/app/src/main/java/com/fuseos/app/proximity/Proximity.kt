@@ -39,11 +39,35 @@ class Proximity(
 ) {
     private val app = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
-    private var key: ByteArray? = null
+    private val prefs = app.getSharedPreferences("proximity", Context.MODE_PRIVATE)
+    /**
+     * The Mac's latest key, kept on disk: a phone whose process was killed (ColorOS does,
+     * freely) or whose link is down must keep beaconing, or the Mac can't tell it is close.
+     */
+    private var key: ByteArray? = prefs.getString(KEY_PREF, null)?.let { android.util.Base64.decode(it, android.util.Base64.NO_WRAP) }
     private var advertising = false
     private val rotate = Runnable { restartBeacon() }
 
-    private val callback = object : AdvertiseCallback() {}
+    /** What the beacon is doing, in words for Profile — "On" used to mean only "permitted". */
+    enum class Beacon { Broadcasting, NoPermission, BluetoothOff, WaitingForMac, Refused }
+    private val _state = kotlinx.coroutines.flow.MutableStateFlow(Beacon.WaitingForMac)
+    val state: kotlinx.coroutines.flow.StateFlow<Beacon> = _state
+    /** Android's reason when it refused to broadcast (its AdvertiseCallback error code). */
+    @Volatile var refusal: Int = 0
+        private set
+
+    private val callback = object : AdvertiseCallback() {
+        override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
+            _state.value = Beacon.Broadcasting
+        }
+
+        override fun onStartFailure(errorCode: Int) {
+            advertising = false
+            refusal = errorCode
+            _state.value = Beacon.Refused
+            android.util.Log.e("FuseProximity", "beacon refused by Android: $errorCode")
+        }
+    }
 
     /** When the phone was unlocked with no link up — the link usually comes back seconds later. */
     private var unlockedAt = 0L
@@ -53,7 +77,9 @@ class Proximity(
             transport.incoming.collect { envelope ->
                 when (envelope.bodyCase) {
                     Envelope.BodyCase.BEACON_KEY -> {
-                        key = envelope.beaconKey.key.toByteArray()
+                        val fresh = envelope.beaconKey.key.toByteArray()
+                        key = fresh
+                        prefs.edit().putString(KEY_PREF, android.util.Base64.encodeToString(fresh, android.util.Base64.NO_WRAP)).apply()
                         main.post { restartBeacon() }
                     }
                     Envelope.BodyCase.UNLOCKED -> main.post { wakeScreen() }
@@ -70,6 +96,17 @@ class Proximity(
                 }
             }
         }
+        // Bluetooth switched back on: the advertiser went with it, so start again.
+        app.registerReceiver(
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    main.post { restartBeacon() }
+                }
+            },
+            IntentFilter(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED),
+        )
+        // A key from an earlier run: beacon straight away, before any link.
+        main.post { restartBeacon() }
         // USER_PRESENT is only delivered to receivers registered at run time.
         app.registerReceiver(
             object : BroadcastReceiver() {
@@ -88,9 +125,15 @@ class Proximity(
     @Suppress("MissingPermission")
     private fun restartBeacon() {
         main.removeCallbacks(rotate)
-        val key = key ?: return
-        if (!hasPermission()) return
-        val advertiser = app.getSystemService(BluetoothManager::class.java)?.adapter?.bluetoothLeAdvertiser ?: return
+        val key = key ?: return run { _state.value = Beacon.WaitingForMac }
+        if (!hasPermission()) return run { _state.value = Beacon.NoPermission }
+        val adapter = app.getSystemService(BluetoothManager::class.java)?.adapter
+        if (adapter?.isEnabled != true) {
+            advertising = false
+            _state.value = Beacon.BluetoothOff
+            return
+        }
+        val advertiser = adapter.bluetoothLeAdvertiser ?: return run { _state.value = Beacon.Refused }
         runCatching {
             if (advertising) advertiser.stopAdvertising(callback)
             val now = System.currentTimeMillis()
@@ -134,5 +177,6 @@ class Proximity(
         /** 0xFFFF: the Bluetooth SIG's id for testing/unassigned — FuseOS has no company id. */
         const val COMPANY_ID = 0xFFFF
         const val UNLOCK_GRACE_MS = 10_000L
+        const val KEY_PREF = "beacon_key"
     }
 }

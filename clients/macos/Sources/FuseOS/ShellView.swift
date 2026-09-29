@@ -207,7 +207,10 @@ private struct HomePane: View {
                 // narrow — the window's width goes to content instead of margins.
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .top, spacing: 18) {
-                        clipboard(rows: 12).frame(minWidth: 360)
+                        // An ideal width, not the text's: ViewThatFits measures ideal sizes,
+                        // and one long copied line (a code snippet) otherwise "doesn't fit"
+                        // and drops the whole Home to a single column.
+                        clipboard(rows: 12).frame(minWidth: 360, idealWidth: 460, maxWidth: .infinity)
                         VStack(spacing: 18) {
                             nowPlaying
                             notificationsPanel
@@ -221,7 +224,7 @@ private struct HomePane: View {
                             clipboard(rows: 6)
                             notificationsPanel
                         }
-                        .frame(minWidth: 420)
+                        .frame(minWidth: 420, idealWidth: 480, maxWidth: .infinity)
                         files.frame(width: 340)
                     }
                     VStack(spacing: 18) {
@@ -244,10 +247,15 @@ private struct HomePane: View {
     @ViewBuilder private var notificationsPanel: some View {
         Panel(title: "From your phone") {
             if viewModel.recentNotifications.isEmpty {
-                EmptyNote(symbol: "bell.badge", text: "Turn on notification sync in FuseOS on your phone, and they land here.")
+                // Nothing since this Mac started listening — sync may well be on already, so
+                // say both things rather than implying it is off.
+                EmptyNote(symbol: "bell.badge", text: viewModel.connected.isEmpty
+                    ? "Your phone's notifications land here while it's linked."
+                    : "Nothing new yet. If sync is on in FuseOS on \(viewModel.peerName ?? "your phone") (You → Notification sync), the next one lands here.")
             } else {
                 VStack(spacing: 8) {
                     ForEach(viewModel.recentNotifications) { n in
+                        Button { viewModel.openNotificationOnPhone(n.id) } label: {
                         HStack(alignment: .top, spacing: 10) {
                             if let data = n.iconPNG, let icon = NSImage(data: data) {
                                 Image(nsImage: icon).resizable().frame(width: 30, height: 30)
@@ -263,6 +271,10 @@ private struct HomePane: View {
                             Spacer(minLength: 6)
                             Text(n.postedAt, style: .time).font(.system(size: 11)).foregroundStyle(FuseColor.muted)
                         }
+                        .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Open on \(viewModel.peerName ?? "your phone")")
                     }
                 }
             }
@@ -447,7 +459,7 @@ private struct PhoneActionsPanel: View {
     var body: some View {
         let linked = !viewModel.connected.isEmpty
         Panel(title: "Your phone") {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
                 action(ringing ? "Stop ringing" : "Ring", symbol: ringing ? "speaker.slash.fill" : "bell.and.waves.left.and.right.fill") {
                     if ringing {
                         viewModel.phone.stopRinging()
@@ -462,7 +474,7 @@ private struct PhoneActionsPanel: View {
                         }
                     }
                 }
-                action("Open copied link", symbol: "safari.fill") {
+                action("Open link", symbol: "safari.fill") {
                     if let url = viewModel.clipboardLink { viewModel.openOnPhone(url) }
                 }
                 .disabled(viewModel.clipboardLink == nil)
@@ -493,129 +505,278 @@ private struct PhoneActionsPanel: View {
     }
 }
 
-/// The top of Home: this Mac and the phone, joined by the filament a spark runs along while
-/// they are linked. The one showy thing in the app — it answers the question people open
-/// it to ask. Everything below it stays quiet.
+/// The top of Home, and the one showy thing in the app: it answers the question people open
+/// it to ask. With no phone linked it is this Mac alone, breathing, with Connect; searching,
+/// rings ripple out from it; linked, the phone arrives under its real name — battery,
+/// charging — joined by a live wave that carries a packet each time something crosses.
 private struct LinkHero: View {
     @ObservedObject var viewModel: DashboardViewModel
     let onMirror: () -> Void
+    @State private var search: Search = .idle
+
+    private enum Search: Equatable { case idle, searching, notFound }
 
     var body: some View {
         let peer = viewModel.peers.first { viewModel.isConnected($0) } ?? viewModel.peers.first
         let linked = peer.map(viewModel.isConnected) ?? false
-        return HStack(spacing: 28) {
-            HStack(spacing: 0) {
-                endpoint(symbol: "laptopcomputer", name: viewModel.selfDevice?.name ?? "This Mac", lit: true)
-                LiveFilament(linked: linked, pulse: viewModel.linkPulse, stream: viewModel.streamToPhone)
-                    .frame(height: 24)
-                    .padding(.horizontal, 4)
-                endpoint(symbol: "iphone", name: peer?.name ?? "Your phone", lit: linked)
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 34) {
+                stage(peer: peer, linked: linked).frame(width: 440)
+                info(peer: peer, linked: linked).frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: 420)
+            VStack(spacing: 18) {
+                stage(peer: peer, linked: linked).frame(maxWidth: 440)
+                info(peer: peer, linked: linked).frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.vertical, 22)
+        .padding(.horizontal, 28)
+        .background(heroBackground(linked: linked))
+        .animation(.spring(response: 0.62, dampingFraction: 0.78), value: linked)
+        .animation(.easeInOut(duration: 0.35), value: search)
+        .onChange(of: linked) { if $0 { search = .idle } }
+        // Same 12 s as the popover: long enough for a LAN dial and handshake.
+        .task(id: search) {
+            guard search == .searching else { return }
+            try? await Task.sleep(nanoseconds: 12_000_000_000)
+            guard !Task.isCancelled, search == .searching, viewModel.connected.isEmpty else { return }
+            search = .notFound
+        }
+    }
 
-            VStack(alignment: .leading, spacing: 6) {
-                StatusPill(linked: linked, text: linked ? "Linked · direct" : status)
-                Text(peer?.name ?? "No phone yet")
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(linked ? AnyShapeStyle(FuseColor.glow) : AnyShapeStyle(FuseColor.ink))
-                    .lineLimit(1)
-                Text(detail)
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(FuseColor.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 8) {
-                    if let live = viewModel.phoneStatus, let battery = live.battery {
-                        BatteryBadge(percent: battery, charging: live.charging)
-                    } else if let peer, let battery = viewModel.onlineState(for: peer).battery {
-                        BatteryBadge(percent: battery)
+    // MARK: The stage
+
+    private func stage(peer: DeviceItem?, linked: Bool) -> some View {
+        // Aligned on the circles' centres, not the stack's: the names under the circles
+        // would otherwise pull the wave off the line between the two devices.
+        HStack(alignment: .deviceCentre, spacing: 0) {
+            ZStack {
+                if !linked {
+                    if search == .searching {
+                        Ripples().frame(width: 200, height: 200).transition(.opacity)
+                    } else {
+                        Breathing().frame(width: 120, height: 120).transition(.opacity)
                     }
-                    if linked, let latency = viewModel.syncLatency {
-                        // The PRD's own yardstick: p95 under 300 ms, shown where people look.
-                        Label("\(latency.lastMs) ms · p95 \(latency.p95Ms) ms", systemImage: "bolt.fill")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(latency.p95Ms < 300 ? FuseColor.muted : FuseColor.error)
-                            .monospacedDigit()
-                            .help("Round trip of the last clip, and the 95th percentile of the last \(latency.samples)")
-                    }
-                    Spacer(minLength: 0)
+                }
+                endpoint(symbol: "laptopcomputer", name: viewModel.selfDevice?.name ?? "This Mac", lit: true)
+            }
+            .frame(width: 120)
+            if linked {
+                LiveFilament(linked: true, pulse: viewModel.linkPulse, stream: viewModel.streamToPhone)
+                    .frame(height: 44)
+                    .padding(.horizontal, 4)
+                    .alignmentGuide(.deviceCentre) { $0[VerticalAlignment.center] }
+                    .transition(.opacity.combined(with: .scale(scale: 0.2, anchor: .leading)))
+                phoneEndpoint(name: peer?.name ?? "Your phone")
+                    .frame(width: 120)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity).combined(with: .scale(scale: 0.6)),
+                        removal: .opacity.combined(with: .scale(scale: 0.8)),
+                    ))
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 150)
+    }
+
+    private func endpoint(symbol: String, name: String, lit: Bool) -> some View {
+        VStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(RadialGradient(colors: [FuseColor.accent.opacity(lit ? 0.28 : 0.08), FuseColor.accent.opacity(0.04)],
+                                         center: .center, startRadius: 2, endRadius: 40))
+                    .frame(width: 72, height: 72)
+                Circle()
+                    .stroke(FuseColor.accent.opacity(lit ? 0.45 : 0.12), lineWidth: 1)
+                    .frame(width: 72, height: 72)
+                Image(systemName: symbol)
+                    .font(.system(size: 27, weight: .light))
+                    .foregroundStyle(lit ? FuseColor.accent : FuseColor.muted)
+            }
+            .frame(width: 86, height: 86)
+            .alignmentGuide(.deviceCentre) { $0[VerticalAlignment.center] }
+            Text(name)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(FuseColor.ink.opacity(0.85))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: 118)
+        }
+    }
+
+    /// The phone: its battery as a ring round it, a bolt badge while it charges.
+    private func phoneEndpoint(name: String) -> some View {
+        let live = viewModel.phoneStatus
+        let percent = live?.battery ?? viewModel.peers.first.flatMap { viewModel.onlineState(for: $0).battery }
+        let charging = live?.charging == true
+        return VStack(spacing: 10) {
+            ZStack {
+                if let percent {
+                    Circle()
+                        .trim(from: 0, to: CGFloat(max(0, min(100, percent))) / 100)
+                        .stroke(percent <= 20 && !charging ? FuseColor.error : FuseColor.amber,
+                                style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 82, height: 82)
+                        .animation(.easeOut(duration: 0.6), value: percent)
+                }
+                Circle()
+                    .fill(RadialGradient(colors: [FuseColor.accent.opacity(0.28), FuseColor.accent.opacity(0.04)],
+                                         center: .center, startRadius: 2, endRadius: 40))
+                    .frame(width: 72, height: 72)
+                Image(systemName: "iphone")
+                    .font(.system(size: 27, weight: .light))
+                    .foregroundStyle(FuseColor.accent)
+                if charging {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 22, height: 22)
+                        .background(Circle().fill(FuseColor.accent))
+                        .overlay(Circle().stroke(FuseColor.surface, lineWidth: 2))
+                        .offset(x: 28, y: 28)
+                        .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .frame(width: 86, height: 86)
+            .alignmentGuide(.deviceCentre) { $0[VerticalAlignment.center] }
+            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: charging)
+            Text(name)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(FuseColor.ink.opacity(0.85))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: 118)
+        }
+    }
+
+    // MARK: The words
+
+    private func info(peer: DeviceItem?, linked: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            StatusPill(linked: linked, text: linked ? "Linked · direct" : status)
+            Text(title(peer: peer, linked: linked))
+                .font(.system(size: 26, weight: .bold))
+                .foregroundStyle(linked ? AnyShapeStyle(FuseColor.glow) : AnyShapeStyle(FuseColor.ink))
+                .lineLimit(1)
+                .contentTransition(.opacity)
+            Text(detail(linked: linked))
+                .font(.system(size: 12.5))
+                .foregroundStyle(search == .notFound && !linked ? FuseColor.error : FuseColor.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 10) {
+                if linked, let battery = viewModel.phoneStatus?.battery ?? peer.flatMap({ viewModel.onlineState(for: $0).battery }) {
+                    let charging = viewModel.phoneStatus?.charging == true
+                    Label(charging ? "\(battery)% · charging" : "\(battery)%",
+                          systemImage: charging ? "battery.100.bolt" : "battery.75")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(charging ? FuseColor.accent : FuseColor.muted)
+                        .monospacedDigit()
+                }
+                if linked, let latency = viewModel.syncLatency {
+                    // The PRD's own yardstick: p95 under 300 ms, shown where people look.
+                    Label("\(latency.lastMs) ms · p95 \(latency.p95Ms) ms", systemImage: "bolt.horizontal.fill")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(latency.p95Ms < 300 ? FuseColor.muted : FuseColor.error)
+                        .monospacedDigit()
+                        .help("Round trip of the last clip, and the 95th percentile of the last \(latency.samples)")
+                }
+                Spacer(minLength: 0)
+                if linked {
                     Button(action: onMirror) {
                         Label("Mirror screen", systemImage: "rectangle.on.rectangle")
                     }
                     .buttonStyle(CapsuleButtonStyle(prominent: false))
-                    .disabled(!linked)
+                } else {
+                    Button {
+                        search = .searching
+                        Task { await viewModel.connect() }
+                    } label: {
+                        Label(search == .searching ? "Looking…" : search == .notFound ? "Try again" : "Connect",
+                              systemImage: search == .notFound ? "arrow.clockwise" : "dot.radiowaves.left.and.right")
+                    }
+                    .buttonStyle(CapsuleButtonStyle(prominent: true))
+                    .disabled(search == .searching)
                 }
-                .padding(.top, 6)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 6)
         }
-        .padding(.vertical, 22)
-        .padding(.horizontal, 26)
-        .background(heroBackground)
-        .animation(.easeInOut(duration: 0.4), value: linked)
     }
 
-    /// The panel surface with the ember rising from its bottom edge — the hero's own glow.
-    private var heroBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
-        return shape.fill(FuseColor.surface)
-            .overlay(
-                shape.fill(RadialGradient(
-                    colors: [FuseColor.accent.opacity(0.10), .clear],
-                    center: UnitPoint(x: 0.25, y: 1.1), startRadius: 0, endRadius: 360,
-                )),
-            )
-            .overlay(shape.stroke(FuseColor.outline.opacity(0.55), lineWidth: 1))
-            // The website's glowing edge, lit while linked: ember top-left fading to amber.
-            .overlay(shape.stroke(LinearGradient(
-                colors: [FuseColor.accent.opacity(0.75), .clear, FuseColor.amber.opacity(0.45)],
-                startPoint: .topLeading, endPoint: .bottomTrailing,
-            ), lineWidth: 1).opacity(isLinked ? 1 : 0))
-    }
-
-    private var isLinked: Bool {
-        (viewModel.peers.first { viewModel.isConnected($0) }).map(viewModel.isConnected) ?? false
+    private func title(peer: DeviceItem?, linked: Bool) -> String {
+        if linked { return peer?.name ?? "Your phone" }
+        switch search {
+        case .searching: return "Looking for your phone…"
+        case .notFound: return "Couldn't reach your phone"
+        case .idle: return viewModel.peers.isEmpty ? "Just this Mac" : "Not linked"
+        }
     }
 
     private var status: String {
+        if search == .searching { return "Searching this Wi-Fi" }
         switch viewModel.connectState.stage {
         case .connected: return "Linked · direct"
         case .connecting: return "Connecting"
         case .differentNetwork: return "Different networks"
         case .peerOffline: return "Phone offline"
-        case .alone: return "Waiting for a phone"
+        case .alone: return "No phone yet"
         }
     }
 
-    private var detail: String {
+    private func detail(linked: Bool) -> String {
+        if linked { return "Clipboard, files and notifications move straight over your Wi-Fi." }
+        switch search {
+        case .searching: return "Dialling every device on your account that's on this network."
+        case .notFound:
+            return "Open FuseOS on your phone with the same account and Wi-Fi, and allow FuseOS on the local network in System Settings → Privacy & Security."
+        case .idle: break
+        }
         switch viewModel.connectState.stage {
-        case .connected: return "Clipboard, files and notifications move straight over your Wi-Fi."
-        case .connecting: return "Finding your phone on this Wi-Fi…"
-        case .differentNetwork: return "Put both devices on the same Wi-Fi network."
-        case .peerOffline: return "Open FuseOS on your phone to link it."
-        case .alone: return "Sign in on your phone with this account."
+        case .connected, .connecting: return "Finding your phone on this Wi-Fi…"
+        case .differentNetwork: return "Put both devices on the same Wi-Fi network, then Connect."
+        case .peerOffline: return "Open FuseOS on your phone, then Connect."
+        case .alone: return "Sign in on your phone with this account, then Connect."
         }
     }
 
-    private func endpoint(symbol: String, name: String, lit: Bool) -> some View {
-        VStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .fill(FuseColor.accent.opacity(lit ? 0.15 : 0.05))
-                    .frame(width: 60, height: 60)
-                Circle()
-                    .stroke(FuseColor.accent.opacity(lit ? 0.35 : 0.1), lineWidth: 1)
-                    .frame(width: 60, height: 60)
-                Image(systemName: symbol)
-                    .font(.system(size: 23, weight: .light))
-                    .foregroundStyle(lit ? FuseColor.accent : FuseColor.muted)
+    /// The panel surface with the ember rising from its bottom edge; its edge lights while linked.
+    private func heroBackground(linked: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
+        return shape.fill(FuseColor.surface)
+            .overlay(
+                shape.fill(RadialGradient(
+                    colors: [FuseColor.accent.opacity(linked ? 0.16 : 0.08), .clear],
+                    center: UnitPoint(x: 0.2, y: 1.15), startRadius: 0, endRadius: 420,
+                )),
+            )
+            .overlay(shape.stroke(FuseColor.outline.opacity(0.55), lineWidth: 1))
+            .overlay(shape.stroke(LinearGradient(
+                colors: [FuseColor.accent.opacity(0.75), .clear, FuseColor.amber.opacity(0.45)],
+                startPoint: .topLeading, endPoint: .bottomTrailing,
+            ), lineWidth: 1).opacity(linked ? 1 : 0))
+    }
+}
+
+extension VerticalAlignment {
+    /// The centre line of the device circles on the link card, which the wave follows.
+    private enum DeviceCentre: AlignmentID {
+        static func defaultValue(in d: ViewDimensions) -> CGFloat { d[VerticalAlignment.center] }
+    }
+    static let deviceCentre = VerticalAlignment(DeviceCentre.self)
+}
+
+/// A slow glow round a device that is waiting: present, not broken.
+private struct Breathing: View {
+    @State private var up = false
+
+    var body: some View {
+        Circle()
+            .fill(RadialGradient(colors: [FuseColor.accent.opacity(0.22), .clear], center: .center, startRadius: 10, endRadius: 60))
+            .scaleEffect(up ? 1.08 : 0.86)
+            .opacity(up ? 1 : 0.55)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) { up = true }
             }
-            Text(name)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(FuseColor.muted)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: 104)
-        }
+            .accessibilityHidden(true)
     }
 }
 
@@ -749,22 +910,7 @@ private struct AccountPane: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                HStack(spacing: 14) {
-                    ZStack {
-                        Circle().fill(FuseColor.accent.opacity(0.16)).frame(width: 52, height: 52)
-                        Text((session.email ?? "?").prefix(1).uppercased())
-                            .font(.system(size: 22, weight: .semibold))
-                            .foregroundStyle(FuseColor.accent)
-                    }
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(session.email ?? "Signed in")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(FuseColor.ink)
-                        Text("\(viewModel.peers.count + 1) devices · \(viewModel.connected.count) linked")
-                            .font(.system(size: 12))
-                            .foregroundStyle(FuseColor.muted)
-                    }
-                }
+                AccountHeader(email: session.email, viewModel: viewModel)
 
                 Panel(title: "This Mac") {
                     VStack(alignment: .leading, spacing: 8) {
@@ -788,9 +934,10 @@ private struct AccountPane: View {
                 }
                 .onAppear { draftName = session.deviceName ?? SessionStore.detectedDeviceName() }
 
-                Panel(title: "Behaviour") {
+                Panel(title: "Everyday") {
                     VStack(spacing: 0) {
                         SettingSwitch(
+                            symbol: "power",
                             title: "Start at login",
                             detail: "Sync is ready before you reach for it.",
                             isOn: Binding(
@@ -800,43 +947,60 @@ private struct AccountPane: View {
                         )
                         Divider().opacity(0.5)
                         SettingSwitch(
-                            title: "Show in Dock",
-                            detail: "Off, FuseOS lives in the menu bar only.",
+                            symbol: "dock.rectangle",
+                            title: "Keep in Dock when closed",
+                            detail: "Off: the Dock icon shows only while this window is open; FuseOS keeps running in the menu bar.",
                             isOn: $showInDock,
                         )
-                        .onChange(of: showInDock) { shown in
-                            DockIcon.apply(shown)
+                        .onChange(of: showInDock) { _ in
+                            DockIcon.update()
                             // Leaving the Dock deactivates the app; keep this window in front
                             // of the user who is still looking at it.
                             DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
                         }
                         Divider().opacity(0.5)
                         SettingSwitch(
+                            symbol: "hand.raised",
                             title: "Ask before sending copies",
                             detail: "Each copy waits in the island for you to click Send.",
                             isOn: $askBeforeSend,
                         )
-                        Divider().opacity(0.5)
+                    }
+                }
+
+                Panel(title: "Your phone and this Mac") {
+                    VStack(spacing: 0) {
                         SettingSwitch(
+                            symbol: "lock",
                             title: "Lock this Mac when your phone leaves",
-                            detail: "When your phone walks away (Bluetooth distance) or leaves this Wi-Fi, the Mac locks.",
+                            detail: "When your phone walks away — Bluetooth hears it go — the Mac locks. A dropped Wi-Fi link alone never locks it.",
                             isOn: $lockWhenPhoneLeaves,
                         )
                         .onChange(of: lockWhenPhoneLeaves) { _ in viewModel.proximitySettingsChanged() }
                         Divider().opacity(0.5)
                         SettingSwitch(
+                            symbol: "lock.open",
                             title: "Unlock this Mac with your phone",
                             detail: "Experimental. Unlock your phone next to the Mac and the Mac unlocks too.",
                             isOn: $unlockWithPhone,
                         )
                         .onChange(of: unlockWithPhone) { on in
-                            if on {
-                                if !MacUnlock.setUp() { unlockWithPhone = false }
-                                MacPointer.accessibilityGranted(prompt: true)
-                            } else {
+                            guard on else {
                                 MacUnlock.forget()
+                                viewModel.proximitySettingsChanged()
+                                return
                             }
-                            viewModel.proximitySettingsChanged()
+                            // After this view update, not inside it: a modal password prompt
+                            // run from the switch's own change handler reset the switch, so
+                            // it would not stay on.
+                            DispatchQueue.main.async {
+                                if MacUnlock.setUp() {
+                                    MacPointer.accessibilityGranted(prompt: true)
+                                } else {
+                                    unlockWithPhone = false
+                                }
+                                viewModel.proximitySettingsChanged()
+                            }
                         }
                         if lockWhenPhoneLeaves || unlockWithPhone {
                             // Both switches rest on hearing the phone; say plainly whether
@@ -846,6 +1010,7 @@ private struct AccountPane: View {
                         }
                         Divider().opacity(0.5)
                         SettingSwitch(
+                            symbol: "hand.point.up.left",
                             title: "Let your phone control this Mac",
                             detail: MacPointer.accessibilityGranted(prompt: false) || !phoneControlsMac
                                 ? "Use your phone as this Mac's trackpad and keyboard."
@@ -898,6 +1063,92 @@ private struct AccountPane: View {
     }
 }
 
+/// The top of Account: who is signed in, the devices on the account with their live state,
+/// and what FuseOS has done today — so the pane opens on something worth reading.
+private struct AccountHeader: View {
+    let email: String?
+    @ObservedObject var viewModel: DashboardViewModel
+
+    var body: some View {
+        let today = viewModel.history.filter { Calendar.current.isDateInToday($0.at) }.count
+        let files = viewModel.transfers.filter { $0.state == .done }.count
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(colors: [FuseColor.accent, FuseColor.amber], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 58, height: 58)
+                    Text((email ?? "?").prefix(1).uppercased())
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .shadow(color: FuseColor.accent.opacity(0.35), radius: 14, y: 6)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(email ?? "Signed in")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(FuseColor.ink)
+                        .lineLimit(1)
+                    Text("One account · \(viewModel.peers.count + 1) devices · \(viewModel.connected.count) linked")
+                        .font(.system(size: 12))
+                        .foregroundStyle(FuseColor.muted)
+                }
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 10) {
+                device(symbol: "laptopcomputer", name: viewModel.selfDevice?.name ?? "This Mac", state: "This Mac", live: true)
+                ForEach(viewModel.peers) { peer in
+                    let linked = viewModel.isConnected(peer)
+                    device(symbol: peer.platform == "android" ? "iphone" : "laptopcomputer", name: peer.name,
+                           state: linked ? "Linked" : viewModel.onlineState(for: peer).online ? "Online" : "Offline", live: linked)
+                }
+            }
+            HStack(spacing: 10) {
+                stat("\(today)", "clips today", symbol: "doc.on.clipboard")
+                stat("\(files)", "files moved", symbol: "arrow.left.arrow.right")
+                stat(viewModel.syncLatency.map { "\($0.p95Ms) ms" } ?? "—", "sync p95", symbol: "bolt.horizontal.fill")
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous).fill(FuseColor.surface)
+                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(RadialGradient(
+                    colors: [FuseColor.accent.opacity(0.14), .clear], center: .topLeading, startRadius: 0, endRadius: 380,
+                )))
+                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(FuseColor.outline.opacity(0.55), lineWidth: 1)),
+        )
+    }
+
+    private func device(symbol: String, name: String, state: String, live: Bool) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(live ? FuseColor.accent : FuseColor.muted)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name).font(.system(size: 12, weight: .semibold)).foregroundStyle(FuseColor.ink).lineLimit(1)
+                HStack(spacing: 4) {
+                    Circle().fill(live ? FuseColor.accent : FuseColor.muted).frame(width: 5, height: 5)
+                    Text(state).font(.system(size: 10.5)).foregroundStyle(FuseColor.muted)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(FuseColor.surfaceAlt.opacity(0.7)))
+    }
+
+    private func stat(_ value: String, _ label: String, symbol: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Image(systemName: symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(FuseColor.accent).frame(height: 16)
+            Text(value).font(.system(size: 20, weight: .bold)).foregroundStyle(FuseColor.ink).monospacedDigit()
+            Text(label).font(.system(size: 10.5)).foregroundStyle(FuseColor.muted)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(FuseColor.surfaceAlt.opacity(0.7)))
+    }
+}
+
 /// One line under the lock/unlock switches: is the phone close, and if this Mac can't tell,
 /// why not and what to do.
 private struct ProximityStatus: View {
@@ -925,15 +1176,22 @@ private struct ProximityStatus: View {
 }
 
 private struct SettingSwitch: View {
+    var symbol: String?
     let title: String
     let detail: String
     @Binding var isOn: Bool
 
     var body: some View {
         Toggle(isOn: $isOn) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 13, weight: .medium)).foregroundStyle(FuseColor.ink)
-                Text(detail).font(.system(size: 11.5)).foregroundStyle(FuseColor.muted)
+            HStack(spacing: 12) {
+                if let symbol {
+                    IconTile(symbol: symbol, tint: isOn ? FuseColor.accent : FuseColor.muted)
+                        .animation(.easeOut(duration: 0.2), value: isOn)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.system(size: 13, weight: .medium)).foregroundStyle(FuseColor.ink)
+                    Text(detail).font(.system(size: 11.5)).foregroundStyle(FuseColor.muted)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -1361,12 +1619,14 @@ struct ClipRow: View {
             }
         } label: {
             HStack(spacing: 12) {
-                if let data = entry.imageData, let image = NSImage(data: data) {
+                if let image = thumbnail {
+                    // An image is its own preview: shown big enough to recognise.
                     Image(nsImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
-                        .frame(width: 34, height: 34)
-                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        .frame(width: 76, height: 54)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(FuseColor.outline.opacity(0.5), lineWidth: 1))
                 } else {
                     IconTile(symbol: symbol, tint: entry.fromSelf ? FuseColor.muted : FuseColor.accent)
                 }
@@ -1415,8 +1675,13 @@ struct ClipRow: View {
         return "text.alignleft"
     }
 
+    private var thumbnail: NSImage? { entry.imageData.flatMap(NSImage.init(data:)) }
+
     private var preview: String {
-        if entry.isImage { return "Image" }
+        if entry.isImage {
+            guard let rep = thumbnail?.representations.first, rep.pixelsWide > 0 else { return "Image" }
+            return "Image · \(rep.pixelsWide) × \(rep.pixelsHigh)"
+        }
         // A two-line preview reads as one thought; raw newlines made it a ragged fragment.
         return (entry.text ?? "").split(whereSeparator: \.isNewline).joined(separator: "  ")
     }

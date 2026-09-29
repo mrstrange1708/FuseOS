@@ -75,7 +75,7 @@ public final class PhoneCommands {
 /// What became of something one device asked of the other (`Outcome` on the wire).
 public struct Outcome: Equatable {
     public enum Kind: Equatable {
-        case reply, openNotification, unlock, openLink, other
+        case reply, openNotification, unlock, openLink, call, other
 
         init(_ wire: FuseOutcome.Kind) {
             switch wire {
@@ -83,6 +83,7 @@ public struct Outcome: Equatable {
             case .openNotification: self = .openNotification
             case .unlock: self = .unlock
             case .openLink: self = .openLink
+            case .call: self = .call
             default: self = .other
             }
         }
@@ -93,6 +94,7 @@ public struct Outcome: Equatable {
             case .openNotification: return .openNotification
             case .unlock: return .unlock
             case .openLink: return .openLink
+            case .call: return .call
             case .other: return .unspecified
             }
         }

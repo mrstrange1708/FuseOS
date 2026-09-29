@@ -75,9 +75,9 @@ class FuseConnectionService : Service() {
         }
         if (startJob?.isActive != true) {
             startJob = scope.launch {
-                // Fail soft: the phone may be off-network at boot. The dashboard and the
-                // Share sheet both retry through the same ConnectionManager.
-                runCatching { ServiceLocator.connectionManager.ensureStarted() }
+                // Fail soft: the phone may be off-network at boot, or the server down.
+                // Keeps retrying with backoff, so it links by itself once it's reachable.
+                ServiceLocator.connectionManager.startRetrying()
             }
         }
         // START_STICKY: if Android kills us for memory, come back — continuity is the

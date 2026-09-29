@@ -125,12 +125,10 @@ class DashboardViewModel(
     }
 
     private suspend fun bootstrap() {
-        try {
-            connection.ensureStarted()
-            refresh()
-        } catch (e: Exception) {
+        connection.startRetrying { e ->
             _state.update { it.copy(error = e.message ?: "Unable to load your devices.") }
         }
+        refresh()
     }
 
     suspend fun refresh() {
