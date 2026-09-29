@@ -281,6 +281,33 @@ final class LatencyWindowTests: XCTestCase {
     }
 }
 
+/// Same cases as `RoundTripTest` on Android.
+final class RoundTripTests: XCTestCase {
+    func testAFrameThatWaitedOnASleeperIsStale() {
+        XCTAssertTrue(RoundTrip.isFresh(sentAtUnixMs: 10_000, nowUnixMs: 12_000))
+        XCTAssertFalse(RoundTrip.isFresh(sentAtUnixMs: 10_000, nowUnixMs: 12_001))
+        // A peer clock a little ahead is still fresh.
+        XCTAssertTrue(RoundTrip.isFresh(sentAtUnixMs: 10_500, nowUnixMs: 10_000))
+    }
+
+    func testARoundTripThatABulkFrameCrossedMeasuredAQueue() {
+        XCTAssertEqual(RoundTrip.ms(sentAt: 5_000_000_000, now: 5_030_000_000, lastBulkAt: 4_000_000_000), 30)
+        XCTAssertNil(RoundTrip.ms(sentAt: 5_000_000_000, now: 6_400_000_000, lastBulkAt: 5_000_000_001))
+        XCTAssertNil(RoundTrip.ms(sentAt: 5_000_000_000, now: 5_030_000_000, lastBulkAt: 5_000_000_000))
+    }
+
+    func testImagesAndFramesAreBulkButTextAndHeartbeatsAreNot() {
+        var image = FuseEnvelope(); image.clipImage = FuseClipImage()
+        var frame = FuseEnvelope(); frame.screenFrame = FuseScreenFrame()
+        var text = FuseEnvelope(); text.clipText = FuseClipText()
+        var beat = FuseEnvelope(); beat.heartbeat = FuseHeartbeat()
+        XCTAssertTrue(RoundTrip.isBulk(image))
+        XCTAssertTrue(RoundTrip.isBulk(frame))
+        XCTAssertFalse(RoundTrip.isBulk(text))
+        XCTAssertFalse(RoundTrip.isBulk(beat))
+    }
+}
+
 final class ScreenReceiverFramingTests: XCTestCase {
     func testSplitsAnnexBOnThreeAndFourByteStartCodes() {
         let data = Data([0, 0, 0, 1, 0x67, 0xAA, 0, 0, 1, 0x68, 0xBB, 0, 0, 0, 1, 0x65, 0xCC, 0xDD])

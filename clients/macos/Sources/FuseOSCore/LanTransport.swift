@@ -55,6 +55,8 @@ public final class LanTransport {
     public var onPeersJoined: ((Set<String>) -> Void)?
     /// A heartbeat's round trip, in ms, as its echo comes back (see `Heartbeat` in the proto).
     public var onRoundTrip: ((Int) -> Void)?
+    /// When a bulk frame last finished crossing, either way (uptime ns). See `RoundTrip`.
+    private var lastBulkAt: UInt64 = 0
     /// Heartbeats sent and not yet echoed: seq → when they went, monotonic nanoseconds.
     private var pings: [UInt64: UInt64] = [:]
 
@@ -178,6 +180,7 @@ public final class LanTransport {
         for (peerId, channel) in channels {
             do {
                 try await channel.send(envelope)
+                noteTraffic(envelope)
             } catch {
                 drop(peerId, channel: channel)
             }
@@ -191,6 +194,7 @@ public final class LanTransport {
             Task { [weak self] in
                 do {
                     try await channel.send(envelope)
+                    self?.noteTraffic(envelope)
                 } catch {
                     self?.drop(peerId, channel: channel)
                 }
@@ -272,6 +276,7 @@ public final class LanTransport {
         while !Task.isCancelled {
             do {
                 let envelope = try await channel.receive()
+                noteTraffic(envelope)
                 switch envelope.body {
                 case .some(.heartbeat(let heartbeat)):
                     echo(heartbeat, of: envelope, from: channel.peerDeviceId)
@@ -327,14 +332,28 @@ public final class LanTransport {
         broadcast(heartbeat, only: only)
     }
 
+    private func noteTraffic(_ envelope: FuseEnvelope) {
+        if RoundTrip.isBulk(envelope) { lastBulkAt = DispatchTime.now().uptimeNanoseconds }
+    }
+
+    /// The round trip since `sentAt` in ms, or nil if it measured a queue, not the link.
+    func roundTrip(since sentAt: UInt64) -> Int? {
+        RoundTrip.ms(sentAt: sentAt, now: DispatchTime.now().uptimeNanoseconds, lastBulkAt: lastBulkAt)
+    }
+
     /// A ping is answered at once, to its sender only; an echo is timed and never answered.
+    /// A stale one is neither: it waited in a buffer while one of us slept (`RoundTrip`).
     private func echo(_ heartbeat: FuseHeartbeat, of envelope: FuseEnvelope, from peerId: String) {
+        guard RoundTrip.isFresh(sentAtUnixMs: envelope.sentAtUnixMs) else {
+            if heartbeat.echoSeq != 0 { pings.removeValue(forKey: heartbeat.echoSeq) }
+            return
+        }
         if heartbeat.echoSeq == 0 {
             var reply = newEnvelope()
             reply.heartbeat = FuseHeartbeat.with { $0.echoSeq = envelope.seq }
             broadcast(reply, only: [peerId])
-        } else if let sentAt = pings.removeValue(forKey: heartbeat.echoSeq) {
-            onRoundTrip?(Int((DispatchTime.now().uptimeNanoseconds - sentAt) / 1_000_000))
+        } else if let sentAt = pings.removeValue(forKey: heartbeat.echoSeq), let ms = roundTrip(since: sentAt) {
+            onRoundTrip?(ms)
         }
     }
 
