@@ -242,11 +242,25 @@ fun ProfileScreen(
         }
 
         Panel(title = "Account") {
-            SettingItem(
-                "Link with a code",
-                "Devices on this account link themselves. Use a code only if one didn't show up.",
-                onLinkManually,
-            )
+            // Linked already: say so, rather than offer a code nobody needs. Not linked: the
+            // linking screen, where the Mac is found or a code is entered.
+            val linkedMac = state.allPeers.firstOrNull { it.id in state.connected }
+            if (linkedMac != null) {
+                SettingItem(
+                    "Linked with ${linkedMac.name}",
+                    "Your devices are already connected.",
+                    onClick = {},
+                    trailing = "Linked",
+                    trailingLit = true,
+                )
+            } else {
+                SettingItem(
+                    "Not linked",
+                    "Link your Mac: it finds itself on this Wi-Fi, or use a code.",
+                    onLinkManually,
+                    trailing = "Link",
+                )
+            }
             SettingItem("Sign out", "Clears this phone's session and clipboard history.", onSignOut, destructive = true)
         }
 
