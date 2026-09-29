@@ -91,7 +91,13 @@ message Ack {
   uint64 ref_seq         = 2; // for clipboard events
 }
 
-message Heartbeat {}
+// Keeps the channel alive (every 15 s, and once as it comes up) and times it. A ping has
+// echo_seq 0; the other end answers at once with echo_seq = the ping's seq, and the pinger
+// records the round trip in the same window as clip acks — so the link card's sync speed
+// is live even when nothing is being copied. A reply is never answered, so it cannot loop.
+message Heartbeat {
+  uint64 echo_seq = 1;
+}
 
 // Either end of a transfer giving up: the sender cancelled or could not read the file,
 // or the receiver cancelled, failed a write, or failed verification. The other end stops

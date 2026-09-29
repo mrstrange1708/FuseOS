@@ -53,6 +53,10 @@ public final class LanTransport {
 
     /// Fires with the peers that just gained a channel — the moment to exchange history.
     public var onPeersJoined: ((Set<String>) -> Void)?
+    /// A heartbeat's round trip, in ms, as its echo comes back (see `Heartbeat` in the proto).
+    public var onRoundTrip: ((Int) -> Void)?
+    /// Heartbeats sent and not yet echoed: seq → when they went, monotonic nanoseconds.
+    private var pings: [UInt64: UInt64] = [:]
 
     /// Peers with a live direct channel right now — what the UI's "connected" chip reads.
     public private(set) var connectedPeers: Set<String> = []
@@ -269,8 +273,10 @@ public final class LanTransport {
             do {
                 let envelope = try await channel.receive()
                 switch envelope.body {
-                case .some(.heartbeat), .none:
-                    break // liveness only; nothing above the transport cares
+                case .some(.heartbeat(let heartbeat)):
+                    echo(heartbeat, of: envelope, from: channel.peerDeviceId)
+                case .none:
+                    break
                 // An ack with a transfer id is a file's; one without acknowledges a clip.
                 case .some(.ack(let ack)) where ack.refTransferID.isEmpty:
                     onEnvelope?(envelope)
@@ -306,9 +312,29 @@ public final class LanTransport {
         while !Task.isCancelled {
             try? await Task.sleep(nanoseconds: 15_000_000_000)
             guard !channels.isEmpty else { continue }
-            var envelope = newEnvelope()
-            envelope.heartbeat = FuseHeartbeat()
-            broadcast(envelope)
+            ping()
+        }
+    }
+
+    /// A heartbeat that asks to be echoed, so the link's round trip stays measured.
+    private func ping(only: Set<String>? = nil) {
+        let envelope = newEnvelope()
+        pings[envelope.seq] = DispatchTime.now().uptimeNanoseconds
+        // Bounded: a peer that never echoes (an older build) must not grow this.
+        if pings.count > 16, let oldest = pings.keys.min() { pings.removeValue(forKey: oldest) }
+        var heartbeat = envelope
+        heartbeat.heartbeat = FuseHeartbeat()
+        broadcast(heartbeat, only: only)
+    }
+
+    /// A ping is answered at once, to its sender only; an echo is timed and never answered.
+    private func echo(_ heartbeat: FuseHeartbeat, of envelope: FuseEnvelope, from peerId: String) {
+        if heartbeat.echoSeq == 0 {
+            var reply = newEnvelope()
+            reply.heartbeat = FuseHeartbeat.with { $0.echoSeq = envelope.seq }
+            broadcast(reply, only: [peerId])
+        } else if let sentAt = pings.removeValue(forKey: heartbeat.echoSeq) {
+            onRoundTrip?(Int((DispatchTime.now().uptimeNanoseconds - sentAt) / 1_000_000))
         }
     }
 
@@ -320,6 +346,8 @@ public final class LanTransport {
         setConnected(connectedPeers.union([channel.peerDeviceId]))
         // Every channel, reconnects included: a merge drops what the peer already has.
         onPeersJoined?([channel.peerDeviceId])
+        // Time the link straight away rather than 15 s from now.
+        ping(only: [channel.peerDeviceId])
     }
 
     private func drop(_ peerId: String, channel: LanChannel) {

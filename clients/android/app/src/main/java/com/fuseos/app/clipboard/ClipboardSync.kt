@@ -139,7 +139,9 @@ class ClipboardSync(
         clipboard.addPrimaryClipChangedListener(listener)
 
         inboundJob = scope.launch {
-            transport.incoming.collect { envelope -> apply(guard, envelope) }
+            launch { transport.incoming.collect { envelope -> apply(guard, envelope) } }
+            // Heartbeat echoes keep the sync speed live between clips.
+            transport.roundTrips.collect { _latency.value = latencyWindow.record(it) }
         }
         // Both ends send their history whenever a peer gains a channel; each merges what
         // it lacks.

@@ -14,7 +14,7 @@ This is the **data plane**: the actual clipboard and file bytes moving **directl
 4. **Channel keys:** ECDH over the two static keys, salted with both nonces, expanded by HKDF-SHA256 into **one key per direction** (`fuseos:lan:v1:low-to-high` and `…:high-to-low`, ordered by device id so both ends agree without extra negotiation). Every frame after the handshake is `[4-byte BE length][AES-GCM ciphertext || 16-byte tag]` over a serialised `Envelope`, with the frame counter as the GCM nonce.
 
    This is TLS-shaped rather than literally TLS: the same guarantees (authenticated peers, per-session keys, per-frame integrity) without a certificate chain, because the control plane already distributes the keys that a PKI would otherwise establish.
-5. **Maintain:** the channel is persistent and bidirectional; a `Heartbeat` envelope every 15s keeps it alive; loss triggers reconnection with exponential backoff capped at 15s.
+5. **Maintain:** the channel is persistent and bidirectional; a `Heartbeat` envelope every 15s (and once as the channel comes up) keeps it alive and times it; loss triggers reconnection with exponential backoff capped at 15s.
 
 > **No forward secrecy.** The ECDH is static-static, so an attacker holding a device's private key can decrypt recorded sessions. The upgrade is ephemeral keys plus signatures (Noise IK); it was skipped because it costs a full handshake protocol to defend against someone who already has the device.
 
@@ -73,7 +73,7 @@ message Envelope {
 | `FILE_META` | sender → receiver | name, size, mime, checksum |
 | `FILE_CHUNK` | sender → receiver | ordered chunk index + bytes |
 | `ACK` | receiver → sender | acknowledges an applied event / completed transfer |
-| `HEARTBEAT` | either | liveness |
+| `HEARTBEAT` | either | liveness, and the link's live round trip: a ping is echoed at once (§4) |
 | `FILE_CANCEL` | either | this end of a transfer gave up; the other stops and discards |
 | `HISTORY_SYNC` | either | recent clipboard history, sent once per new channel (§9) |
 | `PHONE_NOTIFICATION` | phone → Mac | a notification posted on the phone (§10) |
@@ -124,6 +124,8 @@ User copies on A
 ```
 
 **The ack is how sync speed is measured.** B sends `ACK` with `ref_seq = n` (and no `ref_transfer_id`) once it has applied a clip — never for one the loop guard refused. A keeps the send time of each unacknowledged clip (monotonic clock, at most 64 outstanding) and, on the ack, records the round trip in a window of the last 50: `SyncLatency { lastMs, p95Ms }`, shown on both apps' link card. A round trip, because the two devices' clocks cannot be trusted to agree to the millisecond; it bounds copy-to-available from above, so a round-trip p95 under the PRD's 300 ms meets the target. An ack is not a clip and is never re-emitted, so it cannot loop; a build that predates it ignores an ack whose transfer id it does not know.
+
+**Heartbeats keep it live.** Clips alone left the number empty until the first copy and stale after it. So every heartbeat is a ping (`echo_seq` 0): the other end answers at once, on that channel only, with `echo_seq` = the ping's `seq`, and the pinger records that round trip in the same window. A ping goes as soon as a channel comes up, then every 15 s — traffic the link already had, so nothing new polls. An echo is never answered, and a build that predates it simply does not echo (its peer keeps at most 16 unanswered pings).
 
 Images take the same path as text: a `ClipImage` inline in one frame, up to **3 MB**. The `.proto` comment anticipates chunking large images through `FileChunk`, but a single frame is both simpler and lower-latency on a LAN, and `LanChannel` already caps a frame at 4 MB — which comfortably covers the 1–2 MB screenshot that is the common case. Images above 3 MB are not synced yet; they get picked up when file transfer lands and brings chunk reassembly with it.
 

@@ -5,6 +5,7 @@ import com.fuseos.app.core.DeviceKey
 import com.fuseos.app.data.PeerPresence
 import com.fuseos.app.data.SessionStore
 import com.fuseos.proto.Envelope
+import com.fuseos.proto.Heartbeat
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,6 +57,14 @@ class LanTransport(
 
     /** Envelopes received from any peer. Heartbeats are consumed here, not republished. */
     val incoming: SharedFlow<Envelope> = _incoming.asSharedFlow()
+
+    private val _roundTrips = MutableSharedFlow<Int>(extraBufferCapacity = 8)
+
+    /** A heartbeat's round trip, in ms, as its echo comes back (see `Heartbeat` in the proto). */
+    val roundTrips: SharedFlow<Int> = _roundTrips.asSharedFlow()
+
+    /** Heartbeats sent and not yet echoed: seq → when they went (elapsed nanos). */
+    private val pings = ConcurrentHashMap<Long, Long>()
 
     private val _connectedPeers = MutableStateFlow<Set<String>>(emptySet())
 
@@ -237,10 +246,14 @@ class LanTransport(
     /** Blocking receive loop for one channel; returns when the connection ends. */
     private suspend fun pump(channel: LanChannel) {
         register(channel)
+        // Time the link straight away rather than 15 s from now.
+        ping(channel)
         try {
             while (true) {
                 val envelope = channel.receive()
-                if (envelope.bodyCase != Envelope.BodyCase.HEARTBEAT) {
+                if (envelope.bodyCase == Envelope.BodyCase.HEARTBEAT) {
+                    echo(envelope, channel)
+                } else {
                     // Suspends while a collector is behind, which stops reading the socket
                     // and lets TCP push back on the sender. `tryEmit` dropped the envelope
                     // instead: 64 file chunks queued behind a disk write, and the 65th was
@@ -258,7 +271,29 @@ class LanTransport(
         while (currentCoroutineContext().isActive) {
             kotlinx.coroutines.delay(HEARTBEAT_MS)
             if (channels.isEmpty()) continue
-            broadcast(newEnvelope().setHeartbeat(com.fuseos.proto.Heartbeat.getDefaultInstance()).build())
+            channels.values.forEach(::ping)
+        }
+    }
+
+    /** A heartbeat that asks to be echoed, so the link's round trip stays measured. */
+    private fun ping(channel: LanChannel) {
+        val envelope = newEnvelope().setHeartbeat(Heartbeat.getDefaultInstance()).build()
+        pings[envelope.seq] = System.nanoTime()
+        // Bounded: a peer that never echoes (an older build) must not grow this.
+        if (pings.size > 16) pings.keys.minOrNull()?.let { pings.remove(it) }
+        // A write that fails is how a half-open connection shows itself: close it, and
+        // its pump unregisters it so the dial loop reconnects.
+        runCatching { channel.send(envelope) }.onFailure { channel.close() }
+    }
+
+    /** A ping is answered at once, on its own channel; an echo is timed and never answered. */
+    private fun echo(envelope: Envelope, channel: LanChannel) {
+        val echoSeq = envelope.heartbeat.echoSeq
+        if (echoSeq == 0L) {
+            runCatching { channel.send(newEnvelope().setHeartbeat(Heartbeat.newBuilder().setEchoSeq(envelope.seq)).build()) }
+        } else {
+            val sentAt = pings.remove(echoSeq) ?: return
+            _roundTrips.tryEmit(((System.nanoTime() - sentAt) / 1_000_000).toInt())
         }
     }
 

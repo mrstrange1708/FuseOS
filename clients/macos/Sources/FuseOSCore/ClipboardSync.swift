@@ -74,7 +74,7 @@ public final class ClipboardSync {
     /// sign-out clearing, neither of which is an event worth showing anyone.
     public var onClipEvent: ((ClipEntry) -> Void)?
 
-    /// Each clip's round trip as it is acknowledged (see `SyncLatency`).
+    /// The link's round trip as each clip is acknowledged and each heartbeat echoed (see `SyncLatency`).
     public var onLatency: ((SyncLatency) -> Void)?
     private var latency = LatencyWindow()
     /// Clips sent and not yet acknowledged: seq → when they went, monotonic nanoseconds.
@@ -96,6 +96,12 @@ public final class ClipboardSync {
         self.pasteboard = pasteboard
         self.store = store
         lastChangeCount = pasteboard.changeCount
+        // Heartbeat echoes keep the sync speed live between clips.
+        transport.onRoundTrip = { [weak self] ms in self?.recordLatency(ms) }
+    }
+
+    private func recordLatency(_ ms: Int) {
+        onLatency?(latency.record(ms))
     }
 
     public func start(selfDeviceId: String) {
@@ -376,8 +382,7 @@ public final class ClipboardSync {
             return
         case .ack(let ack):
             guard let sentAt = awaitingAck.removeValue(forKey: ack.refSeq) else { return }
-            let ms = Int((DispatchTime.now().uptimeNanoseconds - sentAt) / 1_000_000)
-            onLatency?(latency.record(ms))
+            recordLatency(Int((DispatchTime.now().uptimeNanoseconds - sentAt) / 1_000_000))
             return
         case .clipText:
             let text = envelope.clipText.text
