@@ -196,14 +196,14 @@ message RemoteInput {
 // Mac -> phone: something for the phone to do.
 //  RING       - play a loud alarm, even on silent, until STOP_RING, a tap on its
 //               notification, or 30 s (Find My, for a phone lost in the sofa).
-//  TAKE_PHOTO - open the camera on the phone; the photo comes back as a ClipImage, so it
-//               lands on the Mac's clipboard ready to paste (Continuity Camera).
+//  3 was TAKE_PHOTO (Continuity Camera), removed on 2026-09-28; reserved, never reuse.
 message PhoneCommand {
   enum Action {
     ACTION_UNSPECIFIED = 0;
     RING               = 1;
     STOP_RING          = 2;
-    TAKE_PHOTO         = 3;
+    reserved 3;
+    reserved "TAKE_PHOTO";
   }
   Action action = 1;
 }

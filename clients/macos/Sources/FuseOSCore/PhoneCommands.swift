@@ -1,7 +1,7 @@
 import Foundation
 
-/// The Mac's side of `PhoneCommand` and `OpenLink`: ring the phone, ask it for a photo,
-/// hand a link over — and open the links the phone hands back.
+/// The Mac's side of `PhoneCommand` and `OpenLink`: ring the phone, hand a link
+/// over — and open the links the phone hands back.
 @MainActor
 public final class PhoneCommands {
     /// A link the phone sent to open here (http/https only; anything else never arrives).
@@ -16,8 +16,6 @@ public final class PhoneCommands {
 
     public func ring() { send(.ring) }
     public func stopRinging() { send(.stopRing) }
-    /// The photo comes back as a clip, so it lands on this Mac's clipboard.
-    public func takePhoto() { send(.takePhoto) }
 
     /// Handoff, Mac → phone. False for anything that is not an http(s) link.
     @discardableResult

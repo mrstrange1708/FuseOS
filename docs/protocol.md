@@ -83,7 +83,7 @@ message Envelope {
 | `CALL_ACTION` | Mac → phone | answer, decline or end the call (§10) |
 | `SCREEN_CONTROL` | either | start / stop / keyframe for screen mirroring (§11) |
 | `SCREEN_FRAME` | phone → Mac | one H.264 access unit of the phone's screen (§11) |
-| `PHONE_COMMAND` | Mac → phone | ring the phone, stop ringing, or open its camera for a photo (§12) |
+| `PHONE_COMMAND` | Mac → phone | ring the phone or stop ringing (§12); `TAKE_PHOTO` was removed and its tag is reserved |
 | `OPEN_LINK` | either | open an http(s) link on the other device (§12) |
 | `MEDIA_STATE` | phone → Mac | what the phone is playing (§13) |
 | `MEDIA_COMMAND` | Mac → phone | play/pause, next, previous, seek (§13) |
@@ -245,10 +245,10 @@ Sharing the channel means a burst of video can delay a clipboard frame behind it
 Small commands, each one message on the LAN channel; none touches the server.
 
 - **Ring** (`PHONE_COMMAND RING`) — the phone plays its alarm sound on the alarm stream at full volume, so silent mode does not mute it, and shows an ongoing notification with Stop. It stops on `STOP_RING`, on that Stop, or after 30 s, and puts the alarm volume back.
-- **Take photo** (`PHONE_COMMAND TAKE_PHOTO`) — Continuity Camera. The phone opens its own camera (asking for the camera permission first if needed). The photo is scaled to a 2560 px long side, JPEG-compressed until it fits one clip frame (3 MB), and sent as a `CLIP_IMAGE` — so it lands on the Mac's clipboard and in history, ready to paste.
+- **Take photo** was removed on 2026-09-28 (the user wanted the phone as a live webcam, which needs a camera system extension and so a paid Apple Team ID). `TAKE_PHOTO` (3) stays reserved in the proto.
 - **Open a link** (`OPEN_LINK`) — Handoff. Phone → Mac through *Open on Mac* in the Android Share sheet; Mac → phone through *Open Link on Phone with FuseOS* in the Services menu or *Open copied link* on Home. The receiver opens **http and https only**; any other scheme is dropped, so a peer cannot make the other device launch arbitrary intents or URL handlers.
 
-Anything the phone must show while FuseOS is in the background (the camera, a link) opens directly when FuseOS holds the overlay permission, which exempts it from Android's background-activity-launch block, and through a tap-to-open notification otherwise.
+Anything the phone must show while FuseOS is in the background (a link, a consent dialog) opens directly when FuseOS holds the overlay permission, which exempts it from Android's background-activity-launch block, and through a tap-to-open notification otherwise.
 
 ## 13. Now Playing
 
