@@ -22,6 +22,10 @@ class AuthApi(
     suspend fun signIn(request: SignInRequest): AuthResponse =
         post("/auth/sign-in/email", request)
 
+    /** Signs in, or up, with an ID token from the phone's Google account picker. */
+    suspend fun signInWithGoogle(request: GoogleSignInRequest): AuthResponse =
+        post("/auth/google", request)
+
     /** Ends this session on the server, so the token stops working at once. Best effort:
      *  signing out locally must not wait on, or fail with, the network. */
     suspend fun signOut(token: String) {

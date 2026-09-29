@@ -19,6 +19,8 @@ final class AuthViewModel: ObservableObject {
     @Published var nameError: String?
 
     private let repository = AuthRepository.shared
+    /// Held while Google's sheet is up: the web session lives only as long as its owner.
+    private var google: GoogleSignIn?
 
     func switchTo(_ newMode: Mode) {
         mode = newMode
@@ -50,6 +52,26 @@ final class AuthViewModel: ObservableObject {
             } catch {
                 self.error = (error as? AuthError)?.message ?? error.localizedDescription
             }
+            isSubmitting = false
+        }
+    }
+
+    func continueWithGoogle() {
+        guard !isSubmitting else { return }
+        error = nil
+        isSubmitting = true
+        let google = GoogleSignIn()
+        self.google = google
+        Task {
+            do {
+                // nil: the sheet was closed — nothing to say.
+                if let idToken = try await google.idToken() {
+                    try await repository.signInWithGoogle(idToken: idToken)
+                }
+            } catch {
+                self.error = (error as? AuthError)?.message ?? error.localizedDescription
+            }
+            self.google = nil
             isSubmitting = false
         }
     }

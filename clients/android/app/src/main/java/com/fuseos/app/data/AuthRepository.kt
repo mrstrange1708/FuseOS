@@ -19,6 +19,11 @@ class AuthRepository(
         session.save(result.token, result.user.email)
     }
 
+    suspend fun signInWithGoogle(idToken: String) {
+        val result = api.signInWithGoogle(GoogleSignInRequest(idToken))
+        session.save(result.token, result.user.email)
+    }
+
     suspend fun signUp(email: String, password: String, name: String) {
         val result = api.signUp(SignUpRequest(email, password, name))
         session.save(result.token, result.user.email)

@@ -18,6 +18,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -148,6 +149,19 @@ fun FusePrimaryButton(
         } else {
             Text(text, style = MaterialTheme.typography.labelLarge)
         }
+    }
+}
+
+/** "Continue with Google", under the primary action on both auth screens. */
+@Composable
+fun FuseGoogleButton(onClick: () -> Unit, enabled: Boolean = true) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().height(52.dp),
+    ) {
+        Text("Continue with Google", style = MaterialTheme.typography.labelLarge)
     }
 }
 

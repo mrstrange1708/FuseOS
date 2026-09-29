@@ -22,6 +22,17 @@ const schema = z.object({
   // Auth falls back to a built-in dev secret and warns.
   BETTER_AUTH_SECRET: z.string().min(32).optional(),
 
+  // This server's public URL (https://… when hosted). Better Auth derives it from each
+  // request when unset, which is fine on a laptop and warned about everywhere else.
+  BETTER_AUTH_URL: z.string().url().optional(),
+
+  // Sign in with Google (docs/api.md). The web client verifies Android's ID tokens (its
+  // audience) and holds the secret; the Mac signs in through an iOS-type client, whose
+  // tokens carry that client's id instead. Google sign-in is off unless all are set.
+  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+  GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+  GOOGLE_MAC_CLIENT_ID: z.string().min(1).optional(),
+
   // Error tracking (Sentry) — optional; disabled if absent.
   SENTRY_DSN: z.string().url().optional(),
 

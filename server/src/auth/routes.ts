@@ -21,6 +21,9 @@ const signInSchema = z.object({
   password: z.string().min(1),
 });
 
+// A Google ID token (a JWT) from the device's own Google sign-in.
+const googleSchema = z.object({ idToken: z.string().min(1).max(8192) });
+
 /** Better Auth's error codes, in this API's words. Anything else passes through. */
 const knownErrors: Record<string, { status: number; code: string; message: string }> = {
   USER_ALREADY_EXISTS: {
@@ -38,6 +41,23 @@ const knownErrors: Record<string, { status: number; code: string; message: strin
     code: 'invalid_credentials',
     message: 'Incorrect email or password.',
   },
+  INVALID_TOKEN: {
+    status: 401,
+    code: 'invalid_google_token',
+    message: "Google didn't confirm that sign-in. Try again.",
+  },
+  PROVIDER_NOT_FOUND: {
+    status: 503,
+    code: 'google_unavailable',
+    message: "Google sign-in isn't set up on this server yet.",
+  },
+  // An account with this email exists and its email was never verified, so it is not
+  // linked to Google (see auth.ts).
+  OAUTH_LINK_ERROR: {
+    status: 409,
+    code: 'use_password',
+    message: 'This email already has a FuseOS account. Sign in with your password.',
+  },
 };
 
 async function forward(
@@ -45,8 +65,9 @@ async function forward(
   reply: FastifyReply,
   body: unknown,
   successStatus?: number,
+  path?: string,
 ): Promise<FastifyReply> {
-  const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
+  const url = new URL(path ?? request.url, `http://${request.headers.host ?? 'localhost'}`);
   const headers = new Headers({ 'content-type': 'application/json' });
   if (request.headers.authorization) headers.set('authorization', request.headers.authorization);
   const response = await getAuth().handler(
@@ -99,6 +120,24 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       });
     }
     return forward(request, reply, { ...parsed.data, email: parsed.data.email.toLowerCase() });
+  });
+
+  // Sign in (or sign up) with Google: the app hands over the ID token it got on the
+  // device, and gets the same `{ token, user }` as an email sign-in.
+  app.post('/auth/google', async (request, reply) => {
+    const parsed = googleSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: { code: 'invalid_request', message: 'Google sign-in failed. Try again.' },
+      });
+    }
+    return forward(
+      request,
+      reply,
+      { provider: 'google', idToken: { token: parsed.data.idToken } },
+      undefined,
+      '/auth/sign-in/social',
+    );
   });
 
   // Ends this device's session; the token stops working at once.

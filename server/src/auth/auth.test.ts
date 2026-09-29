@@ -153,6 +153,24 @@ describe.skipIf(!process.env.DATABASE_URL)('auth (Better Auth, Postgres)', () =>
     await app.close();
   });
 
+  it('asks for a Google ID token', async () => {
+    const res = await buildApp().inject({ method: 'POST', url: '/auth/google', payload: {} });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('invalid_request');
+  });
+
+  it('refuses a forged Google ID token in the API error shape', async () => {
+    const res = await buildApp().inject({
+      method: 'POST',
+      url: '/auth/google',
+      payload: { idToken: 'not-a-google-token' },
+    });
+    // Configured (server/.env): Google's signature check fails. Not configured: says so.
+    const configured = Boolean(process.env.GOOGLE_CLIENT_ID);
+    expect(res.statusCode).toBe(configured ? 401 : 503);
+    expect(res.json().error.code).toBe(configured ? 'invalid_google_token' : 'google_unavailable');
+  });
+
   it('refuses an unknown token', async () => {
     const app = buildApp();
     const res = await app.inject({

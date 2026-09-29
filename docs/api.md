@@ -19,9 +19,22 @@ Better Auth (`server/src/auth/auth.ts`) serves these routes behind a thin adapte
 | --- | --- | --- | --- |
 | POST | `/auth/sign-up/email` | `{ email, password (8–200), name (1–100) }` | `201 { token, user: { id, email, name, … } }` |
 | POST | `/auth/sign-in/email` | `{ email, password }` | `200 { token, user }` |
+| POST | `/auth/google` | `{ idToken }` — a Google ID token | `200 { token, user }`; signs up on first use |
 | POST | `/auth/sign-out` | — (bearer token) | `200`; the token stops working at once |
 
-Errors: `400 invalid_request` (failed validation), `409 email_taken`, `401 invalid_credentials` (unknown email and wrong password answer the same), anything else Better Auth reports as its own code, lower-cased.
+Errors: `400 invalid_request` (failed validation), `409 email_taken`, `401 invalid_credentials` (unknown email and wrong password answer the same), anything else Better Auth reports as its own code, lower-cased. Google adds `401 invalid_google_token`, `409 use_password` and `503 google_unavailable` (below).
+
+**Sign in with Google.** Each app gets the ID token on the device and posts it; the server verifies it against Google's keys (`/auth/sign-in/social` in Better Auth), so no redirect ever reaches the server. Google Cloud project `fuseos-510109` holds four clients:
+
+| Client | Used by | Configured where |
+| --- | --- | --- |
+| Web (`…k5cnmdsu…`) + secret | the server; the audience of Android's tokens | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` in the server env |
+| Android debug, Android release | Google recognising the APK by package + SHA-1 | Google Cloud only (nothing in code) |
+| iOS type (`…lmb0vpom…`) | the Mac: `ASWebAuthenticationSession`, PKCE, reversed-id redirect, no secret | `GoogleSignIn.swift`; `GOOGLE_MAC_CLIENT_ID` in the server env |
+
+Android uses Credential Manager (`GetGoogleIdOption` with the web client as server client id). Either client id is an accepted audience. Google sign-in is off (`503 google_unavailable`) until all three env values are set.
+
+**Linking.** A Google sign-in whose email already has a FuseOS account is linked only if that account's email is verified (Better Auth's `requireLocalEmailVerified`). Otherwise it is refused with `409 use_password`: anyone can register an address without proving it, and linking would let them share — and trust devices on — the real owner's account. Once email verification ships, a verified account links on its first Google sign-in.
 
 **Tokens are opaque session tokens (the bearer plugin), not JWTs.** Each request costs one indexed lookup in `session`. JWTs would save that lookup, but REST is off the clipboard hot path, and a session token can be revoked at once, which a JWT cannot. Sessions last 90 days and are extended at most once a day while the device uses them. A continuity app that signs you out weekly is not worth having.
 

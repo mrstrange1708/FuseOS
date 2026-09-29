@@ -19,12 +19,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.fuseos.app.ui.components.AuthSwitchRow
 import com.fuseos.app.ui.components.ErrorBanner
+import com.fuseos.app.ui.components.FuseGoogleButton
 import com.fuseos.app.ui.components.FusePrimaryButton
 import com.fuseos.app.ui.components.FuseTextField
 import com.fuseos.app.ui.components.FuseWordmark
@@ -33,6 +35,7 @@ import com.fuseos.app.ui.components.FuseWordmark
 fun LoginScreen(viewModel: AuthViewModel) {
     val state by viewModel.state.collectAsState()
     val focus = LocalFocusManager.current
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -96,6 +99,14 @@ fun LoginScreen(viewModel: AuthViewModel) {
                 viewModel.submit()
             },
             loading = state.isSubmitting,
+        )
+        Spacer(Modifier.height(12.dp))
+        FuseGoogleButton(
+            onClick = {
+                focus.clearFocus()
+                viewModel.continueWithGoogle(context)
+            },
+            enabled = !state.isSubmitting,
         )
         Spacer(Modifier.height(12.dp))
         AuthSwitchRow(

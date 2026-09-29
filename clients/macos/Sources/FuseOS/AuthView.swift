@@ -52,6 +52,9 @@ struct LoginView: View {
 
             Spacer().frame(height: 22)
             PrimaryButton(title: "Sign in", loading: viewModel.isSubmitting) { viewModel.submit() }
+            SecondaryButton(title: "Continue with Google") { viewModel.continueWithGoogle() }
+                .disabled(viewModel.isSubmitting)
+                .padding(.top, 10)
             SwitchRow(prompt: "New to FuseOS?", action: "Create account") {
                 viewModel.switchTo(.signUp)
             }
@@ -91,6 +94,9 @@ struct SignUpView: View {
 
             Spacer().frame(height: 22)
             PrimaryButton(title: "Create account", loading: viewModel.isSubmitting) { viewModel.submit() }
+            SecondaryButton(title: "Continue with Google") { viewModel.continueWithGoogle() }
+                .disabled(viewModel.isSubmitting)
+                .padding(.top, 10)
             SwitchRow(prompt: "Already have an account?", action: "Sign in") {
                 viewModel.switchTo(.signIn)
             }

@@ -13,6 +13,12 @@ object Config {
      */
     const val BASE_URL: String = BuildConfig.SERVER_URL
 
+    /**
+     * The Google Cloud web client (project fuseos-510109): the audience of the ID tokens
+     * the account picker issues, and what the server checks them against. Public.
+     */
+    const val GOOGLE_WEB_CLIENT_ID = "988990113872-k5cnmdsuc0rdgocgln75t0l315sjuf6d.apps.googleusercontent.com"
+
     /** The `/signal` presence WebSocket on the same server (http → ws). */
     val SIGNAL_URL: String = BASE_URL.replaceFirst("http", "ws") + "/signal"
 }
