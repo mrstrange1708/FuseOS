@@ -55,6 +55,18 @@ final class SignalClientTests: XCTestCase {
         XCTAssertEqual(client.presence["p"]?.battery, 49)
     }
 
+    /// A rename arrives as a peer-update carrying only the name; it must not cost the peer
+    /// its address or key, and the dashboard reads the name to refresh its roster.
+    func testARenameKeepsTheAddressAndCarriesTheName() {
+        client.handle(#"{"type":"peer-online","deviceId":"p","name":"Pixel 8","publicKey":"KEY","lanAddress":"10.0.0.1:1000"}"#)
+        XCTAssertEqual(client.presence["p"]?.name, "Pixel 8")
+        client.handle(#"{"type":"peer-update","deviceId":"p","name":"nano"}"#)
+
+        XCTAssertEqual(client.presence["p"]?.name, "nano")
+        XCTAssertEqual(client.presence["p"]?.lanAddress, "10.0.0.1:1000")
+        XCTAssertEqual(client.presence["p"]?.publicKey, "KEY")
+    }
+
     /// The merge keeps what a frame omits. `peer-update` carries no publicKey, and losing
     /// it would leave a peer we can see but can never authenticate.
     func testAnUpdateWithoutAPublicKeyKeepsTheOneWeAlreadyHave() {
