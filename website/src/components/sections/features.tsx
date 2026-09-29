@@ -75,8 +75,8 @@ const FEATURES: Feature[] = [
   {
     Icon: IconLink,
     title: 'Links itself',
-    body: 'Sign in to the same account on both devices and they find each other. There are no codes to scan.',
-    spec: 'one account · automatic',
+    body: 'Sign in with Google, or email, on both devices and they find each other. There are no codes to scan.',
+    spec: 'google or email · automatic',
     className: 'md:col-span-2',
   },
   {

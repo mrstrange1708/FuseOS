@@ -8,6 +8,8 @@ import {
   IconCopy,
   IconDeviceDesktop,
   IconExternalLink,
+  IconGauge,
+  IconKey,
   IconHandFinger,
   IconLayoutDashboard,
   IconLock,
@@ -207,7 +209,7 @@ const TILES: Tile[] = [
     Icon: IconCopy,
     title: 'Copy anywhere, keep Gboard',
     body: 'Copy in any Android app and a pop-up asks if it should go to the Mac. One tap. No special keyboard to switch to.',
-    className: 'md:col-span-6',
+    className: 'md:col-span-3',
     art: (
       <div className="mt-6">
         <div className="mx-auto flex max-w-[260px] items-center gap-2.5 rounded-full bg-black px-3 py-2 ring-1 ring-white/10">
@@ -220,6 +222,31 @@ const TILES: Tile[] = [
       </div>
     ),
   },
+  {
+    Icon: IconKey,
+    title: 'Codes, pasted for you',
+    body: 'A sign-in or payment code texted or emailed to your phone shows in the island. Copy it, or Paste it straight into the box you are typing in. It never leaves your Mac.',
+    className: 'md:col-span-3',
+    art: (
+      <div className="mt-6">
+        <Island>
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/10 text-white">
+            <IconKey size={18} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold text-white">Messages</p>
+            <p className="truncate text-[12px] text-white/60">482913 is your verification code</p>
+          </div>
+          <span className="rounded-full bg-ember px-2.5 py-1 font-mono text-[10.5px] font-semibold text-white">
+            Copy 482913
+          </span>
+          <span className="rounded-full bg-ember px-2.5 py-1 text-[10.5px] font-semibold text-white">
+            Paste
+          </span>
+        </Island>
+      </div>
+    ),
+  },
 ];
 
 /** The smaller pieces, together: each one is a line, not a tile. */
@@ -229,6 +256,7 @@ const EXTRAS = [
   { Icon: IconRoute, text: 'Live activities: rides, deliveries, timers' },
   { Icon: IconBatteryCharging, text: 'Battery and charging, both ways' },
   { Icon: IconLayoutDashboard, text: 'A home-screen widget on the phone' },
+  { Icon: IconGauge, text: 'Live sync speed, measured on both apps' },
 ];
 
 function Card({ t }: { t: Tile }) {
@@ -298,7 +326,7 @@ export function Continuity() {
             <Card key={t.title} t={t} />
           ))}
         </ul>
-        <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {EXTRAS.map(({ Icon, text }) => (
             <li
               key={text}
