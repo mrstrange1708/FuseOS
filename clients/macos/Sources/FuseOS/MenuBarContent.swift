@@ -70,7 +70,9 @@ struct MenuBarContent: View {
         }
         .padding(12)
         .frame(width: 360)
+        .fixedSize(horizontal: false, vertical: true)
         .background(FuseColor.bg)
+        .background(GeometryReader { FitMenuWindow(height: $0.size.height) })
         .overlay {
             if dropTargeted {
                 RoundedRectangle(cornerRadius: 14)
@@ -505,6 +507,34 @@ struct MenuBarContent: View {
 // MARK: - Pieces
 
 /// Three rings pulsing out from the Mac: the search, running.
+/// Keeps the popover's window fitted to its content, its top under the menu bar.
+///
+/// `MenuBarExtra` sizes its window once, when it opens. Content that changes while it is
+/// open — a link coming up, a card going away — was clipped when it grew and, when it
+/// shrank, left the window hanging below the menu bar with a strip of nothing above it.
+private struct FitMenuWindow: NSViewRepresentable {
+    let height: CGFloat
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        // After this layout pass: resizing the window from inside it would re-enter it.
+        DispatchQueue.main.async {
+            guard let window = view.window, height > 0 else { return }
+            let content = NSRect(x: 0, y: 0, width: window.contentLayoutRect.width, height: height)
+            let size = window.frameRect(forContentRect: content).size
+            // The content's top just under the menu bar, where the popover opens. The window
+            // reaches higher than its content (a strip the system tucks behind the menu bar),
+            // so the frame's own top is not the anchor.
+            let chrome = window.frame.height - window.contentLayoutRect.maxY
+            let top = (window.screen?.visibleFrame.maxY).map { $0 + chrome } ?? window.frame.maxY
+            let frame = NSRect(x: window.frame.minX, y: top - size.height, width: window.frame.width, height: size.height)
+            guard abs(window.frame.height - frame.height) > 0.5 || abs(window.frame.maxY - top) > 0.5 else { return }
+            window.setFrame(frame, display: true)
+        }
+    }
+}
+
 private struct Radar: View {
     var body: some View {
         ZStack {
