@@ -172,6 +172,15 @@ final class DashboardViewModel: ObservableObject {
             self.notifications.reply(key: key, text: text)
         }
         island.openNotification = { [weak self] key in self?.openNotificationOnPhone(key) }
+        island.useCode = { [weak self] code, paste in
+            guard let self else { return }
+            self.clipboard.copyLocally(code)
+            if paste, Self.pasteIntoFrontApp() {
+                self.island.present(symbol: "checkmark", title: "Code pasted", detail: code)
+            } else {
+                self.island.present(symbol: "doc.on.clipboard", title: "Code copied", detail: "\(code) · press ⌘V to paste")
+            }
+        }
         phone.onOutcome = { [weak self] outcome in self?.presentOutcome(outcome) }
         notifications.onCall = { [weak self] call in
             guard let self else { return }
@@ -650,4 +659,17 @@ final class DashboardViewModel: ObservableObject {
 
     /// Clicking a history entry puts it back on this Mac's clipboard.
     func copyToClipboard(_ entry: ClipEntry) { clipboard.copyToClipboard(entry) }
+
+    /// ⌘V to whatever has focus: the island is a non-activating panel, so that is still the
+    /// field the code is wanted in. Needs Accessibility (already granted for the trackpad
+    /// and unlock); false without it, and the code stays copied.
+    private static func pasteIntoFrontApp() -> Bool {
+        guard AXIsProcessTrusted(), let source = CGEventSource(stateID: .hidSystemState) else { return false }
+        for keyDown in [true, false] {
+            let event = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: keyDown) // "v"
+            event?.flags = .maskCommand
+            event?.post(tap: .cghidEventTap)
+        }
+        return true
+    }
 }
