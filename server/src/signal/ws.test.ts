@@ -243,6 +243,33 @@ describe.skipIf(!process.env.DATABASE_URL)('/signal websocket', () => {
     });
   });
 
+  it('tells an online peer when a device is renamed', async () => {
+    const a = await helloAs(mac);
+    await helloAs(phone);
+    await a.client.waitFor('peer-online');
+
+    // Re-registering with the same key is the rename.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/devices',
+      headers: { authorization: `Bearer ${owner.token}` },
+      payload: { name: 'nano', platform: 'android', publicKey: phone.publicKey },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(await a.client.waitFor('peer-update')).toMatchObject({
+      deviceId: phone.id,
+      name: 'nano',
+    });
+
+    // Back to its fixture name, so no other test depends on running before this one.
+    await app.inject({
+      method: 'POST',
+      url: '/devices',
+      headers: { authorization: `Bearer ${owner.token}` },
+      payload: { name: 'Pixel 8', platform: 'android', publicKey: phone.publicKey },
+    });
+  });
+
   it('sends peer-update when only the lanAddress changes', async () => {
     // Regression guard: a peer that moved is unreachable until its peers hear the
     // new address, so an address-only change must propagate like a battery change.

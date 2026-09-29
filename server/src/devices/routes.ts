@@ -5,6 +5,7 @@ import { authenticate } from '../auth/session.js';
 import { getDb } from '../db/client.js';
 import { devices } from '../db/schema.js';
 import { presence } from '../signal/presence.js';
+import { trustedPeerIds } from './trust.js';
 
 const registerSchema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -71,6 +72,18 @@ export function registerDeviceRoutes(app: FastifyInstance): void {
           message: 'This device key is already registered to another account.',
         },
       });
+    }
+    // Peers draw names from their REST roster, which nothing refreshed on a rename: tell
+    // the online ones, so the other device shows the new name at once, not next launch.
+    // Only for a device already on /signal — clients read any peer-update as "online", and
+    // the launch-time registration comes before the hello, whose peer-online card carries
+    // the name anyway.
+    if (presence.isOnline(device.id)) {
+      for (const peerId of await trustedPeerIds(device.id)) {
+        if (presence.isOnline(peerId)) {
+          presence.sendTo(peerId, { type: 'peer-update', deviceId: device.id, name: device.name });
+        }
+      }
     }
     return reply.status(201).send({
       id: device.id,

@@ -140,13 +140,14 @@ Server → client:
 { "type": "hello-ok",     "deviceId": "uuid", "peers": [ { "deviceId": "uuid", "name": "…", "platform": "macos", "publicKey": "base64…", "lanAddress": "…", "battery": 88, "online": true } ] }
 { "type": "peer-online",  "deviceId": "uuid", "name": "…", "platform": "…", "publicKey": "base64…", "lanAddress": "…", "battery": 88 }
 { "type": "peer-update",  "deviceId": "uuid", "battery": 42, "lanAddress": "192.168.1.20:47100" }
+{ "type": "peer-update",  "deviceId": "uuid", "name": "nano" }             // a rename
 { "type": "peer-offline", "deviceId": "uuid" }
 ```
 
 Semantics:
 - On `hello`, the server authenticates the token, marks the device online, updates `last_seen`/`battery`, replies with `hello-ok` (its trusted, online peers), and relays `peer-online` to those peers. This is the introduction that lets the two devices open a **direct** LAN connection — and, for a device signing in for the first time, it is also the whole linking step.
 - `battery` is operational presence metadata (never a user payload); `peer-update` propagates changes to trusted peers for the dashboard.
-- A peer card carries `publicKey` and `lanAddress` together because both are needed to open the LAN channel: the address says where to dial, the key says who must answer. `peer-update` fires when either `battery` or `lanAddress` changes — an address change matters because a peer that moved is unreachable until its peers hear about it.
+- A peer card carries `publicKey` and `lanAddress` together because both are needed to open the LAN channel: the address says where to dial, the key says who must answer. `peer-update` fires when either `battery` or `lanAddress` changes — an address change matters because a peer that moved is unreachable until its peers hear about it. It also fires with just `name` when an online device re-registers (`POST /devices`), because both apps draw names from their `GET /devices` roster and refetch it when a peer's announced name differs; without it a rename showed on the other device only after a restart. Fields a `peer-update` omits keep their last value.
 - Heartbeats keep the socket alive; a missed threshold marks the device offline. An Inngest presence-timeout sweep self-heals stale state if a socket dies uncleanly.
 - The server does not proxy any clipboard/file data — after the introduction, devices talk directly (see [protocol.md](protocol.md)).
 

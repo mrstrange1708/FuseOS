@@ -111,8 +111,14 @@ class DashboardViewModel(
                 // it exists in the REST roster — which holds the names the UI draws. This
                 // is how a second device shows up with no pairing step, so it has to
                 // self-heal.
+                // A rename arrives the same way (peer-update with a name): the roster is stale.
                 val known = _state.value
-                if (p.keys.any { id -> id != known.selfDevice?.id && known.allPeers.none { it.id == id } }) {
+                if (p.any { (id, peer) ->
+                        id != known.selfDevice?.id &&
+                            known.allPeers.firstOrNull { it.id == id }
+                                .let { listed -> listed == null || (peer.name != null && peer.name != listed.name) }
+                    }
+                ) {
                     refresh()
                 }
             }

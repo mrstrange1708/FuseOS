@@ -10,12 +10,15 @@ public struct PeerPresence {
     public let battery: Int?
     public let publicKey: String?
     public let lanAddress: String?
+    /// The peer's name as the server last announced it; nil until one has been.
+    public let name: String?
 
-    public init(online: Bool, battery: Int?, publicKey: String?, lanAddress: String?) {
+    public init(online: Bool, battery: Int?, publicKey: String?, lanAddress: String?, name: String? = nil) {
         self.online = online
         self.battery = battery
         self.publicKey = publicKey
         self.lanAddress = lanAddress
+        self.name = name
     }
 }
 
@@ -27,6 +30,7 @@ private struct SignalEvent: Decodable {
     let online: Bool?
     let publicKey: String?
     let lanAddress: String?
+    let name: String?
     let peers: [PeerCard]?
 }
 
@@ -36,6 +40,7 @@ private struct PeerCard: Decodable {
     let online: Bool?
     let publicKey: String?
     let lanAddress: String?
+    let name: String?
 }
 
 /// Maintains the `/signal` WebSocket: authenticates with a `hello`, sends battery
@@ -150,14 +155,14 @@ public final class SignalClient {
             for peer in event.peers ?? [] {
                 setPresence(
                     peer.deviceId, online: peer.online ?? true, battery: peer.battery,
-                    publicKey: peer.publicKey, lanAddress: peer.lanAddress,
+                    publicKey: peer.publicKey, lanAddress: peer.lanAddress, name: peer.name,
                 )
             }
         case "peer-online", "peer-update":
             if let id = event.deviceId {
                 setPresence(
                     id, online: true, battery: event.battery,
-                    publicKey: event.publicKey, lanAddress: event.lanAddress,
+                    publicKey: event.publicKey, lanAddress: event.lanAddress, name: event.name,
                 )
             }
         case "peer-offline":
@@ -177,6 +182,7 @@ public final class SignalClient {
         battery: Int?,
         publicKey: String?,
         lanAddress: String?,
+        name: String? = nil,
     ) {
         let existing = presence[deviceId]
         presence[deviceId] = PeerPresence(
@@ -184,6 +190,7 @@ public final class SignalClient {
             battery: battery ?? existing?.battery,
             publicKey: publicKey ?? existing?.publicKey,
             lanAddress: lanAddress ?? existing?.lanAddress,
+            name: name ?? existing?.name,
         )
         onPresenceChanged?(presence)
     }

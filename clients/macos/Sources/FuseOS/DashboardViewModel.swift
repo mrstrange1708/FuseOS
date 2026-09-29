@@ -134,8 +134,11 @@ final class DashboardViewModel: ObservableObject {
             // A device that just signed in on this account arrives as presence before it
             // exists in the REST roster — which holds the names the UI draws. This is how
             // a second device shows up with no pairing step, so it has to self-heal.
-            if presence.keys.contains(where: { id in
-                id != self.selfDevice?.id && !self.allPeers.contains { $0.id == id }
+            // A rename arrives the same way (peer-update with a name): the roster is stale.
+            if presence.contains(where: { id, peer in
+                guard id != self.selfDevice?.id else { return false }
+                guard let listed = self.allPeers.first(where: { $0.id == id }) else { return true }
+                return peer.name.map { $0 != listed.name } ?? false
             }) {
                 Task { await self.refresh() }
             }

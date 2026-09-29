@@ -35,6 +35,8 @@ data class PeerPresence(
     val battery: Int?,
     val publicKey: String?,
     val lanAddress: String?,
+    /** The peer's name as the server last announced it; null until one has been. */
+    val name: String? = null,
 )
 
 @Serializable
@@ -61,6 +63,7 @@ private data class SignalEvent(
     val online: Boolean? = null,
     val publicKey: String? = null,
     val lanAddress: String? = null,
+    val name: String? = null,
     val peers: List<PeerCard>? = null,
 )
 
@@ -71,6 +74,7 @@ private data class PeerCard(
     val online: Boolean? = null,
     val publicKey: String? = null,
     val lanAddress: String? = null,
+    val name: String? = null,
 )
 
 /**
@@ -161,10 +165,10 @@ class SignalClient(
         }
         when (event.type) {
             "hello-ok" -> event.peers?.forEach {
-                setPresence(it.deviceId, it.online ?: true, it.battery, it.publicKey, it.lanAddress)
+                setPresence(it.deviceId, it.online ?: true, it.battery, it.publicKey, it.lanAddress, it.name)
             }
             "peer-online", "peer-update" -> event.deviceId?.let {
-                setPresence(it, true, event.battery, event.publicKey, event.lanAddress)
+                setPresence(it, true, event.battery, event.publicKey, event.lanAddress, event.name)
             }
             // Keep the key and address on the way down: the peer is unreachable now, but
             // the details are still valid when it comes back and save a round trip.
@@ -178,6 +182,7 @@ class SignalClient(
         battery: Int?,
         publicKey: String?,
         lanAddress: String?,
+        name: String? = null,
     ) {
         _presence.update { current ->
             val existing = current[deviceId]
@@ -187,6 +192,7 @@ class SignalClient(
                     battery = battery ?: existing?.battery,
                     publicKey = publicKey ?: existing?.publicKey,
                     lanAddress = lanAddress ?: existing?.lanAddress,
+                    name = name ?: existing?.name,
                 )
                 )
         }
