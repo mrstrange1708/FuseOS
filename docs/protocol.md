@@ -94,6 +94,7 @@ message Envelope {
 | `DEVICE_STATUS` | either | battery and charging, live (§17) |
 | `BEACON_KEY` | Mac → phone | the key the phone's private Bluetooth beacon rotates with (§15) |
 | `UNLOCKED` | either | "my user just unlocked me" (§15) |
+| `BEACON_CHECK` | Mac → phone, answered phone → Mac | "Bluetooth hears you far — beacon at full power"; the answer says whether the beacon is on (§15) |
 | `NOTIFICATION_OPEN` | Mac → phone | the user clicked a mirrored notification; open it on the phone (§10) |
 | `OUTCOME` | either | how something the other device asked for went — a reply, an opened notification, an unlock, a link — with a sentence saying why when it failed (§18) |
 | `REMOTE_INPUT` | Mac → phone | a tap, swipe, long-press, Back/Home/Recents, text or key for the phone to perform (§11) |
@@ -271,7 +272,13 @@ The Mac acts on `POINTER_INPUT` only when **both** gates are open: the user's *L
 
 **Distance.** Wi-Fi cannot tell distance, so the phone runs a private Bluetooth beacon: low power, not connectable, manufacturer data (company id 0xFFFF) = `HMAC-SHA256(key, window)[0..8]`, where the window is unix time in ten-minute steps as an 8-byte big-endian integer (`BeaconToken`; a shared test vector pins both platforms). The Mac sends a fresh random 16-byte key in `BEACON_KEY` on every channel, so nobody without it can recognise or follow the phone, and the value changes every ten minutes. The Mac scans (CoreBluetooth), accepts this or the previous window's value, and keeps a smoothed RSSI: near at −72 dBm or stronger, far at −88 or weaker (a gap, so it does not flap), and far after 25 s without hearing it.
 
-**Lock.** With *Lock this Mac when your phone leaves* on (off by default), the Mac locks only when **both** hold (`AwayLock.shouldLock`, pinned by tests): Bluetooth says **far** — heard, then weak or silent — and the phone's app is provably **alive**, still linked over Wi-Fi (another room) or online via `/signal` (left on mobile data). It is checked 10 s after the phone turns far and 20 s after the channel drops. A dropped channel alone never locks — on the device the link dropped with the phone on the desk (the OS pausing the app) and the old rule locked the user out — and a phone that went quiet (asleep, app killed, battery dead) is not alive, so it never locks either.
+**Lock.** With *Lock this Mac when your phone leaves* on (off by default), Bluetooth and Wi-Fi must agree (`AwayLock.shouldLock`, pinned by tests). Bluetooth is the only signal that measures distance, but Android throttles a background beacon, so a phone lying next to the Mac can go quiet or read weak; Wi-Fi measures nothing, but it is steady. So:
+
+- **Still linked over Wi-Fi** when Bluetooth turns far: the Mac sends `BEACON_CHECK` over the link, the phone beacons at full power (low-latency mode, high TX) for 20 s and answers with `BEACON_CHECK` saying whether its beacon is on. After 15 s the Mac locks only if the beacon is on and it *still* hears the phone far or not at all. A throttled beacon next to the Mac comes back near, which cancels the lock. A phone whose beacon is off (Bluetooth off, refused by Android) gives no distance, so it never locks.
+- **Link down:** checked 20 s after the channel drops (and 10 s after Bluetooth turns far). It locks only if the phone is online via `/signal` on **another network** — its presence `lan_address` is not on the Mac's /24 — because leaving the Wi-Fi is itself a sign it left. On this Wi-Fi with the link down, the app was often paused next to the Mac, and nothing can check it, so it does not lock; a phone gone quiet everywhere (asleep, killed, battery dead) never locks either.
+- A link that comes back while Bluetooth still says far runs the check again.
+
+Skipped locks are logged under `com.fuseos.app` / `unlock` with what each signal said.
 
 **The key survives restarts.** Both sides keep the latest `BEACON_KEY` on disk. Before that, a phone whose process was killed, or a Mac that relaunched, had no key until the next channel, so the beacon was silent or unrecognised and lock and unlock did nothing. The phone beacons as soon as it starts, restarts the beacon when Bluetooth comes back, and shows in Profile what the beacon is doing: broadcasting, Bluetooth off, waiting for the Mac's key, or refused by Android (with its error code). The lock is the same as ⌃⌘Q (`SACLockScreenImmediate`, private, looked up at run time).
 

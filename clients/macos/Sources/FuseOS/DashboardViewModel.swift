@@ -145,6 +145,8 @@ final class DashboardViewModel: ObservableObject {
             self?.clipboard.sendHistory(to: peers)
             self?.status.send(force: true)
             self?.proximityLink.sendBeaconKey()
+            // The link came back while Bluetooth still says far: check again, now it can.
+            if self?.proximity.range == .far { self?.startAwayCheck() }
         }
         startProximity()
         status.onPeerStatus = { [weak self] status in self?.phoneStatus = status }
@@ -414,13 +416,10 @@ final class DashboardViewModel: ObservableObject {
         proximity.onRangeChanged = { [weak self] range in
             guard let self else { return }
             self.farLock?.cancel()
-            guard range == .far, UserDefaults.standard.bool(forKey: ScreenLock.enabledKey) else { return }
-            self.farLock = Task { [weak self] in
-                try? await Task.sleep(nanoseconds: 10_000_000_000)
-                guard !Task.isCancelled, let self, !MacUnlock.isScreenLocked else { return }
-                self.lockIfAway()
-            }
+            self.beaconOn = nil
+            if range == .far { self.startAwayCheck() }
         }
+        proximityLink.onBeaconChecked = { [weak self] on in self?.beaconOn = on }
         proximity.onChange = { [weak self] in
             guard let self else { return }
             self.phoneIsNear = self.proximity.isNear
@@ -477,12 +476,39 @@ final class DashboardViewModel: ObservableObject {
         }
     }
 
-    /// Locks when the phone has really left: Bluetooth far, and its app still alive.
+    /// The phone's answer to the last `BeaconCheck`: nil until it answers.
+    private var beaconOn: Bool?
+
+    /// Bluetooth says far. Linked, the phone is asked over Wi-Fi to beacon at full power
+    /// and the Mac decides at the end of that window — a throttled beacon on a phone next
+    /// to it comes back near, which cancels this. Not linked, it waits the usual 10 s.
+    private func startAwayCheck() {
+        guard UserDefaults.standard.bool(forKey: ScreenLock.enabledKey) else { return }
+        farLock?.cancel()
+        let linked = !connected.isEmpty
+        beaconOn = nil
+        if linked { proximityLink.checkBeacon() }
+        farLock = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64((linked ? AwayLock.checkWindow : 10) * 1_000_000_000))
+            guard !Task.isCancelled, !MacUnlock.isScreenLocked else { return }
+            self?.lockIfAway()
+        }
+    }
+
+    /// Locks when the phone has really left — Bluetooth and Wi-Fi agree (see `AwayLock`).
     private func lockIfAway() {
-        let online = allPeers.contains { onlineState(for: $0).online && $0.platform == "android" }
+        let here = transport.lanAddress()
+        let elsewhere = allPeers.contains { peer in
+            let presence = onlineState(for: peer)
+            return peer.platform == "android" && presence.online && !AwayLock.sameNetwork(presence.lanAddress, here)
+        }
+        let linked = !connected.isEmpty
         guard AwayLock.shouldLock(enabled: UserDefaults.standard.bool(forKey: ScreenLock.enabledKey),
-                                  bluetoothFar: proximityRangeIsFar,
-                                  linkedNow: !connected.isEmpty, phoneOnlineViaServer: online) else { return }
+                                  bluetoothFar: proximityRangeIsFar, linkedNow: linked,
+                                  checkConfirmedFar: beaconOn == true, phoneOnAnotherNetwork: elsewhere) else {
+            FuseLog.unlock.info("away-lock skipped: far \(self.proximityRangeIsFar), linked \(linked), beacon \(String(describing: self.beaconOn), privacy: .public), elsewhere \(elsewhere)")
+            return
+        }
         ScreenLock.lockNow()
     }
 

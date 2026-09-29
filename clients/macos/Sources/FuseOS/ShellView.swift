@@ -973,7 +973,7 @@ private struct AccountPane: View {
                         SettingSwitch(
                             symbol: "lock",
                             title: "Lock this Mac when your phone leaves",
-                            detail: "When your phone walks away — Bluetooth hears it go — the Mac locks. A dropped Wi-Fi link alone never locks it.",
+                            detail: "When your phone walks away, the Mac locks — once Bluetooth hears it go and Wi-Fi confirms it. A weak Bluetooth moment or a dropped Wi-Fi link alone never locks it.",
                             isOn: $lockWhenPhoneLeaves,
                         )
                         .onChange(of: lockWhenPhoneLeaves) { _ in viewModel.proximitySettingsChanged() }

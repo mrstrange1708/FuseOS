@@ -293,7 +293,7 @@ public final class LanTransport {
                     onSidecarEnvelope?(envelope)
                 case .some(.deviceStatus):
                     onStatusEnvelope?(envelope)
-                case .some(.beaconKey), .some(.unlocked):
+                case .some(.beaconKey), .some(.unlocked), .some(.beaconCheck):
                     onProximityEnvelope?(envelope)
                 }
             } catch {

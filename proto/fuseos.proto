@@ -58,6 +58,7 @@ message Envelope {
     Unlocked unlocked = 36;
     NotificationOpen notification_open = 37;
     Outcome outcome = 38;
+    BeaconCheck beacon_check = 39;
   }
 }
 
@@ -364,6 +365,15 @@ message BeaconKey {
 // unlocks. The Mac sends it on unlock, and the phone wakes its screen (an app cannot get
 // past the phone's own lock).
 message Unlocked {}
+
+// Mac -> phone: "Bluetooth says you are far — prove it." Sent over the LAN link, which is
+// steadier than the beacon, before the Mac locks. The phone beacons at full power for a
+// few seconds and answers with the same message, saying whether its beacon is on; the
+// Mac locks only if it is and it still hears the phone far or not at all. A beacon the
+// OS throttled on a phone lying next to the Mac comes back strong and nothing locks.
+message BeaconCheck {
+  bool broadcasting = 1; // phone -> Mac only
+}
 
 // Mac -> phone: the user clicked a mirrored notification; open it on the phone, as a tap
 // in the shade would (its app's own content intent).

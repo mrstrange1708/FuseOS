@@ -2,7 +2,8 @@ import Foundation
 import Security
 
 /// The wire side of nearby lock and unlock: a fresh beacon key for the phone on every
-/// channel, and "I was just unlocked" both ways (`BeaconKey`, `Unlocked`).
+/// channel, "I was just unlocked" both ways, and the check before an away-lock
+/// (`BeaconKey`, `Unlocked`, `BeaconCheck`).
 @MainActor
 public final class ProximityLink {
     /// The key the phone's beacon is being derived from right now. Kept on disk, like the
@@ -12,6 +13,8 @@ public final class ProximityLink {
     static let keyDefault = "beaconKey"
     public var onBeaconKeyChanged: ((Data) -> Void)?
     public var onPeerUnlocked: (() -> Void)?
+    /// The phone's answer to `checkBeacon()`: whether its beacon is on.
+    public var onBeaconChecked: ((Bool) -> Void)?
 
     private let transport: LanTransport
 
@@ -40,7 +43,18 @@ public final class ProximityLink {
         transport.broadcast(envelope)
     }
 
+    /// Bluetooth says the phone is far: ask it, over the LAN, to beacon at full power.
+    public func checkBeacon() {
+        var envelope = transport.newEnvelope()
+        envelope.beaconCheck = FuseBeaconCheck()
+        transport.broadcast(envelope)
+    }
+
     func receive(_ envelope: FuseEnvelope) {
-        if case .unlocked = envelope.body { onPeerUnlocked?() }
+        switch envelope.body {
+        case .unlocked: onPeerUnlocked?()
+        case .beaconCheck(let check): onBeaconChecked?(check.broadcasting)
+        default: break
+        }
     }
 }
