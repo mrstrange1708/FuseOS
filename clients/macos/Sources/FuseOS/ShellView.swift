@@ -84,7 +84,7 @@ struct ShellView: View {
         case .screen:
             ScreenPane(viewModel: viewModel)
         case .account:
-            AccountPane(viewModel: viewModel, onLinkManually: { showPairing = true })
+            AccountPane(viewModel: viewModel, onOpenDevices: { go(.devices) })
         }
     }
 
@@ -899,7 +899,7 @@ private struct DevicesPane: View {
 private struct AccountPane: View {
     @EnvironmentObject var session: SessionStore
     @ObservedObject var viewModel: DashboardViewModel
-    let onLinkManually: () -> Void
+    let onOpenDevices: () -> Void
 
     @State private var draftName = ""
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
@@ -1029,15 +1029,25 @@ private struct AccountPane: View {
 
                 Panel(title: "Account") {
                     VStack(alignment: .leading, spacing: 12) {
+                        // Linked already: say so, rather than offer a code nobody needs. Not
+                        // linked: Devices is where the phone is found, or linked with a code.
                         HStack {
+                            let linked = !viewModel.connected.isEmpty
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Link with a code").font(.system(size: 13, weight: .medium))
-                                Text("Devices on this account link themselves; this is the fallback.")
+                                Text(linked ? "Linked with \(viewModel.peerName ?? "your phone")" : "Not linked")
+                                    .font(.system(size: 13, weight: .medium))
+                                Text(linked
+                                    ? "Your devices are already connected."
+                                    : "Find your phone, or link it with a code, in Devices.")
                                     .font(.system(size: 11.5)).foregroundStyle(FuseColor.muted)
                             }
                             Spacer()
-                            Button("Show code", action: onLinkManually)
-                                .buttonStyle(CapsuleButtonStyle(prominent: false))
+                            if linked {
+                                StatusPill(linked: true, text: "Linked")
+                            } else {
+                                Button("Open Devices", action: onOpenDevices)
+                                    .buttonStyle(CapsuleButtonStyle(prominent: true))
+                            }
                         }
                         Divider().opacity(0.5)
                         HStack {
