@@ -212,8 +212,9 @@ A copy made while the devices were apart never reaches the other side, and on An
 1. Whenever a channel comes up (reconnects included), **each end** sends `HISTORY_SYNC` with its recent history, newest first, up to **3 MB** so one frame stays under `LanChannel`'s 4 MB cap. An image too large for what is left of the budget is skipped, not the rest of the list.
 2. The receiver adds each entry it does not already hold — matched by the same content hash `LoopGuard` uses — at its original `at_unix_ms`, re-sorts, and trims to its usual caps.
 3. **History only.** The clipboard is not written, the island stays quiet, and a `HISTORY_SYNC` is never answered with another one. That is why it cannot loop, and why it does not pass through `LoopGuard`.
+4. **History is per device.** Every entry remembers the peer it crossed with (`source_device_id` for what arrived, the linked peer for what was sent). Each end shows only the entries of the peers linked right now, plus copies made while nothing was linked; with nothing linked, that is all it shows. `HISTORY_SYNC` goes to the joining peer alone and carries only that peer's entries — the unsent copies are handed to it first — so a second phone never receives the first one's clips. Entries stored before this rule have no peer and are dropped on load.
 
-Both clients: `ClipboardSync.sendHistory()` / `merge()`.
+Both clients: `ClipboardSync.sendHistory()` / `merge()` / `publish()`.
 
 ## 10. Notification sync
 

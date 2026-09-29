@@ -93,7 +93,7 @@ class DashboardViewModel(
     init {
         if (DemoMode.isOn) {
             _state.value = DemoMode.state()
-            clipboard.merge(DemoMode.history())
+            clipboard.merge(DemoMode.history(), from = null)
             ServiceLocator.transfers.showForDemo(DemoMode.transfers())
         } else {
             startLive()

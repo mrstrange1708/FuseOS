@@ -93,9 +93,13 @@ class LanTransport(
             .setSessionId(sessionId)
             .setSentAtUnixMs(System.currentTimeMillis())
 
-    /** Fail-soft broadcast to every connected peer; a dead channel is dropped, not thrown. */
-    fun broadcast(envelope: Envelope) {
+    /**
+     * Fail-soft broadcast to every connected peer (or only those in [only]); a dead channel
+     * is dropped, not thrown.
+     */
+    fun broadcast(envelope: Envelope, only: Set<String>? = null) {
         for ((peerId, channel) in channels) {
+            if (only != null && peerId !in only) continue
             try {
                 channel.send(envelope)
             } catch (e: Exception) {

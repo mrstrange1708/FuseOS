@@ -141,8 +141,8 @@ final class DashboardViewModel: ObservableObject {
             }
         }
         // Both ends send their history on every new channel, and each merges what it lacks.
-        transport.onPeersJoined = { [weak self] _ in
-            self?.clipboard.sendHistory()
+        transport.onPeersJoined = { [weak self] peers in
+            self?.clipboard.sendHistory(to: peers)
             self?.status.send(force: true)
             self?.proximityLink.sendBeaconKey()
         }
@@ -223,6 +223,8 @@ final class DashboardViewModel: ObservableObject {
             guard let self else { return }
             let left = self.connected.subtracting(peers)
             self.connected = peers
+            // History shows only the linked device's clips.
+            self.clipboard.publish()
             if !left.isEmpty { self.watchForAway() }
             if peers.isEmpty {
                 self.phoneStatus = nil

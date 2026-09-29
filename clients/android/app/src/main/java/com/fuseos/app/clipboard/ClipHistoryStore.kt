@@ -21,12 +21,17 @@ class ClipHistoryStore(private val directory: File) {
     private val index = File(directory, "history.json")
     private val blobs = File(directory, "blobs")
 
-    /** Newest first, oldest entries dropped if they no longer fit the caps. */
+    /**
+     * Newest first, oldest entries dropped if they no longer fit the caps. A record from
+     * before history was kept per device has no "peer" and is dropped: nothing says whose
+     * it was. "" is a copy not sent yet.
+     */
     fun load(): List<ClipEntry> = runCatching {
         if (!index.exists()) return emptyList()
         val array = JSONArray(index.readText())
         (0 until array.length()).mapNotNull { i ->
             val o = array.getJSONObject(i)
+            if (!o.has("peer")) return@mapNotNull null
             val blob = o.optString("blob").takeIf { it.isNotEmpty() }
             val bytes = blob?.let { name ->
                 File(blobs, name).takeIf { it.exists() }?.readBytes()
@@ -41,6 +46,7 @@ class ClipHistoryStore(private val directory: File) {
                 mime = o.optString("mime").takeIf { it.isNotEmpty() },
                 fromSelf = o.getBoolean("fromSelf"),
                 atUnixMs = o.getLong("at"),
+                peer = o.getString("peer").ifEmpty { null },
             )
         }
     }.onFailure { Log.w(TAG, "history unreadable, starting empty: ${it.message}") }
@@ -58,6 +64,7 @@ class ClipHistoryStore(private val directory: File) {
                     .put("id", entry.id)
                     .put("fromSelf", entry.fromSelf)
                     .put("at", entry.atUnixMs)
+                    .put("peer", entry.peer.orEmpty())
                 entry.text?.let { o.put("text", it) }
                 entry.mime?.let { o.put("mime", it) }
                 entry.imageBytes?.let { bytes ->

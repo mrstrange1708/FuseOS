@@ -180,9 +180,10 @@ public final class LanTransport {
         }
     }
 
-    /// Fail-soft broadcast to every connected peer; a dead channel is dropped, not thrown.
-    func broadcast(_ envelope: FuseEnvelope) {
-        for (peerId, channel) in channels {
+    /// Fail-soft broadcast to every connected peer (or only those in `only`); a dead
+    /// channel is dropped, not thrown.
+    func broadcast(_ envelope: FuseEnvelope, only: Set<String>? = nil) {
+        for (peerId, channel) in channels where only?.contains(peerId) ?? true {
             Task { [weak self] in
                 do {
                     try await channel.send(envelope)
