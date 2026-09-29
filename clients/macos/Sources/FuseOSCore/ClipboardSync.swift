@@ -283,6 +283,19 @@ public final class ClipboardSync {
         return entry.text.map { LoopGuard.hash($0) }
     }
 
+    /// Puts text on this Mac's clipboard and nowhere else: a one-time code from the phone's
+    /// own notification has no business going back to the phone, or into the history.
+    public func copyLocally(_ text: String) {
+        if var loopGuard = guard_ {
+            loopGuard.recordApplied(contentHash: LoopGuard.hash(text), sentAtUnixMs: Int64(Date().timeIntervalSince1970 * 1000))
+            guard_ = loopGuard
+        }
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        // Absorbed, so the poll never sees it as a copy of the user's.
+        lastChangeCount = pasteboard.changeCount
+    }
+
     /// Put a history entry back on this device's clipboard — the point of a history.
     public func copyToClipboard(_ entry: ClipEntry) {
         // Goes through the same guard as an inbound apply, so re-copying an old item

@@ -48,6 +48,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.BatteryStd
+import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -297,18 +299,34 @@ private fun LinkHero(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
-        val facts = listOfNotNull(
-            peerBattery?.let { if (peerCharging) "⚡ Charging $it%" else "Battery $it%" },
-            // The PRD's yardstick — p95 under 300 ms — shown where people look.
-            latency?.takeIf { linked }?.let { "Sync ${it.lastMs} ms · p95 ${it.p95Ms} ms" },
-        )
-        if (facts.isNotEmpty()) {
+        // The PRD's yardstick — p95 under 300 ms — shown where people look.
+        val sync = latency?.takeIf { linked }?.let { "Sync ${it.lastMs} ms · p95 ${it.p95Ms} ms" }
+        if (peerBattery != null || sync != null) {
             Spacer(Modifier.height(6.dp))
-            Text(
-                facts.joinToString("  ·  "),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (peerBattery != null) {
+                    // The system's battery glyphs, as the Mac uses SF Symbols — not an emoji.
+                    Icon(
+                        if (peerCharging) Icons.Rounded.BatteryChargingFull else Icons.Rounded.BatteryStd,
+                        contentDescription = if (peerCharging) "Charging" else "Battery",
+                        tint = if (peerCharging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(15.dp),
+                    )
+                    Spacer(Modifier.width(3.dp))
+                    Text(
+                        if (peerCharging) "$peerBattery% · charging" else "$peerBattery%",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (peerCharging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (sync != null) {
+                    Text(
+                        if (peerBattery != null) "  ·  $sync" else sync,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }

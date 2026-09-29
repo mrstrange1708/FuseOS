@@ -22,6 +22,8 @@ final class ClipIsland {
     var reply: (String, String) -> Void = { _, _ in }
     /// A click on a mirrored notification: open it on the phone.
     var openNotification: (String) -> Void = { _ in }
+    /// A one-time code in a notification: copy it, or copy it and paste (true).
+    var useCode: (String, Bool) -> Void = { _, _ in }
 
     init() {
         model.onReply = { [weak self] key, text in
@@ -32,6 +34,7 @@ final class ClipIsland {
         model.onHoverChange = { [weak self] inside in self?.hoverChanged(inside) }
         model.onReplyTap = { [weak self] in self?.beginReply() }
         model.onReplyCancel = { [weak self] in self?.cancelReply() }
+        model.onCode = { [weak self] code, paste in self?.useCode(code, paste) }
     }
 
     /// The pointer on the island holds it open; leaving lets it go after a beat. A ringing
@@ -269,6 +272,7 @@ private final class IslandModel: ObservableObject {
     var onReplyCancel: (() -> Void)?
     var onHoverChange: ((Bool) -> Void)?
     var onReplyTap: (() -> Void)?
+    var onCode: ((String, Bool) -> Void)?
     enum CallButton { case answer, decline, end }
     var onCall: ((CallButton) -> Void)?
 }
@@ -406,7 +410,14 @@ private struct IslandView: View {
                         incoming: true,
                         trailing: n.canReply ? "" : nil,
                     )
-                    if n.canReply && model.replyDraft == nil {
+                    // A code is for pasting, not replying to: it takes the Reply slot.
+                    if let code = OneTimeCode.find(in: n.title + " " + n.text), model.replyDraft == nil {
+                        pill("Copy \(code)") { model.onCode?(code, false) }
+                        // Paste types ⌘V into the app you're in — the island never takes focus.
+                        if AXIsProcessTrusted() {
+                            pill("Paste") { model.onCode?(code, true) }
+                        }
+                    } else if n.canReply && model.replyDraft == nil {
                         pill("Reply") { model.onReplyTap?() }
                     }
                 }
