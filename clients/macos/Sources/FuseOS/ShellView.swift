@@ -550,7 +550,9 @@ private struct LinkHero: View {
         // Aligned on the circles' centres, not the stack's: the names under the circles
         // would otherwise pull the wave off the line between the two devices.
         HStack(alignment: .deviceCentre, spacing: 0) {
-            ZStack {
+            // On the circle's centre too, not the circle-and-name stack's, so the rings
+            // ripple out of the Mac itself.
+            ZStack(alignment: Alignment(horizontal: .center, vertical: .deviceCentre)) {
                 if !linked {
                     if search == .searching {
                         Ripples().frame(width: 200, height: 200).transition(.opacity)

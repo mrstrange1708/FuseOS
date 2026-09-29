@@ -435,7 +435,8 @@ class ClipboardSync(
         // An ack without a transfer id acknowledges one of our clips: time the round trip.
         if (envelope.bodyCase == Envelope.BodyCase.ACK && envelope.ack.refTransferId.isEmpty()) {
             val sentAt = awaitingAck.remove(envelope.ack.refSeq) ?: return
-            _latency.value = latencyWindow.record(((System.nanoTime() - sentAt) / 1_000_000).toInt())
+            if (!RoundTrip.isFresh(envelope.sentAtUnixMs)) return
+            transport.roundTrip(sentAt)?.let { _latency.value = latencyWindow.record(it) }
             return
         }
         val content = when (envelope.bodyCase) {
@@ -472,8 +473,9 @@ class ClipboardSync(
             else -> return
         }
         withContext(Dispatchers.Main) { clipboard.setPrimaryClip(clip) }
-        // Tell the sender it landed, so it can time the round trip.
-        withContext(Dispatchers.IO) {
+        // Tell the sender it landed, so it can time the round trip — unless the clip sat in
+        // a buffer while we slept (Doze), which would time our sleep ([RoundTrip]).
+        if (RoundTrip.isFresh(envelope.sentAtUnixMs)) withContext(Dispatchers.IO) {
             transport.broadcast(
                 transport.newEnvelope().setAck(Ack.newBuilder().setRefSeq(envelope.seq)).build(),
             )

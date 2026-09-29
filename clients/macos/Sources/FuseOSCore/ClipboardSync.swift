@@ -381,8 +381,10 @@ public final class ClipboardSync {
             merge(sync, from: envelope.sourceDeviceID)
             return
         case .ack(let ack):
-            guard let sentAt = awaitingAck.removeValue(forKey: ack.refSeq) else { return }
-            recordLatency(Int((DispatchTime.now().uptimeNanoseconds - sentAt) / 1_000_000))
+            guard let sentAt = awaitingAck.removeValue(forKey: ack.refSeq),
+                  RoundTrip.isFresh(sentAtUnixMs: envelope.sentAtUnixMs),
+                  let ms = transport.roundTrip(since: sentAt) else { return }
+            recordLatency(ms)
             return
         case .clipText:
             let text = envelope.clipText.text
@@ -428,10 +430,13 @@ public final class ClipboardSync {
 
         record(text: entry.text, imageData: entry.image, mime: entry.mime, fromSelf: false, peer: envelope.sourceDeviceID)
         write()
-        // Tell the sender it landed, so it can time the round trip.
-        var ack = transport.newEnvelope()
-        ack.ack = FuseAck.with { $0.refSeq = envelope.seq }
-        transport.broadcast(ack)
+        // Tell the sender it landed, so it can time the round trip — unless the clip sat
+        // in a buffer while we slept, which would time our sleep (`RoundTrip`).
+        if RoundTrip.isFresh(sentAtUnixMs: envelope.sentAtUnixMs) {
+            var ack = transport.newEnvelope()
+            ack.ack = FuseAck.with { $0.refSeq = envelope.seq }
+            transport.broadcast(ack)
+        }
         // Deliberately do NOT absorb the bumped changeCount here. Letting the next poll
         // see the change is what delivers the echo to `checkForLocalChange`, where the
         // one-shot hash suppression consumes it. Absorbing it instead leaves that

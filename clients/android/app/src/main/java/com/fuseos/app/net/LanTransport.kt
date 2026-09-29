@@ -1,6 +1,7 @@
 package com.fuseos.app.net
 
 import android.util.Log
+import com.fuseos.app.clipboard.RoundTrip
 import com.fuseos.app.core.DeviceKey
 import com.fuseos.app.data.PeerPresence
 import com.fuseos.app.data.SessionStore
@@ -66,6 +67,9 @@ class LanTransport(
     /** Heartbeats sent and not yet echoed: seq → when they went (elapsed nanos). */
     private val pings = ConcurrentHashMap<Long, Long>()
 
+    /** When a bulk frame last finished crossing, either way (nanoTime). See [RoundTrip]. */
+    @Volatile private var lastBulkAt = System.nanoTime()
+
     private val _connectedPeers = MutableStateFlow<Set<String>>(emptySet())
 
     /** Peers with a live direct channel right now — what the UI's "connected" chip reads. */
@@ -111,6 +115,7 @@ class LanTransport(
             if (only != null && peerId !in only) continue
             try {
                 channel.send(envelope)
+                noteTraffic(envelope)
             } catch (e: Exception) {
                 unregister(peerId, channel)
                 channel.close()
@@ -251,6 +256,7 @@ class LanTransport(
         try {
             while (true) {
                 val envelope = channel.receive()
+                noteTraffic(envelope)
                 if (envelope.bodyCase == Envelope.BodyCase.HEARTBEAT) {
                     echo(envelope, channel)
                 } else {
@@ -286,14 +292,28 @@ class LanTransport(
         runCatching { channel.send(envelope) }.onFailure { channel.close() }
     }
 
-    /** A ping is answered at once, on its own channel; an echo is timed and never answered. */
+    private fun noteTraffic(envelope: Envelope) {
+        if (RoundTrip.isBulk(envelope)) lastBulkAt = System.nanoTime()
+    }
+
+    /** The round trip since [sentAt] in ms, or null if it measured a queue, not the link. */
+    fun roundTrip(sentAt: Long): Int? = RoundTrip.ms(sentAt, System.nanoTime(), lastBulkAt)
+
+    /**
+     * A ping is answered at once, on its own channel; an echo is timed and never answered.
+     * A stale one is neither: it waited in a buffer while one of us slept ([RoundTrip]).
+     */
     private fun echo(envelope: Envelope, channel: LanChannel) {
         val echoSeq = envelope.heartbeat.echoSeq
+        if (!RoundTrip.isFresh(envelope.sentAtUnixMs)) {
+            if (echoSeq != 0L) pings.remove(echoSeq)
+            return
+        }
         if (echoSeq == 0L) {
             runCatching { channel.send(newEnvelope().setHeartbeat(Heartbeat.newBuilder().setEchoSeq(envelope.seq)).build()) }
         } else {
             val sentAt = pings.remove(echoSeq) ?: return
-            _roundTrips.tryEmit(((System.nanoTime() - sentAt) / 1_000_000).toInt())
+            roundTrip(sentAt)?.let { _roundTrips.tryEmit(it) }
         }
     }
 
