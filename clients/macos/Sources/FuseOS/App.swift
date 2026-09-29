@@ -28,6 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// The one way to show the main window: Dock click, menu bar, or a Service.
     @MainActor func showMainWindow() {
+        // Into the Dock first, so the window arrives as a normal app window, not a stray.
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         if let openMain {
             openMain()
@@ -44,7 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        DockIcon.apply(DockIcon.isShown)
+        DockIcon.watch()
         if let directory = DemoMode.directory {
             Task { @MainActor in await DemoMode.snapshot(to: directory) }
         }
@@ -160,14 +162,36 @@ private struct MenuIconLabel: View {
     }
 }
 
-/// Whether FuseOS has a Dock icon. The menu bar item stays either way, so hiding the Dock
-/// icon never leaves the app unreachable.
+/// Whether FuseOS has a Dock icon: always while its window is open — an open window with
+/// no Dock icon reads as a broken app, and ⌘Tab can't reach it — and, once the window is
+/// closed, only if the user keeps it there ("Show in Dock"). The menu bar item stays either
+/// way, so a hidden icon never leaves the app unreachable.
 enum DockIcon {
     static let key = "showInDock"
 
-    static var isShown: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
+    /// Kept in the Dock even with the window closed.
+    static var isPinned: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
 
-    @MainActor static func apply(_ shown: Bool) {
-        NSApp.setActivationPolicy(shown ? .regular : .accessory)
+    private static var observers: [NSObjectProtocol] = []
+
+    @MainActor static func update() {
+        // The menu bar's own window is a panel and never counts.
+        let windowOpen = NSApp.windows.contains { $0.isVisible && $0.canBecomeMain && !($0 is NSPanel) }
+            || NSApp.windows.contains { $0.isMiniaturized }
+        let wanted: NSApplication.ActivationPolicy = isPinned || windowOpen ? .regular : .accessory
+        guard NSApp.activationPolicy() != wanted else { return }
+        NSApp.setActivationPolicy(wanted)
+    }
+
+    /// Follows the main window opening and closing for the life of the app.
+    @MainActor static func watch() {
+        let center = NotificationCenter.default
+        // A closing window is still visible when it says so; look once it has gone.
+        let later: (Notification) -> Void = { _ in DispatchQueue.main.async { MainActor.assumeIsolated { update() } } }
+        for name in [NSWindow.didBecomeMainNotification, NSWindow.willCloseNotification,
+                     NSWindow.didMiniaturizeNotification, NSWindow.didDeminiaturizeNotification] {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main, using: later))
+        }
+        update()
     }
 }
