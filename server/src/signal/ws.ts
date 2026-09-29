@@ -124,7 +124,14 @@ export function attachSignal(app: FastifyInstance): void {
             .update(devices)
             .set({ lastSeen: new Date(), ...(battery !== undefined ? { battery } : {}) })
             .where(eq(devices.id, device.id));
-          presence.add({ deviceId: device.id, userId, socket: ws, lanAddress, battery });
+          presence.add({
+            deviceId: device.id,
+            userId,
+            socket: ws,
+            lanAddress,
+            battery,
+            lastHeard: Date.now(),
+          });
 
           // Tell the newcomer which trusted peers are already online...
           const peerIds = await trustedPeerIds(device.id);
@@ -146,6 +153,9 @@ export function attachSignal(app: FastifyInstance): void {
           }
           return;
         }
+
+        // Any frame proves the socket alive (the presence sweep closes silent ones).
+        presence.heard(device.id, ws);
 
         const heartbeat = heartbeatSchema.safeParse(payload);
         if (heartbeat.success) {

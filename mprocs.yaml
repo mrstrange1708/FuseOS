@@ -5,6 +5,12 @@ procs:
   server:
     shell: pnpm --filter server dev
 
+  inngest:
+    # Durable jobs (server/src/jobs): presence sweep, verification / welcome / new-device
+    # emails. Dashboard at http://localhost:8288 — every run, its steps and its result.
+    # Needs INNGEST_DEV=1 in server/.env.
+    shell: npx --yes inngest-cli@latest dev -u http://localhost:3000/api/inngest --no-discovery
+
   mac:
     # Run the .app bundle, not `swift run` — LAN permission is keyed to a bundle id
     # (see clients/macos/README.md). The pane exits once the app is launched; press

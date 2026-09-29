@@ -5,6 +5,7 @@ import { bearer } from 'better-auth/plugins';
 import { scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { env } from '../config/env.js';
+import { emit } from '../jobs/inngest.js';
 import { getDb } from '../db/client.js';
 import { account, session, user, verification } from '../db/schema.js';
 
@@ -60,6 +61,17 @@ function createAuth() {
     },
     // A continuity app that signs you out every week is not worth having: 90 days,
     // extended at most once a day while the app is used.
+    // Confirming the email is what lets a Google sign-in link to this account later (see
+    // socialProviders). Sign-in is not blocked on it. The mail itself is an Inngest job.
+    emailVerification: {
+      sendOnSignUp: true,
+      sendVerificationEmail: async ({ user, url }) => {
+        emit({ name: 'auth/verification.requested', data: { userId: user.id, url } });
+      },
+      afterEmailVerification: async (user) => {
+        emit({ name: 'auth/email.verified', data: { userId: user.id } });
+      },
+    },
     // Both apps get a Google ID token on the device and send it here (`/auth/google`);
     // either client id is a valid audience. Linking to an existing account needs that
     // account's email verified (Better Auth's default) — otherwise whoever registered

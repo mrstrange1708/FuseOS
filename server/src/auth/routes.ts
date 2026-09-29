@@ -140,6 +140,31 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     );
   });
 
+  // The link in the verification email. Better Auth checks the token and answers with a
+  // redirect (with ?error= on failure); a person clicked it, so they get a page, not JSON.
+  app.get('/auth/verify-email', async (request, reply) => {
+    const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
+    const response = await getAuth().handler(new Request(url, { method: 'GET' }));
+    const failed =
+      response.status >= 400 || (response.headers.get('location') ?? '').includes('error=');
+    return reply
+      .status(failed ? 400 : 200)
+      .type('text/html; charset=utf-8')
+      .send(
+        page(
+          failed ? 'That link has expired' : 'Email confirmed',
+          failed
+            ? 'Sign in to FuseOS and ask for a new confirmation email.'
+            : 'Thanks — your FuseOS account is confirmed. You can close this page.',
+        ),
+      );
+  });
+
   // Ends this device's session; the token stops working at once.
   app.post('/auth/sign-out', async (request, reply) => forward(request, reply, {}));
+}
+
+/** A minimal page for links opened in a browser. Only fixed strings go in — nothing echoed. */
+function page(title: string, body: string): string {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · FuseOS</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0a0b10;color:#f3f4f6;font:16px/1.5 system-ui,sans-serif}main{max-width:26rem;padding:2rem;text-align:center}h1{color:#ff7a45;font-size:1.6rem;margin:0 0 .5rem}</style></head><body><main><h1>${title}</h1><p>${body}</p></main></body></html>`;
 }

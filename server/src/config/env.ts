@@ -33,6 +33,11 @@ const schema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
   GOOGLE_MAC_CLIENT_ID: z.string().min(1).optional(),
 
+  // Email through Resend (email/resend.ts), sent only from Inngest jobs. Until the domain is
+  // verified in Resend, only onboarding@resend.dev -> the Resend account's own address works.
+  RESEND_API_KEY: z.string().min(1).optional(),
+  EMAIL_FROM: z.string().min(3).default('FuseOS <onboarding@resend.dev>'),
+
   // Error tracking (Sentry) — optional; disabled if absent.
   SENTRY_DSN: z.string().url().optional(),
 

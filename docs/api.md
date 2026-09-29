@@ -38,7 +38,7 @@ Android uses Credential Manager (`GetGoogleIdOption` with the web client as serv
 
 **Tokens are opaque session tokens (the bearer plugin), not JWTs.** Each request costs one indexed lookup in `session`. JWTs would save that lookup, but REST is off the clipboard hot path, and a session token can be revoked at once, which a JWT cannot. Sessions last 90 days and are extended at most once a day while the device uses them. A continuity app that signs you out weekly is not worth having.
 
-> Email verification is sent via an Inngest job (not yet wired; `requireEmailVerification` is off).
+> Email verification is sent on sign-up via an Inngest job (below). Sign-in does not wait for it (`requireEmailVerification` off); a confirmed email is what lets a Google sign-in link to the account.
 
 ## Devices
 
@@ -153,10 +153,16 @@ Semantics:
 
 ## Inngest functions (durable)
 
+Served at `/api/inngest` (`server/src/jobs/`). Locally the Inngest dev server (`inngest` mprocs pane, `INNGEST_DEV=1`); hosted, Inngest Cloud with `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY`. Requests queue events with `emit()`, which never fails the request (a failure to queue goes to Sentry) and does nothing under test, so the suite never emails anyone. Emails go through Resend (`RESEND_API_KEY`, `EMAIL_FROM`) and only to **confirmed** addresses, except the confirmation itself.
+
 | Function | Trigger | Does |
 | --- | --- | --- |
-| `presence/sweep-timeouts` | cron | Marks devices offline whose heartbeat lapsed |
-| `auth/send-verification` | user created | Sends email verification |
+| `presence-sweep-timeouts` | cron, every minute | Terminates `/signal` sockets silent for 2 min (clients heartbeat every 20 s); each socket's close handler sends `peer-offline`. A phone that lost Wi-Fi without a FIN otherwise stayed "online" for hours. |
+| `auth-send-verification` | `auth/verification.requested` (sign-up) | Emails the confirmation link; the link (`GET /auth/verify-email`) answers with a small page |
+| `auth-welcome` | `auth/email.verified` | Welcome email with the download link |
+| `devices-new-device-alert` | `devices/device.added` (a new public key, not a re-register) | "New device on your FuseOS account" — every device on an account is trusted with its clipboard, so the owner hears of each one. Not for the first device. |
+
+Events carry ids (`userId`, `deviceId`), never the address: the job reads it when it sends.
 
 ## Observability
 
