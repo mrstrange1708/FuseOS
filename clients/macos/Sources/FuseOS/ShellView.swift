@@ -499,6 +499,9 @@ private struct PhoneActionsPanel: View {
 private struct LinkHero: View {
     @ObservedObject var viewModel: DashboardViewModel
     let onMirror: () -> Void
+    @State private var search: Search = .idle
+
+    private enum Search: Equatable { case idle, searching, notFound }
 
     var body: some View {
         let peer = viewModel.peers.first { viewModel.isConnected($0) } ?? viewModel.peers.first
@@ -538,11 +541,24 @@ private struct LinkHero: View {
                             .help("Round trip of the last clip, and the 95th percentile of the last \(latency.samples)")
                     }
                     Spacer(minLength: 0)
-                    Button(action: onMirror) {
-                        Label("Mirror screen", systemImage: "rectangle.on.rectangle")
+                    if linked {
+                        Button(action: onMirror) {
+                            Label("Mirror screen", systemImage: "rectangle.on.rectangle")
+                        }
+                        .buttonStyle(CapsuleButtonStyle(prominent: false))
+                    } else {
+                        // The popover's Connect, here too: re-read the account's devices and
+                        // dial them now instead of after the backoff.
+                        Button {
+                            search = .searching
+                            Task { await viewModel.connect() }
+                        } label: {
+                            Label(search == .searching ? "Looking…" : search == .notFound ? "Try again" : "Connect",
+                                  systemImage: search == .notFound ? "arrow.clockwise" : "dot.radiowaves.left.and.right")
+                        }
+                        .buttonStyle(CapsuleButtonStyle(prominent: true))
+                        .disabled(search == .searching)
                     }
-                    .buttonStyle(CapsuleButtonStyle(prominent: false))
-                    .disabled(!linked)
                 }
                 .padding(.top, 6)
             }
@@ -552,6 +568,14 @@ private struct LinkHero: View {
         .padding(.horizontal, 26)
         .background(heroBackground)
         .animation(.easeInOut(duration: 0.4), value: linked)
+        .onChange(of: linked) { if $0 { search = .idle } }
+        // Same 12 s as the popover: long enough for a LAN dial and handshake.
+        .task(id: search) {
+            guard search == .searching else { return }
+            try? await Task.sleep(nanoseconds: 12_000_000_000)
+            guard !Task.isCancelled, search == .searching, viewModel.connected.isEmpty else { return }
+            search = .notFound
+        }
     }
 
     /// The panel surface with the ember rising from its bottom edge — the hero's own glow.
@@ -587,6 +611,9 @@ private struct LinkHero: View {
     }
 
     private var detail: String {
+        if search == .notFound, viewModel.connected.isEmpty {
+            return "Couldn't reach your phone. Open FuseOS on it, same account, same Wi-Fi — and allow FuseOS on the local network in System Settings → Privacy & Security."
+        }
         switch viewModel.connectState.stage {
         case .connected: return "Clipboard, files and notifications move straight over your Wi-Fi."
         case .connecting: return "Finding your phone on this Wi-Fi…"
