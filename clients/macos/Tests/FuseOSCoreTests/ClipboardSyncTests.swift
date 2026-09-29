@@ -231,8 +231,8 @@ final class ClipboardSyncTests: XCTestCase {
         let sent = envelopesSent {
             sync.apply(historySync([("older", 1_000), ("newer", 2_000)]))
         }
-        XCTAssertEqual(sync.history.prefix(2).map(\.text), ["newer", "older"])
-        XCTAssertTrue(sync.history.prefix(2).allSatisfy { !$0.fromSelf })
+        XCTAssertEqual(sync.kept.prefix(2).map(\.text), ["newer", "older"])
+        XCTAssertTrue(sync.kept.prefix(2).allSatisfy { !$0.fromSelf && $0.peer == "peer" })
         // History only: the clipboard is untouched and nothing is answered.
         XCTAssertEqual(pasteboard.changeCount, changeCount)
         XCTAssertEqual(sent, 0)
@@ -240,9 +240,34 @@ final class ClipboardSyncTests: XCTestCase {
 
     func testHistorySyncSkipsWhatWeAlreadyHave() {
         sync.apply(historySync([("same", 1_000)]))
-        let count = sync.history.count
+        let count = sync.kept.count
         sync.apply(historySync([("same", 5_000)]))
-        XCTAssertEqual(sync.history.count, count)
+        XCTAssertEqual(sync.kept.count, count)
+    }
+
+    /// A second phone must not see the first one's clips — nor anyone, with nothing linked.
+    func testHistoryShowsOnlyTheLinkedDevicesClips() {
+        sync.apply(historySync([("from the phone", 1_000)]))
+        sync.apply(inbound(text: "sent by the phone", from: "peer", seq: 1, at: Int64(Date().timeIntervalSince1970 * 1000)))
+        copyText("copied here, unlinked")
+        sync.checkForLocalChange()
+        XCTAssertEqual(sync.kept.count, 3)
+        XCTAssertEqual(sync.history.map(\.text), ["copied here, unlinked"], "peer is not linked")
+        XCTAssertNil(sync.history.first?.peer, "unsent — the next device to link gets it")
+    }
+
+    func testTheStoreKeepsWhoEachClipCrossedWith() throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("fuse-history-\(UUID().uuidString)")
+        let store = ClipHistoryStore(directory: directory)
+        store.save([
+            ClipEntry(id: 0, text: "a", imageData: nil, mime: nil, fromSelf: false, at: Date(), peer: "phone"),
+            ClipEntry(id: 1, text: "b", imageData: nil, mime: nil, fromSelf: true, at: Date(), peer: nil),
+        ])
+        XCTAssertEqual(store.load().map(\.peer), ["phone", nil])
+        // A record from before history was kept per device says nothing about whose it was.
+        try Data(#"[{"id":0,"text":"old","fromSelf":false,"atUnixMs":0}]"#.utf8)
+            .write(to: directory.appendingPathComponent("history.json"))
+        XCTAssertTrue(store.load().isEmpty)
     }
 }
 

@@ -78,6 +78,13 @@ public final class NotificationMirror {
         transport.broadcast(envelope)
     }
 
+    /// The user clicked it on the Mac: open it on the phone, as a tap in its shade would.
+    public func open(key: String) {
+        var envelope = transport.newEnvelope()
+        envelope.notificationOpen = FuseNotificationOpen.with { $0.key = key }
+        transport.broadcast(envelope)
+    }
+
     public func answerCall() { callAction(.answer) }
     public func declineCall() { callAction(.decline) }
     public func endCall() { callAction(.end) }

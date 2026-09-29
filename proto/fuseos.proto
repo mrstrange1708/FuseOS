@@ -56,6 +56,9 @@ message Envelope {
     DeviceStatus device_status = 34;
     BeaconKey beacon_key = 35;
     Unlocked unlocked = 36;
+    NotificationOpen notification_open = 37;
+    Outcome outcome = 38;
+    BeaconCheck beacon_check = 39;
   }
 }
 
@@ -88,7 +91,13 @@ message Ack {
   uint64 ref_seq         = 2; // for clipboard events
 }
 
-message Heartbeat {}
+// Keeps the channel alive (every 15 s, and once as it comes up) and times it. A ping has
+// echo_seq 0; the other end answers at once with echo_seq = the ping's seq, and the pinger
+// records the round trip in the same window as clip acks — so the link card's sync speed
+// is live even when nothing is being copied. A reply is never answered, so it cannot loop.
+message Heartbeat {
+  uint64 echo_seq = 1;
+}
 
 // Either end of a transfer giving up: the sender cancelled or could not read the file,
 // or the receiver cancelled, failed a write, or failed verification. The other end stops
@@ -343,6 +352,10 @@ message SidecarInput {
 message DeviceStatus {
   int32 battery  = 1; // 0–100; -1 when the device has no battery (a desktop Mac)
   bool  charging = 2;
+  // Mac -> phone: the Mac will act on POINTER_INPUT — its "Let your phone control this
+  // Mac" switch is on and macOS granted Accessibility. The phone's trackpad says so
+  // instead of sending input into nothing. Sent again whenever either changes.
+  bool  pointer_allowed = 3;
 }
 
 // Mac -> phone, on every new channel: a fresh random key for the phone's Bluetooth
@@ -358,3 +371,35 @@ message BeaconKey {
 // unlocks. The Mac sends it on unlock, and the phone wakes its screen (an app cannot get
 // past the phone's own lock).
 message Unlocked {}
+
+// Mac -> phone: "Bluetooth says you are far — prove it." Sent over the LAN link, which is
+// steadier than the beacon, before the Mac locks. The phone beacons at full power for a
+// few seconds and answers with the same message, saying whether its beacon is on; the
+// Mac locks only if it is and it still hears the phone far or not at all. A beacon the
+// OS throttled on a phone lying next to the Mac comes back strong and nothing locks.
+message BeaconCheck {
+  bool broadcasting = 1; // phone -> Mac only
+}
+
+// Mac -> phone: the user clicked a mirrored notification; open it on the phone, as a tap
+// in the shade would (its app's own content intent).
+message NotificationOpen {
+  string key = 1;
+}
+
+// Either direction: what became of something the other device asked for — a reply, an
+// opened notification, an unlock — so the asker's island can say so instead of assuming.
+// `detail` is a short sentence for a person (why it failed, what to do), shown as-is.
+message Outcome {
+  enum Kind {
+    KIND_UNSPECIFIED  = 0;
+    REPLY             = 1;
+    OPEN_NOTIFICATION = 2;
+    UNLOCK            = 3;
+    OPEN_LINK         = 4;
+    CALL              = 5; // answer / decline / end, as the Mac asked
+  }
+  Kind   kind   = 1;
+  bool   ok     = 2;
+  string detail = 3;
+}

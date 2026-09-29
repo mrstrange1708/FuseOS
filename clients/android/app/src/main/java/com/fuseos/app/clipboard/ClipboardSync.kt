@@ -45,6 +45,12 @@ data class ClipEntry(
     /** True when this device copied it, false when it arrived from a peer. */
     val fromSelf: Boolean,
     val atUnixMs: Long,
+    /**
+     * The device this clip crossed with — where it came from, or where it went. Null for
+     * a copy made here with nothing linked: it goes to whichever device links next.
+     * History shows only the linked device's clips, so a second Mac never sees the first's.
+     */
+    val peer: String? = null,
 ) {
     val isImage: Boolean get() = imageBytes != null
 
@@ -95,6 +101,8 @@ class ClipboardSync(
     private var joinJob: Job? = null
 
     private val _history = MutableStateFlow<List<ClipEntry>>(emptyList())
+    /** Everything kept, whichever device it crossed with — what is persisted. */
+    private val kept = MutableStateFlow<List<ClipEntry>>(emptyList())
 
     private val latencyWindow = LatencyWindow()
     private val _latency = MutableStateFlow<SyncLatency?>(null)
@@ -110,7 +118,7 @@ class ClipboardSync(
     /** Every clip that moves, in either direction, as it happens. Drives the island. */
     val events: SharedFlow<ClipEntry> = _events.asSharedFlow()
 
-    /** Newest first. In memory only — clipboard content is never written to disk here. */
+    /** Newest first: the clips of the devices linked right now, and copies not sent yet. */
     val history: StateFlow<List<ClipEntry>> = _history.asStateFlow()
 
     // Restored ids continue upward rather than restarting, so a reloaded entry and a fresh
@@ -120,7 +128,8 @@ class ClipboardSync(
     fun start(selfDeviceId: String) {
         stop()
         val restored = store.load()
-        _history.value = restored
+        kept.value = restored
+        publish()
         nextId = (restored.maxOfOrNull { it.id } ?: -1L) + 1
         val guard = LoopGuard(selfDeviceId)
         this.guard = guard
@@ -130,14 +139,18 @@ class ClipboardSync(
         clipboard.addPrimaryClipChangedListener(listener)
 
         inboundJob = scope.launch {
-            transport.incoming.collect { envelope -> apply(guard, envelope) }
+            launch { transport.incoming.collect { envelope -> apply(guard, envelope) } }
+            // Heartbeat echoes keep the sync speed live between clips.
+            transport.roundTrips.collect { _latency.value = latencyWindow.record(it) }
         }
         // Both ends send their history whenever a peer gains a channel; each merges what
         // it lacks.
         joinJob = scope.launch {
             var previous = emptySet<String>()
             transport.connectedPeers.collect { now ->
-                if ((now - previous).isNotEmpty()) sendHistory()
+                publish()
+                val joined = now - previous
+                if (joined.isNotEmpty()) sendHistory(joined)
                 previous = now
             }
         }
@@ -153,7 +166,14 @@ class ClipboardSync(
         guard = null
         // Backgrounding calls this too, so the list is only cleared from memory; what is
         // on disk is what a relaunch restores. `forget()` is the sign-out path.
+        kept.value = emptyList()
         _history.value = emptyList()
+    }
+
+    /** Republishes [history] for the devices linked now. */
+    private fun publish() {
+        val linked = transport.connectedPeers.value
+        _history.value = kept.value.filter { it.peer == null || it.peer in linked }
     }
 
     /** Sign-out: drop the history from memory *and* disk. */
@@ -168,7 +188,7 @@ class ClipboardSync(
      * Two caps, because entries are wildly uneven: [MAX_ENTRIES] keeps the list readable,
      * and [MAX_HISTORY_BYTES] keeps 50 screenshots from pinning 150 MB of heap.
      */
-    private fun record(text: String?, imageBytes: ByteArray?, mime: String?, fromSelf: Boolean) {
+    private fun record(text: String?, imageBytes: ByteArray?, mime: String?, fromSelf: Boolean, peer: String?) {
         val entry = ClipEntry(
             id = nextId++,
             text = text,
@@ -176,6 +196,7 @@ class ClipboardSync(
             mime = mime,
             fromSelf = fromSelf,
             atUnixMs = System.currentTimeMillis(),
+            peer = peer,
         )
         commit { current -> listOf(entry) + current }
         _events.tryEmit(entry)
@@ -183,7 +204,7 @@ class ClipboardSync(
 
     /** Applies [change] to the history, trims it to the caps, and persists it. */
     private fun commit(change: (List<ClipEntry>) -> List<ClipEntry>) {
-        _history.update { current ->
+        kept.update { current ->
             val trimmed = change(current).take(MAX_ENTRIES)
             var bytes = 0L
             trimmed.takeWhile {
@@ -191,19 +212,31 @@ class ClipboardSync(
                 bytes <= MAX_HISTORY_BYTES
             }
         }
+        publish()
         // Written on every change so an app the OS kills without warning — the norm on
         // Android — still has its history on the next launch.
-        scope.launch(Dispatchers.IO) { store.save(_history.value) }
+        scope.launch(Dispatchers.IO) { store.save(kept.value) }
     }
 
     /**
      * Sends our recent history to peers (`HistorySync` in the proto), newest first,
      * stopping short of the channel's frame cap. An image too big for what is left of the
      * budget is skipped rather than ending the list.
+     *
+     * Each peer gets only what crossed with it, plus copies not sent yet — which now belong
+     * to it. Another Mac's clips never leave this phone.
      */
-    private fun sendHistory() {
+    private fun sendHistory(peers: Set<String>) {
+        // ponytail: unsent copies go to one joining peer; two Macs joining in the same
+        // instant is not a case worth splitting them for.
+        val first = peers.first()
+        if (kept.value.any { it.peer == null }) commit { all -> all.map { if (it.peer == null) it.copy(peer = first) else it } }
+        peers.forEach(::sendHistoryOf)
+    }
+
+    private fun sendHistoryOf(peer: String) {
         var budget = MAX_HISTORY_SYNC_BYTES
-        val items = _history.value.mapNotNull { entry ->
+        val items = kept.value.filter { it.peer == peer }.mapNotNull { entry ->
             val size = entry.imageBytes?.size ?: entry.text?.toByteArray()?.size ?: 0
             if (size > budget) return@mapNotNull null
             budget -= size
@@ -218,17 +251,18 @@ class ClipboardSync(
             }.build()
         }
         if (items.isEmpty()) return
-        broadcast { it.setHistorySync(HistorySync.newBuilder().addAllItems(items)) }
+        broadcast(only = setOf(peer)) { it.setHistorySync(HistorySync.newBuilder().addAllItems(items)) }
     }
 
     /**
      * Folds a peer's history into ours: the entries we lack, at the time they were first
      * copied. History only — the clipboard is not touched, the island stays quiet, and
-     * nothing is sent back, which is what keeps this from looping.
+     * nothing is sent back, which is what keeps this from looping. [from] is the sender;
+     * null only for demo mode's made-up history.
      */
-    internal fun merge(sync: HistorySync) {
+    internal fun merge(sync: HistorySync, from: String?) {
         commit { current ->
-            val known = current.mapNotNull(::contentHash).toMutableSet()
+            val known = current.filter { it.peer == null || it.peer == from }.mapNotNull(::contentHash).toMutableSet()
             val added = sync.itemsList.mapNotNull { item ->
                 val isImage = !item.imageData.isEmpty
                 if (!isImage && item.text.isEmpty()) return@mapNotNull null
@@ -241,6 +275,7 @@ class ClipboardSync(
                     mime = item.imageMime.takeIf { isImage },
                     fromSelf = false,
                     atUnixMs = item.atUnixMs,
+                    peer = from,
                 )
             }
             (current + added).sortedByDescending { it.atUnixMs }
@@ -282,7 +317,7 @@ class ClipboardSync(
     fun share(text: String?, imageBytes: ByteArray?, mime: String?): SendOutcome {
         if (imageBytes != null) {
             if (imageBytes.isEmpty() || imageBytes.size > MAX_INLINE_IMAGE_BYTES) return SendOutcome.Nothing
-            record(text = null, imageBytes = imageBytes, mime = mime, fromSelf = true)
+            record(text = null, imageBytes = imageBytes, mime = mime, fromSelf = true, peer = linkedPeer())
             if (transport.connectedPeers.value.isEmpty()) return SendOutcome.NotLinked
             broadcast {
                 it.setClipImage(
@@ -294,11 +329,13 @@ class ClipboardSync(
             return SendOutcome.Sent
         }
         val body = text?.takeIf { it.isNotEmpty() } ?: return SendOutcome.Nothing
-        record(text = body, imageBytes = null, mime = null, fromSelf = true)
+        record(text = body, imageBytes = null, mime = null, fromSelf = true, peer = linkedPeer())
         if (transport.connectedPeers.value.isEmpty()) return SendOutcome.NotLinked
         broadcast { it.setClipText(ClipText.newBuilder().setText(body)) }
         return SendOutcome.Sent
     }
+
+    private fun linkedPeer(): String? = transport.connectedPeers.value.firstOrNull()
 
     /**
      * Sends whatever is on the clipboard right now, on the user's explicit request.
@@ -351,9 +388,23 @@ class ClipboardSync(
      */
     var onLocalCopy: ((PendingClip) -> Unit)? = null
 
+    /**
+     * True when this content arrived from the Mac — so offering to send it would bounce the
+     * Mac's own clip back to it. The loop guard's 3 s window covers the clipboard listener;
+     * the copy detector can fire later (the system's clipboard preview, another app's
+     * "copied" toast while the Mac's clip is still on the clipboard), so automatic offers
+     * check history too: anything that came from a peer in the last day is not a new copy.
+     */
+    fun cameFromPeer(clip: PendingClip, nowMs: Long = System.currentTimeMillis()): Boolean =
+        kept.value.any { entry ->
+            !entry.fromSelf && nowMs - entry.atUnixMs < ECHO_MEMORY_MS &&
+                if (clip.imageBytes != null) entry.imageBytes?.contentEquals(clip.imageBytes) == true else entry.text == clip.text
+        }
+
     /** A local copy — offer it unless it is the echo of something we just injected. */
     private fun onLocalChange(guard: LoopGuard) {
         val clip = capture() ?: return
+        if (cameFromPeer(clip)) return
         // Images hash by bytes and text by string, exactly as the emit path always has;
         // getting this wrong would either loop injected content back or silence a real copy.
         val hash = clip.imageBytes?.let { LoopGuard.hash(it) } ?: LoopGuard.hash(clip.text.orEmpty())
@@ -364,7 +415,7 @@ class ClipboardSync(
     }
 
     /** The listener fires on the main thread; socket writes must not. */
-    private fun broadcast(body: (Envelope.Builder) -> Envelope.Builder) {
+    private fun broadcast(only: Set<String>? = null, body: (Envelope.Builder) -> Envelope.Builder) {
         scope.launch(Dispatchers.IO) {
             val envelope = body(transport.newEnvelope()).build()
             if (envelope.hasClipText() || envelope.hasClipImage()) {
@@ -372,13 +423,13 @@ class ClipboardSync(
                 // Bounded: a peer that never acks (an older build) must not grow this.
                 if (awaitingAck.size > 64) awaitingAck.keys.minOrNull()?.let { awaitingAck.remove(it) }
             }
-            transport.broadcast(envelope)
+            transport.broadcast(envelope, only)
         }
     }
 
     private suspend fun apply(guard: LoopGuard, envelope: Envelope) {
         if (envelope.bodyCase == Envelope.BodyCase.HISTORY_SYNC) {
-            merge(envelope.historySync)
+            merge(envelope.historySync, from = envelope.sourceDeviceId)
             return
         }
         // An ack without a transfer id acknowledges one of our clips: time the round trip.
@@ -411,8 +462,8 @@ class ClipboardSync(
         guard.recordApplied(hash, envelope.sentAtUnixMs)
 
         when (payload) {
-            is String -> record(payload, null, null, fromSelf = false)
-            is ClipImage -> record(null, payload.data.toByteArray(), payload.mime, fromSelf = false)
+            is String -> record(payload, null, null, fromSelf = false, peer = envelope.sourceDeviceId)
+            is ClipImage -> record(null, payload.data.toByteArray(), payload.mime, fromSelf = false, peer = envelope.sourceDeviceId)
         }
 
         val clip = when (payload) {
@@ -471,6 +522,9 @@ class ClipboardSync(
     }.getOrNull()
 
     companion object {
+        /** How long a clip from the Mac is remembered as "not a new copy". */
+        const val ECHO_MEMORY_MS = 24L * 60 * 60 * 1000
+
         /**
          * Images ride inline in a single `ClipImage` frame rather than being chunked.
          * A screenshot is typically 1–2 MB, one frame on a LAN is faster than a chunked

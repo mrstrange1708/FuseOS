@@ -27,7 +27,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -70,7 +73,26 @@ class TrackpadActivity : ComponentActivity() {
         setContent {
             FuseOSTheme {
                 // The Surface supplies the content colour; without it text falls back to black.
-                Surface(color = MaterialTheme.colorScheme.background) { Trackpad(::send, onDone = ::finish) }
+                Surface(color = MaterialTheme.colorScheme.background) {
+                    val peers by ServiceLocator.lanTransport.connectedPeers.collectAsState()
+                    val mac by ServiceLocator.deviceStatus.peer.collectAsState()
+                    when {
+                        peers.isEmpty() -> Blocked(
+                            title = "Your Mac isn't linked",
+                            body = "Open FuseOS on your Mac, on the same Wi-Fi as this phone.",
+                            onDone = ::finish,
+                        )
+                        // Null until the Mac's status arrives; only its explicit "no" blocks.
+                        mac?.pointerAllowed == false -> Blocked(
+                            title = "Turned off on your Mac",
+                            body = "On your Mac, open FuseOS → Account and turn on \"Let your phone control this Mac\". " +
+                                "macOS then asks you to allow FuseOS under Privacy & Security → Accessibility. " +
+                                "This screen unlocks by itself once both are on.",
+                            onDone = ::finish,
+                        )
+                        else -> Trackpad(::send, onDone = ::finish)
+                    }
+                }
             }
         }
     }
@@ -80,6 +102,42 @@ class TrackpadActivity : ComponentActivity() {
         ServiceLocator.appScope.launch(Dispatchers.IO) {
             transport.broadcast(transport.newEnvelope().setPointerInput(input).build())
         }
+    }
+}
+
+/** Why the trackpad can't work right now, and what to do — instead of input into nothing. */
+@Composable
+private fun Blocked(title: String, body: String, onDone: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        Modifier.fillMaxSize().systemBarsPadding().padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
+    ) {
+        Box(
+            Modifier.size(72.dp).clip(RoundedCornerShape(22.dp)).background(scheme.error.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.compose.material3.Icon(
+                androidx.compose.material.icons.Icons.Rounded.Lock,
+                contentDescription = null,
+                tint = scheme.error,
+                modifier = Modifier.size(30.dp),
+            )
+        }
+        Text(title, style = MaterialTheme.typography.headlineSmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Text(
+            body,
+            style = MaterialTheme.typography.bodyMedium,
+            color = scheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+        Text(
+            "Close",
+            color = scheme.primary,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onDone).padding(12.dp),
+        )
     }
 }
 

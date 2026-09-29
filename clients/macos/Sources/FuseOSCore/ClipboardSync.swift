@@ -12,16 +12,21 @@ public struct ClipEntry: Identifiable, Equatable {
     /// True when this device copied it, false when it arrived from a peer.
     public let fromSelf: Bool
     public let at: Date
+    /// The device this clip crossed with — where it came from, or where it went. Nil for a
+    /// copy made here with nothing linked: it goes to whichever device links next. History
+    /// shows only the linked device's clips, so a second phone never sees the first's.
+    public var peer: String?
 
     public var isImage: Bool { imageData != nil }
 
-    public init(id: Int, text: String?, imageData: Data?, mime: String?, fromSelf: Bool, at: Date) {
+    public init(id: Int, text: String?, imageData: Data?, mime: String?, fromSelf: Bool, at: Date, peer: String? = nil) {
         self.id = id
         self.text = text
         self.imageData = imageData
         self.mime = mime
         self.fromSelf = fromSelf
         self.at = at
+        self.peer = peer
     }
 
     public static func == (a: ClipEntry, b: ClipEntry) -> Bool { a.id == b.id }
@@ -55,8 +60,10 @@ public final class ClipboardSync {
     private var watcher: Task<Void, Never>?
     private var lastChangeCount: Int
 
-    /// Newest first. In memory only — clipboard content is never written to disk here.
+    /// Newest first: the clips of the devices linked right now, and copies not sent yet.
     public private(set) var history: [ClipEntry] = []
+    /// Everything kept, whichever device it crossed with — what is persisted.
+    private(set) var kept: [ClipEntry] = []
 
     /// Fires whenever `history` changes, so the dashboard can republish it. A callback
     /// rather than `@Published` keeps this type free of Combine, matching `LanTransport`.
@@ -67,7 +74,7 @@ public final class ClipboardSync {
     /// sign-out clearing, neither of which is an event worth showing anyone.
     public var onClipEvent: ((ClipEntry) -> Void)?
 
-    /// Each clip's round trip as it is acknowledged (see `SyncLatency`).
+    /// The link's round trip as each clip is acknowledged and each heartbeat echoed (see `SyncLatency`).
     public var onLatency: ((SyncLatency) -> Void)?
     private var latency = LatencyWindow()
     /// Clips sent and not yet acknowledged: seq → when they went, monotonic nanoseconds.
@@ -89,6 +96,12 @@ public final class ClipboardSync {
         self.pasteboard = pasteboard
         self.store = store
         lastChangeCount = pasteboard.changeCount
+        // Heartbeat echoes keep the sync speed live between clips.
+        transport.onRoundTrip = { [weak self] ms in self?.recordLatency(ms) }
+    }
+
+    private func recordLatency(_ ms: Int) {
+        onLatency?(latency.record(ms))
     }
 
     public func start(selfDeviceId: String) {
@@ -96,9 +109,9 @@ public final class ClipboardSync {
         guard_ = LoopGuard(selfDeviceId: selfDeviceId)
         // Restored ids continue upward rather than restarting, so a reloaded entry and a
         // fresh one can never collide in a list keyed by id.
-        history = store.load()
-        nextId = (history.map(\.id).max() ?? -1) + 1
-        onHistoryChanged?(history)
+        kept = store.load()
+        nextId = (kept.map(\.id).max() ?? -1) + 1
+        publish()
         // Start from the current count so an item copied before launch is not
         // broadcast as if the user just copied it.
         lastChangeCount = pasteboard.changeCount
@@ -123,7 +136,15 @@ public final class ClipboardSync {
         guard_ = nil
         // Only clears memory; what is on disk is what the next launch restores.
         // `forget()` is the sign-out path.
+        kept = []
         history = []
+        onHistoryChanged?(history)
+    }
+
+    /// Republishes `history` for the devices linked now. Call when they change.
+    public func publish() {
+        let linked = transport.connectedPeers
+        history = kept.filter { $0.peer.map(linked.contains) ?? true }
         onHistoryChanged?(history)
     }
 
@@ -137,14 +158,14 @@ public final class ClipboardSync {
     ///
     /// Two caps, because entries are wildly uneven: `maxEntries` keeps the list readable,
     /// and `maxHistoryBytes` keeps 50 screenshots from pinning 150 MB of memory.
-    private func record(text: String?, imageData: Data?, mime: String?, fromSelf: Bool) {
+    private func record(text: String?, imageData: Data?, mime: String?, fromSelf: Bool, peer: String?) {
         let entry = ClipEntry(
             id: nextId, text: text, imageData: imageData, mime: mime,
-            fromSelf: fromSelf, at: Date(),
+            fromSelf: fromSelf, at: Date(), peer: peer,
         )
         nextId += 1
         onClipEvent?(entry)
-        commit([entry] + history)
+        commit([entry] + kept)
     }
 
     /// Trims a new history to the caps, publishes it, and persists it.
@@ -154,12 +175,12 @@ public final class ClipboardSync {
             bytes += $0.imageData?.count ?? $0.text?.count ?? 0
             return bytes <= Self.maxHistoryBytes
         }
-        history = Array(trimmed)
-        onHistoryChanged?(history)
+        kept = Array(trimmed)
+        publish()
         // Written on every change so a crash or a force-quit does not lose the history.
         // Off the main actor: a screenshot is megabytes, and the pasteboard watcher must
         // not wait on a disk write.
-        let snapshot = history
+        let snapshot = kept
         let store = store
         Task.detached(priority: .utility) { store.save(snapshot) }
     }
@@ -196,10 +217,22 @@ public final class ClipboardSync {
     /// Sends our recent history to peers that just connected (`HistorySync` in the proto),
     /// newest first, stopping short of the channel's frame cap. Images too big for what is
     /// left of the budget are skipped rather than ending the list.
-    public func sendHistory() {
+    ///
+    /// Each peer gets only what crossed with it, plus copies not sent yet — which now
+    /// belong to it. Another phone's clips never leave this Mac.
+    public func sendHistory(to peers: Set<String>) {
+        // ponytail: unsent copies go to one joining peer; two phones joining in the same
+        // instant is not a case worth splitting them for.
+        if let first = peers.first, kept.contains(where: { $0.peer == nil }) {
+            commit(kept.map { var entry = $0; entry.peer = entry.peer ?? first; return entry })
+        }
+        for peer in peers { sendHistory(of: peer) }
+    }
+
+    private func sendHistory(of peer: String) {
         var budget = Self.maxHistorySyncBytes
         var sync = FuseHistorySync()
-        for entry in history {
+        for entry in kept where entry.peer == peer {
             let size = entry.imageData?.count ?? entry.text?.utf8.count ?? 0
             guard size <= budget else { continue }
             budget -= size
@@ -216,14 +249,14 @@ public final class ClipboardSync {
         guard !sync.items.isEmpty else { return }
         var envelope = transport.newEnvelope()
         envelope.historySync = sync
-        transport.broadcast(envelope)
+        transport.broadcast(envelope, only: [peer])
     }
 
     /// Folds a peer's history into ours: the entries we lack, at the time they were first
     /// copied. History only — the clipboard is not touched, the island stays quiet, and
     /// nothing is sent back, which is what keeps this from looping.
-    func merge(_ sync: FuseHistorySync) {
-        var known = Set(history.compactMap(Self.contentHash))
+    func merge(_ sync: FuseHistorySync, from source: String) {
+        var known = Set(kept.filter { $0.peer == nil || $0.peer == source }.compactMap(Self.contentHash))
         var added: [ClipEntry] = []
         for item in sync.items {
             let isImage = !item.imageData.isEmpty
@@ -237,11 +270,12 @@ public final class ClipboardSync {
                 mime: isImage ? item.imageMime : nil,
                 fromSelf: false,
                 at: Date(timeIntervalSince1970: Double(item.atUnixMs) / 1000),
+                peer: source,
             ))
             nextId += 1
         }
         guard !added.isEmpty else { return }
-        commit((history + added).sorted { $0.at > $1.at })
+        commit((kept + added).sorted { $0.at > $1.at })
     }
 
     private static func contentHash(_ entry: ClipEntry) -> String? {
@@ -323,7 +357,8 @@ public final class ClipboardSync {
 
         let send = { [weak self] in
             guard let self else { return }
-            self.record(text: entry.text, imageData: entry.image, mime: entry.mime, fromSelf: true)
+            self.record(text: entry.text, imageData: entry.image, mime: entry.mime, fromSelf: true,
+                        peer: self.transport.connectedPeers.first)
             let envelope = body(self.transport.newEnvelope())
             self.markAwaitingAck(envelope.seq)
             self.transport.broadcast(envelope)
@@ -343,12 +378,11 @@ public final class ClipboardSync {
         let entry: (text: String?, image: Data?, mime: String?)
         switch envelope.body {
         case .historySync(let sync):
-            merge(sync)
+            merge(sync, from: envelope.sourceDeviceID)
             return
         case .ack(let ack):
             guard let sentAt = awaitingAck.removeValue(forKey: ack.refSeq) else { return }
-            let ms = Int((DispatchTime.now().uptimeNanoseconds - sentAt) / 1_000_000)
-            onLatency?(latency.record(ms))
+            recordLatency(Int((DispatchTime.now().uptimeNanoseconds - sentAt) / 1_000_000))
             return
         case .clipText:
             let text = envelope.clipText.text
@@ -392,7 +426,7 @@ public final class ClipboardSync {
         loopGuard.recordApplied(contentHash: hash, sentAtUnixMs: envelope.sentAtUnixMs)
         guard_ = loopGuard
 
-        record(text: entry.text, imageData: entry.image, mime: entry.mime, fromSelf: false)
+        record(text: entry.text, imageData: entry.image, mime: entry.mime, fromSelf: false, peer: envelope.sourceDeviceID)
         write()
         // Tell the sender it landed, so it can time the round trip.
         var ack = transport.newEnvelope()

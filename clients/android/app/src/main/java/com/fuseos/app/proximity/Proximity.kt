@@ -16,6 +16,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import com.fuseos.app.net.LanTransport
+import com.fuseos.proto.BeaconCheck
 import com.fuseos.proto.Envelope
 import com.fuseos.proto.Unlocked
 import kotlinx.coroutines.CoroutineScope
@@ -39,11 +40,39 @@ class Proximity(
 ) {
     private val app = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
-    private var key: ByteArray? = null
+    private val prefs = app.getSharedPreferences("proximity", Context.MODE_PRIVATE)
+    /**
+     * The Mac's latest key, kept on disk: a phone whose process was killed (ColorOS does,
+     * freely) or whose link is down must keep beaconing, or the Mac can't tell it is close.
+     */
+    private var key: ByteArray? = prefs.getString(KEY_PREF, null)?.let { android.util.Base64.decode(it, android.util.Base64.NO_WRAP) }
     private var advertising = false
     private val rotate = Runnable { restartBeacon() }
+    private val unboost = Runnable { restartBeacon() }
+    private val answer = Runnable { answerCheck() }
+    /** Until when the beacon runs at full power, after the Mac asked (elapsed ms). */
+    private var boostUntil = 0L
 
-    private val callback = object : AdvertiseCallback() {}
+    /** What the beacon is doing, in words for Profile — "On" used to mean only "permitted". */
+    enum class Beacon { Broadcasting, NoPermission, BluetoothOff, WaitingForMac, Refused }
+    private val _state = kotlinx.coroutines.flow.MutableStateFlow(Beacon.WaitingForMac)
+    val state: kotlinx.coroutines.flow.StateFlow<Beacon> = _state
+    /** Android's reason when it refused to broadcast (its AdvertiseCallback error code). */
+    @Volatile var refusal: Int = 0
+        private set
+
+    private val callback = object : AdvertiseCallback() {
+        override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
+            _state.value = Beacon.Broadcasting
+        }
+
+        override fun onStartFailure(errorCode: Int) {
+            advertising = false
+            refusal = errorCode
+            _state.value = Beacon.Refused
+            android.util.Log.e("FuseProximity", "beacon refused by Android: $errorCode")
+        }
+    }
 
     /** When the phone was unlocked with no link up — the link usually comes back seconds later. */
     private var unlockedAt = 0L
@@ -53,10 +82,13 @@ class Proximity(
             transport.incoming.collect { envelope ->
                 when (envelope.bodyCase) {
                     Envelope.BodyCase.BEACON_KEY -> {
-                        key = envelope.beaconKey.key.toByteArray()
+                        val fresh = envelope.beaconKey.key.toByteArray()
+                        key = fresh
+                        prefs.edit().putString(KEY_PREF, android.util.Base64.encodeToString(fresh, android.util.Base64.NO_WRAP)).apply()
                         main.post { restartBeacon() }
                     }
                     Envelope.BodyCase.UNLOCKED -> main.post { wakeScreen() }
+                    Envelope.BodyCase.BEACON_CHECK -> main.post { boost() }
                     else -> Unit
                 }
             }
@@ -70,6 +102,17 @@ class Proximity(
                 }
             }
         }
+        // Bluetooth switched back on: the advertiser went with it, so start again.
+        app.registerReceiver(
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    main.post { restartBeacon() }
+                }
+            },
+            IntentFilter(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED),
+        )
+        // A key from an earlier run: beacon straight away, before any link.
+        main.post { restartBeacon() }
         // USER_PRESENT is only delivered to receivers registered at run time.
         app.registerReceiver(
             object : BroadcastReceiver() {
@@ -88,15 +131,22 @@ class Proximity(
     @Suppress("MissingPermission")
     private fun restartBeacon() {
         main.removeCallbacks(rotate)
-        val key = key ?: return
-        if (!hasPermission()) return
-        val advertiser = app.getSystemService(BluetoothManager::class.java)?.adapter?.bluetoothLeAdvertiser ?: return
+        val key = key ?: return run { _state.value = Beacon.WaitingForMac }
+        if (!hasPermission()) return run { _state.value = Beacon.NoPermission }
+        val adapter = app.getSystemService(BluetoothManager::class.java)?.adapter
+        if (adapter?.isEnabled != true) {
+            advertising = false
+            _state.value = Beacon.BluetoothOff
+            return
+        }
+        val advertiser = adapter.bluetoothLeAdvertiser ?: return run { _state.value = Beacon.Refused }
         runCatching {
             if (advertising) advertiser.stopAdvertising(callback)
             val now = System.currentTimeMillis()
+            val boosted = SystemClock.elapsedRealtime() < boostUntil
             val settings = AdvertiseSettings.Builder()
-                .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_POWER)
-                .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
+                .setAdvertiseMode(if (boosted) AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY else AdvertiseSettings.ADVERTISE_MODE_LOW_POWER)
+                .setTxPowerLevel(if (boosted) AdvertiseSettings.ADVERTISE_TX_POWER_HIGH else AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
                 .setConnectable(false)
                 .build()
             val data = AdvertiseData.Builder()
@@ -107,6 +157,28 @@ class Proximity(
             advertising = true
             // Re-derive at the next ten-minute boundary.
             main.postDelayed(rotate, BeaconToken.WINDOW_MS - now % BeaconToken.WINDOW_MS + 1_000)
+        }
+    }
+
+    /**
+     * The Mac hears this phone far and asked over Wi-Fi before locking (`BeaconCheck`):
+     * beacon at full power for a while — a throttled beacon next to the Mac comes back
+     * strong and nothing locks — and say whether the beacon is on at all.
+     */
+    private fun boost() {
+        boostUntil = SystemClock.elapsedRealtime() + BOOST_MS
+        restartBeacon()
+        main.removeCallbacks(unboost)
+        main.postDelayed(unboost, BOOST_MS)
+        // Once Android has said yes or no to the new advertiser.
+        main.removeCallbacks(answer)
+        main.postDelayed(answer, 1_000)
+    }
+
+    private fun answerCheck() {
+        val on = _state.value == Beacon.Broadcasting
+        scope.launch(Dispatchers.IO) {
+            transport.broadcast(transport.newEnvelope().setBeaconCheck(BeaconCheck.newBuilder().setBroadcasting(on)).build())
         }
     }
 
@@ -134,5 +206,8 @@ class Proximity(
         /** 0xFFFF: the Bluetooth SIG's id for testing/unassigned — FuseOS has no company id. */
         const val COMPANY_ID = 0xFFFF
         const val UNLOCK_GRACE_MS = 10_000L
+        /** A little over the Mac's 15 s check window (`AwayLock.checkWindow`). */
+        const val BOOST_MS = 20_000L
+        const val KEY_PREF = "beacon_key"
     }
 }

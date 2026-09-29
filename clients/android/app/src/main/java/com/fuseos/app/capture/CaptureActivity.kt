@@ -64,7 +64,10 @@ class CaptureActivity : ComponentActivity() {
         // An offer nobody asked for stays quiet when there is nothing new to offer.
         // Nor does it offer to send to a Mac that is not there.
         val linked = ServiceLocator.lanTransport.connectedPeers.value.isNotEmpty()
-        if (automatic && (clip == null || clip == lastOffered || !linked)) {
+        // Nor offer the Mac's own clip back to it: the copy detector also fires on the
+        // system's clipboard preview of something the Mac just sent.
+        val echo = clip != null && ServiceLocator.clipboardSync.cameFromPeer(clip)
+        if (automatic && (clip == null || clip == lastOffered || !linked || echo)) {
             finish()
             overridePendingTransition(0, 0)
             return
@@ -79,7 +82,9 @@ class CaptureActivity : ComponentActivity() {
                 // On the app scope, not this activity's: the tap happens seconds after
                 // this activity has finished, so its scope is long gone by then.
                 ServiceLocator.appScope.launch(Dispatchers.IO) {
-                    ServiceLocator.clipboardSync.send(pending)
+                    if (ServiceLocator.clipboardSync.send(pending) == SendOutcome.Nothing) {
+                        island.error(ServiceLocator.TOO_BIG, ServiceLocator.TOO_BIG_HOW)
+                    }
                 }
             }
         }

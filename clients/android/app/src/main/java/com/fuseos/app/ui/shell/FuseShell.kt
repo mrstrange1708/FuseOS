@@ -84,6 +84,7 @@ fun FuseShell() {
         nearbyGranted = granted
         if (granted) ServiceLocator.proximity.permissionChanged()
     }
+    val beacon by ServiceLocator.proximity.state.collectAsState()
     var showPairing by remember { mutableStateOf(false) }
 
     if (showPairing) {
@@ -127,6 +128,12 @@ fun FuseShell() {
                         onCancelTransfer = ServiceLocator.transfers::cancel,
                         latency = latency,
                         macStatus = macStatus,
+                        onOpenLinkOnMac = {
+                            // Read here: FuseOS is in front, the one time Android lets it.
+                            val clip = context.getSystemService(android.content.ClipboardManager::class.java)
+                                ?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
+                            ServiceLocator.phoneActions.openCopiedLinkOnMac(clip)
+                        },
                         onOpenTransfer = { id ->
                             if (!ServiceLocator.transfers.open(id)) {
                                 Toast.makeText(context, "That file has moved or been deleted.", Toast.LENGTH_SHORT).show()
@@ -211,9 +218,13 @@ fun FuseShell() {
                             }
                         },
                         nearbyOn = nearbyGranted,
+                        nearbyState = beacon,
                         onNearby = {
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                                askNearby.launch(android.Manifest.permission.BLUETOOTH_ADVERTISE)
+                            when {
+                                !nearbyGranted && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S ->
+                                    askNearby.launch(android.Manifest.permission.BLUETOOTH_ADVERTISE)
+                                beacon == com.fuseos.app.proximity.Proximity.Beacon.BluetoothOff ->
+                                    runCatching { context.startActivity(Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS)) }
                             }
                         },
                         callsOn = callsGranted,

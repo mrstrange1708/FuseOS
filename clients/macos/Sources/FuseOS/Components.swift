@@ -210,11 +210,9 @@ struct LinkPulse: Equatable {
     let toPhone: Bool
 }
 
-/// The line between this Mac (left) and the phone (right), driven by what actually moves:
-/// a comet with an amber tail for each `LinkPulse`, in the direction the data went, and a
-/// ring where it lands; beads streaming the whole time a file is in flight (`stream`, true
-/// toward the phone). Idle, it rests with a dot in the middle and draws nothing per frame.
-/// Not linked, a dim dashed gap.
+/// The link between the two devices, drawn as a live wave. At rest it drifts gently — the
+/// link is alive, not just drawn. Each crossing sends a wave packet from the sender to the
+/// receiver, which lands as an opening ring; a file in flight keeps packets flowing.
 struct LiveFilament: View {
     let linked: Bool
     let pulse: LinkPulse?
@@ -222,11 +220,12 @@ struct LiveFilament: View {
     @State private var sparkStart: Date?
     @State private var toPhone = true
 
-    private static let travel = 0.6
-    private static let landing = 0.45
+    private static let travel = 0.7
+    private static let landing = 0.5
 
     var body: some View {
-        TimelineView(.animation(paused: stream == nil && sparkStart == nil)) { timeline in
+        // 30 fps is plenty for a slow wave, and it idles only while linked and on screen.
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !linked)) { timeline in
             Canvas { g, size in draw(&g, size: size, now: timeline.date) }
         }
         .onChange(of: pulse) { pulse in
@@ -242,54 +241,108 @@ struct LiveFilament: View {
     }
 
     private func draw(_ g: inout GraphicsContext, size: CGSize, now: Date) {
-        let w = size.width, y = size.height / 2
-        var rail = Path()
-        rail.move(to: CGPoint(x: 0, y: y))
-        rail.addLine(to: CGPoint(x: w, y: y))
+        let w = size.width, mid = size.height / 2
+        let t = now.timeIntervalSinceReferenceDate
         guard linked else {
+            var rail = Path()
+            rail.move(to: CGPoint(x: 0, y: mid))
+            rail.addLine(to: CGPoint(x: w, y: mid))
             g.stroke(rail, with: .color(FuseColor.muted.opacity(0.4)), style: StrokeStyle(lineWidth: 1.5, dash: [4, 6]))
             return
         }
-        g.stroke(rail, with: .linearGradient(
-            Gradient(colors: [FuseColor.accent.opacity(0.15), FuseColor.accent.opacity(0.5), FuseColor.accent.opacity(0.15)]),
-            startPoint: CGPoint(x: 0, y: y), endPoint: CGPoint(x: w, y: y),
-        ), lineWidth: 1.5)
-        func dot(_ x: CGFloat, _ r: CGFloat, _ color: Color) {
-            g.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)), with: .color(color))
-        }
+        // Packets on the wire right now: (centre 0…1 along the link, strength).
+        var packets: [(Double, Double)] = []
         if let stream {
-            let phase = now.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.1) / 1.1
             for i in 0..<3 {
-                let t = (phase + Double(i) / 3).truncatingRemainder(dividingBy: 1)
-                // Fading at both ends reads as leaving one device and entering the other.
-                dot(stream ? t * w : (1 - t) * w, 2.5, FuseColor.amber.opacity(sin(t * .pi)))
+                let p = (t / 1.2 + Double(i) / 3).truncatingRemainder(dividingBy: 1)
+                packets.append((stream ? p : 1 - p, sin(p * .pi)))
             }
-        } else if sparkStart == nil {
-            dot(w / 2, 3, FuseColor.accent.opacity(0.85))
         }
-        guard let sparkStart else { return }
-        let elapsed = now.timeIntervalSince(sparkStart)
-        if elapsed < Self.travel {
-            let p = elapsed / Self.travel
-            let t = p < 0.5 ? 2 * p * p : 1 - pow(-2 * p + 2, 2) / 2 // ease in-out
-            let x = toPhone ? t * w : (1 - t) * w
-            let tail = 60 * (1 - abs(0.5 - t))
-            let from = CGPoint(x: toPhone ? max(0, x - tail) : min(w, x + tail), y: y)
-            var streak = Path()
-            streak.move(to: from)
-            streak.addLine(to: CGPoint(x: x, y: y))
-            g.stroke(streak, with: .linearGradient(Gradient(colors: [.clear, FuseColor.amber]), startPoint: from, endPoint: CGPoint(x: x, y: y)),
-                     style: StrokeStyle(lineWidth: 3, lineCap: .round))
-            dot(x, 9, FuseColor.accent.opacity(0.25))
-            dot(x, 4, FuseColor.amber)
-        } else {
-            // Landed: a ring opens at the receiving end and fades.
-            let c = min(1, (elapsed - Self.travel) / Self.landing)
+        var landed: Double?
+        if let sparkStart {
+            let elapsed = now.timeIntervalSince(sparkStart)
+            if elapsed < Self.travel {
+                let p = elapsed / Self.travel
+                let e = p < 0.5 ? 2 * p * p : 1 - pow(-2 * p + 2, 2) / 2
+                packets.append((toPhone ? e : 1 - e, 1))
+            } else {
+                landed = min(1, (elapsed - Self.travel) / Self.landing)
+            }
+        }
+        func y(_ x: CGFloat) -> CGFloat {
+            let u = Double(x / max(w, 1))
+            // Pinned at both ends: the wave leaves one device and enters the other.
+            let ends = sin(u * .pi)
+            var dy = sin(u * 4 * .pi - t * 1.8) * 2.2 * ends
+            for (c, strength) in packets {
+                let d = (u - c) * Double(w) / 26
+                dy += sin(Double(x) / 5 - t * 18) * 10 * strength * exp(-d * d) * ends
+            }
+            return mid + CGFloat(dy)
+        }
+        var wave = Path()
+        wave.move(to: CGPoint(x: 0, y: y(0)))
+        for x in stride(from: CGFloat(2), through: w, by: 2) { wave.addLine(to: CGPoint(x: x, y: y(x))) }
+        let busy = !packets.isEmpty
+        // A soft glow under the line while something is crossing.
+        if busy {
+            g.stroke(wave, with: .color(FuseColor.amber.opacity(0.18)), style: StrokeStyle(lineWidth: 7, lineCap: .round))
+        }
+        g.stroke(wave, with: .linearGradient(
+            Gradient(colors: [FuseColor.accent.opacity(0.35), busy ? FuseColor.amber : FuseColor.accent.opacity(0.8), FuseColor.accent.opacity(0.35)]),
+            startPoint: CGPoint(x: 0, y: mid), endPoint: CGPoint(x: w, y: mid),
+        ), style: StrokeStyle(lineWidth: busy ? 2.2 : 1.6, lineCap: .round))
+        if let landed {
             let x = toPhone ? w : 0
-            let r = 4 + 14 * c
-            g.stroke(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)),
-                     with: .color(FuseColor.amber.opacity(1 - c)), lineWidth: 1.5)
+            let r = 5 + 20 * landed
+            g.stroke(Path(ellipseIn: CGRect(x: x - r, y: mid - r, width: r * 2, height: r * 2)),
+                     with: .color(FuseColor.amber.opacity(1 - landed)), lineWidth: 1.8)
         }
+    }
+}
+
+/// Rings rippling out from the centre: a search in progress.
+struct Ripples: View {
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            ZStack {
+                ForEach(0 ..< 3, id: \.self) { i in
+                    let phase = (t / 2.1 + Double(i) / 3).truncatingRemainder(dividingBy: 1)
+                    Circle()
+                        .stroke(FuseColor.accent.opacity(0.7 * (1 - phase)), lineWidth: 1.5)
+                        .scaleEffect(0.25 + phase * 0.95)
+                }
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// A battery as a ring, the way the menu bar's own widgets show it; a bolt while charging.
+struct BatteryRing: View {
+    let percent: Int
+    var charging = false
+    var size: CGFloat = 34
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(FuseColor.outline.opacity(0.6), lineWidth: 3)
+            Circle()
+                .trim(from: 0, to: CGFloat(max(0, min(100, percent))) / 100)
+                .stroke(percent <= 20 && !charging ? FuseColor.error : FuseColor.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            if charging {
+                Image(systemName: "bolt.fill").font(.system(size: size * 0.32, weight: .bold)).foregroundStyle(FuseColor.accent)
+            } else {
+                Text("\(percent)")
+                    .font(.system(size: size * 0.3, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(FuseColor.ink)
+            }
+        }
+        .frame(width: size, height: size)
+        .help(charging ? "Charging, \(percent)%" : "Battery \(percent)%")
     }
 }
 

@@ -29,6 +29,9 @@ public struct ClipHistoryStore {
         var blob: String?
         var fromSelf: Bool
         var atUnixMs: Int64
+        /// "" for a copy not sent yet. Absent in records from before history was kept per
+        /// device — those are dropped, since nothing says whose they were.
+        var peer: String?
     }
 
     public func load() -> [ClipEntry] {
@@ -37,6 +40,7 @@ public struct ClipHistoryStore {
         else { return [] }
 
         return records.compactMap { record in
+            guard let peer = record.peer else { return nil }
             var imageData: Data?
             if let blob = record.blob {
                 // An entry whose blob went missing is dropped rather than shown as an
@@ -53,6 +57,7 @@ public struct ClipHistoryStore {
                 mime: record.mime,
                 fromSelf: record.fromSelf,
                 at: Date(timeIntervalSince1970: Double(record.atUnixMs) / 1000),
+                peer: peer.isEmpty ? nil : peer,
             )
         }
     }
@@ -78,6 +83,7 @@ public struct ClipHistoryStore {
                 blob: blob,
                 fromSelf: entry.fromSelf,
                 atUnixMs: Int64(entry.at.timeIntervalSince1970 * 1000),
+                peer: entry.peer ?? "",
             )
         }
 

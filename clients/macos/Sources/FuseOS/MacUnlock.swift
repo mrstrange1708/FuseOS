@@ -34,7 +34,9 @@ enum MacUnlock {
         return (try? record.verifyPassword(password)) != nil
     }
 
-    static func store(_ password: String) {
+    /// False when the Keychain refused it — the switch must not claim to be on then.
+    @discardableResult
+    static func store(_ password: String) -> Bool {
         forget()
         let item: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -44,7 +46,9 @@ enum MacUnlock {
             // Must be readable while the screen is locked — that is when it is needed.
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
-        SecItemAdd(item as CFDictionary, nil)
+        let status = SecItemAdd(item as CFDictionary, nil)
+        if status != errSecSuccess { FuseLog.unlock.error("keychain refused the password: \(status, privacy: .public)") }
+        return status == errSecSuccess
     }
 
     static func forget() {
@@ -63,14 +67,21 @@ enum MacUnlock {
         return String(data: data, encoding: .utf8)
     }
 
-    /// Wakes the display and types the password at the lock screen.
-    static func unlock() {
+    /// Wakes the display and types the password at the lock screen, then reports how it
+    /// went — `report(ok, why)` — so the phone, which is what the user is looking at, can
+    /// say it. Says nothing when the feature is off or the Mac was not locked: every phone
+    /// unlock arrives here, and most are not a request to unlock the Mac.
+    static func unlock(report: @escaping (Bool, String) -> Void) {
         guard UserDefaults.standard.bool(forKey: enabledKey) else { return }
         guard isScreenLocked else { return FuseLog.unlock.info("phone unlocked; Mac is not locked") }
         guard AXIsProcessTrusted() else {
-            return FuseLog.unlock.error("no Accessibility grant — System Settings → Privacy & Security → Accessibility")
+            FuseLog.unlock.error("no Accessibility grant — System Settings → Privacy & Security → Accessibility")
+            return report(false, "Allow FuseOS in your Mac's System Settings → Privacy & Security → Accessibility.")
         }
-        guard let password = storedPassword() else { return FuseLog.unlock.error("no stored password (or the Keychain is locked)") }
+        guard let password = storedPassword() else {
+            FuseLog.unlock.error("no stored password (or the Keychain is locked)")
+            return report(false, "Turn Unlock with phone off and on again on your Mac to re-enter its password.")
+        }
         FuseLog.unlock.info("unlocking")
         var assertion: IOPMAssertionID = 0
         IOPMAssertionDeclareUserActivity("FuseOS: phone unlocked nearby" as CFString, kIOPMUserActiveLocal, &assertion)
@@ -95,6 +106,13 @@ enum MacUnlock {
                 usleep(8_000)
             }
             press(36)
+            // The login window takes a moment to check a password; still locked after that
+            // means macOS refused the typed one (some versions block synthetic input there).
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                isScreenLocked
+                    ? report(false, "Your Mac didn't accept it. macOS may block typed passwords at its lock screen.")
+                    : report(true, "Your Mac is unlocked.")
+            }
         }
     }
 
@@ -117,7 +135,13 @@ enum MacUnlock {
             wrong.runModal()
             return false
         }
-        store(field.stringValue)
+        guard store(field.stringValue) else {
+            let failed = NSAlert()
+            failed.messageText = "Couldn't save the password"
+            failed.informativeText = "macOS's Keychain refused it, so unlocking can't work. Unlock your login keychain (Keychain Access) and try again."
+            failed.runModal()
+            return false
+        }
         return true
     }
 }

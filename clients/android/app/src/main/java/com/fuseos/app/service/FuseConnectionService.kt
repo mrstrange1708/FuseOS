@@ -20,6 +20,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 /**
  * Keeps the LAN listener and the `/signal` socket alive while FuseOS is off screen.
@@ -64,7 +66,7 @@ class FuseConnectionService : Service() {
                 ServiceLocator.clipboardSync.events.collect { entry ->
                     // Copied here with nothing linked: it is in History, but it went nowhere.
                     if (entry.fromSelf && ServiceLocator.lanTransport.connectedPeers.value.isEmpty()) {
-                        ServiceLocator.clipIsland.status("Not sent", "Your Mac isn't linked. Kept in History.")
+                        ServiceLocator.clipIsland.error("Not sent", "Your Mac isn't linked. Kept in History.")
                     } else {
                         ServiceLocator.clipIsland.clip(entry)
                     }
@@ -73,9 +75,9 @@ class FuseConnectionService : Service() {
         }
         if (startJob?.isActive != true) {
             startJob = scope.launch {
-                // Fail soft: the phone may be off-network at boot. The dashboard and the
-                // Share sheet both retry through the same ConnectionManager.
-                runCatching { ServiceLocator.connectionManager.ensureStarted() }
+                // Fail soft: the phone may be off-network at boot, or the server down.
+                // Keeps retrying with backoff, so it links by itself once it's reachable.
+                ServiceLocator.connectionManager.startRetrying()
             }
         }
         // START_STICKY: if Android kills us for memory, come back — continuity is the
@@ -113,9 +115,10 @@ class FuseConnectionService : Service() {
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        fun build(linked: Boolean): Notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("FuseOS")
-            .setContentText("Connected to your Mac")
+            // Follows the link: "connected" while nothing is linked was a quiet lie.
+            .setContentText(if (linked) "Linked to your Mac" else "Not linked · looking for your Mac on this Wi-Fi")
             .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
             .setSilent(true)
@@ -123,10 +126,17 @@ class FuseConnectionService : Service() {
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()
 
+        val notification = build(ServiceLocator.lanTransport.connectedPeers.value.isNotEmpty())
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
             startForeground(NOTIFICATION_ID, notification)
+        }
+        scope.launch {
+            ServiceLocator.lanTransport.connectedPeers
+                .map { it.isNotEmpty() }
+                .distinctUntilChanged()
+                .collect { linked -> manager.notify(NOTIFICATION_ID, build(linked)) }
         }
     }
 

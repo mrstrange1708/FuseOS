@@ -70,7 +70,9 @@ struct MenuBarContent: View {
         }
         .padding(12)
         .frame(width: 360)
+        .fixedSize(horizontal: false, vertical: true)
         .background(FuseColor.bg)
+        .background(GeometryReader { FitMenuWindow(height: $0.size.height) })
         .overlay {
             if dropTargeted {
                 RoundedRectangle(cornerRadius: 14)
@@ -419,13 +421,16 @@ struct MenuBarContent: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 VStack(spacing: 2) {
-                    // Four keeps the popover within a small MacBook's screen even with music,
+                    // Three keeps the popover within a small MacBook's screen even with music,
                     // a live activity and a file showing; the window has the rest.
                     ForEach(viewModel.history.prefix(3)) { entry in
                         ClipRowButton(
                             entry: entry,
                             peerName: viewModel.peerName,
                             copied: copiedId == entry.id,
+                            // What was copied here can go (again) to the phone; what came from
+                            // the phone is already there.
+                            onSend: entry.fromSelf ? { viewModel.sendToPhone(entry) } : nil,
                         ) {
                             viewModel.copyToClipboard(entry)
                             withAnimation(.easeOut(duration: 0.15)) { copiedId = entry.id }
@@ -434,8 +439,10 @@ struct MenuBarContent: View {
                                 if copiedId == entry.id { withAnimation { copiedId = nil } }
                             }
                         }
+                        .transition(.asymmetric(insertion: .move(edge: .top).combined(with: .opacity), removal: .opacity))
                     }
                 }
+                .animation(.spring(response: 0.45, dampingFraction: 0.8), value: viewModel.history.first?.id)
             }
         }
     }
@@ -500,26 +507,46 @@ struct MenuBarContent: View {
 // MARK: - Pieces
 
 /// Three rings pulsing out from the Mac: the search, running.
+/// Keeps the popover's window fitted to its content, its top under the menu bar.
+///
+/// `MenuBarExtra` sizes its window once, when it opens. Content that changes while it is
+/// open — a link coming up, a card going away — was clipped when it grew and, when it
+/// shrank, left the window hanging below the menu bar with a strip of nothing above it.
+private struct FitMenuWindow: NSViewRepresentable {
+    let height: CGFloat
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        // After this layout pass: resizing the window from inside it would re-enter it.
+        DispatchQueue.main.async {
+            guard let window = view.window, height > 0 else { return }
+            let content = NSRect(x: 0, y: 0, width: window.contentLayoutRect.width, height: height)
+            let size = window.frameRect(forContentRect: content).size
+            // The content's top just under the menu bar, where the popover opens. The window
+            // reaches higher than its content (a strip the system tucks behind the menu bar),
+            // so the frame's own top is not the anchor.
+            let chrome = window.frame.height - window.contentLayoutRect.maxY
+            let top = (window.screen?.visibleFrame.maxY).map { $0 + chrome } ?? window.frame.maxY
+            let frame = NSRect(x: window.frame.minX, y: top - size.height, width: window.frame.width, height: size.height)
+            guard abs(window.frame.height - frame.height) > 0.5 || abs(window.frame.maxY - top) > 0.5 else { return }
+            window.setFrame(frame, display: true)
+        }
+    }
+}
+
 private struct Radar: View {
     var body: some View {
-        TimelineView(.animation) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
+        ZStack {
+            Ripples()
             ZStack {
-                ForEach(0 ..< 3, id: \.self) { i in
-                    let phase = (t / 2.1 + Double(i) / 3).truncatingRemainder(dividingBy: 1)
-                    Circle()
-                        .stroke(FuseColor.accent.opacity(0.7 * (1 - phase)), lineWidth: 1.5)
-                        .scaleEffect(0.25 + phase * 0.95)
-                }
-                ZStack {
-                    Circle().fill(FuseColor.accent.opacity(0.15)).frame(width: 40, height: 40)
-                    Image(systemName: "laptopcomputer")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(FuseColor.accent)
-                }
+                Circle().fill(FuseColor.accent.opacity(0.15)).frame(width: 40, height: 40)
+                Image(systemName: "laptopcomputer")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(FuseColor.accent)
             }
-            .frame(maxWidth: .infinity)
         }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -564,8 +591,10 @@ private struct ClipRowButton: View {
     let entry: ClipEntry
     let peerName: String?
     let copied: Bool
+    var onSend: (() -> Void)?
     let action: () -> Void
     @State private var hovering = false
+    @State private var sent = false
 
     var body: some View {
         Button(action: action) {
@@ -599,6 +628,30 @@ private struct ClipRowButton: View {
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(FuseColor.accent)
                         .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                } else if sent {
+                    Label("Sent", systemImage: "checkmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(FuseColor.accent)
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                } else if hovering, let onSend {
+                    Button {
+                        onSend()
+                        withAnimation(.easeOut(duration: 0.15)) { sent = true }
+                        Task {
+                            try? await Task.sleep(nanoseconds: 1_300_000_000)
+                            withAnimation { sent = false }
+                        }
+                    } label: {
+                        Label("Send", systemImage: "arrow.up.right")
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 9)
+                            .frame(height: 22)
+                            .background(Capsule().fill(FuseColor.accent))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Send to \(peerName ?? "your phone")")
+                    .transition(.opacity)
                 } else {
                     Text(entry.at, format: .relative(presentation: .numeric, unitsStyle: .narrow))
                         .font(.system(size: 10.5))
@@ -611,40 +664,17 @@ private struct ClipRowButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { hovering = $0 }
+        .onHover { inside in withAnimation(.easeOut(duration: 0.12)) { hovering = inside } }
         .help("Copy to this Mac's clipboard")
     }
 
     /// Newlines would make a one-line row render as a stray fragment.
     private var summary: String {
-        if entry.isImage { return "Image" }
-        return (entry.text ?? "").replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
-    }
-}
-
-/// The phone's battery as a ring, the way the menu bar's own widgets show it.
-private struct BatteryRing: View {
-    let percent: Int
-    var charging = false
-
-    var body: some View {
-        ZStack {
-            Circle().stroke(FuseColor.outline.opacity(0.6), lineWidth: 3)
-            Circle()
-                .trim(from: 0, to: CGFloat(max(0, min(100, percent))) / 100)
-                .stroke(percent <= 20 ? FuseColor.error : FuseColor.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-            if charging {
-                Image(systemName: "bolt.fill").font(.system(size: 11, weight: .bold)).foregroundStyle(FuseColor.accent)
-            } else {
-                Text("\(percent)")
-                    .font(.system(size: 10, weight: .semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(FuseColor.ink)
-            }
+        if entry.isImage {
+            guard let rep = entry.imageData.flatMap(NSImage.init(data:))?.representations.first, rep.pixelsWide > 0 else { return "Image" }
+            return "Image · \(rep.pixelsWide) × \(rep.pixelsHigh)"
         }
-        .frame(width: 34, height: 34)
-        .help(charging ? "Phone charging, \(percent)%" : "Phone battery \(percent)%")
+        return (entry.text ?? "").replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
     }
 }
 

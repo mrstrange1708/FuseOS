@@ -31,6 +31,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.SouthWest
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -126,12 +128,26 @@ class ClipIsland(context: Context) {
         )
     }
 
+    /**
+     * Something did not happen, and why. The island is where every outcome is said, so a
+     * failure gets it too — in red, and long enough to read the fix.
+     */
+    fun error(title: String, subtitle: String) = status(title, subtitle, icon = IslandIcon.Error)
+
     fun status(
         title: String,
         subtitle: String,
         thumbnail: ByteArray? = null,
         icon: IslandIcon = IslandIcon.Sent,
     ) {
+        // No overlay permission: nowhere to draw. Say it anyway, the plain way — an outcome
+        // that is not shown is the silent failure this whole component exists to prevent.
+        if (!canDraw()) {
+            scope.launch {
+                android.widget.Toast.makeText(appContext, "$title. $subtitle", android.widget.Toast.LENGTH_LONG).show()
+            }
+            return
+        }
         show(
             IslandContent(
                 title = title,
@@ -141,7 +157,7 @@ class ClipIsland(context: Context) {
                 icon = icon,
                 onTap = { hide() },
             ),
-            visibleMs = STATUS_VISIBLE_MS,
+            visibleMs = if (icon == IslandIcon.Error) ERROR_VISIBLE_MS else STATUS_VISIBLE_MS,
         )
     }
 
@@ -243,6 +259,7 @@ class ClipIsland(context: Context) {
 
         private const val PROMPT_VISIBLE_MS = 6_000L
         private const val STATUS_VISIBLE_MS = 2_400L
+        private const val ERROR_VISIBLE_MS = 5_000L
         private const val EXIT_MS = 260L
         /** Breathing room under the status bar — and under an OEM island, if the
          *  phone has one of its own sitting in exactly this spot. */
@@ -250,7 +267,7 @@ class ClipIsland(context: Context) {
     }
 }
 
-enum class IslandIcon { Copy, Sent, Incoming }
+enum class IslandIcon { Copy, Sent, Incoming, Error }
 
 /** One frame of island content. Immutable, so swapping it re-runs the entry animation. */
 private data class IslandContent(
@@ -315,7 +332,7 @@ private fun IslandSurface(content: IslandContent?) {
                 // down into it, and padding rejects a negative value outright.
                 .offset(y = drop)
                 .width(width)
-                .height(HEIGHT)
+                .heightIn(min = HEIGHT)
                 .alpha(shellAlpha)
                 .clip(RoundedCornerShape(HEIGHT / 2))
                 // Opaque, not translucent: this floats over arbitrary app content, and a
@@ -323,7 +340,7 @@ private fun IslandSurface(content: IslandContent?) {
                 .background(scheme.surface)
                 .border(1.dp, scheme.outlineVariant, RoundedCornerShape(HEIGHT / 2))
                 .clickable(onClick = body.onTap)
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -341,7 +358,8 @@ private fun IslandSurface(content: IslandContent?) {
                         text = body.action ?: body.subtitle,
                         style = MaterialTheme.typography.bodySmall,
                         color = if (body.action != null) scheme.primary else scheme.onSurfaceVariant,
-                        maxLines = 1,
+                        // An error's second line is the fix; it gets room rather than an ellipsis.
+                        maxLines = if (body.icon == IslandIcon.Error) 2 else 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
@@ -358,11 +376,12 @@ private fun IslandSurface(content: IslandContent?) {
 @Composable
 private fun Badge(icon: IslandIcon) {
     val scheme = MaterialTheme.colorScheme
+    val tint = if (icon == IslandIcon.Error) scheme.error else scheme.primary
     Box(
         modifier = Modifier
             .size(40.dp)
             .clip(RoundedCornerShape(20.dp))
-            .background(scheme.primary.copy(alpha = 0.14f)),
+            .background(tint.copy(alpha = 0.14f)),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -370,9 +389,10 @@ private fun Badge(icon: IslandIcon) {
                 IslandIcon.Copy -> Icons.Rounded.ContentCopy
                 IslandIcon.Sent -> Icons.Rounded.Check
                 IslandIcon.Incoming -> Icons.Rounded.SouthWest
+                IslandIcon.Error -> Icons.Rounded.Warning
             },
             contentDescription = null,
-            tint = scheme.primary,
+            tint = tint,
             modifier = Modifier.size(18.dp),
         )
     }

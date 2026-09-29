@@ -31,7 +31,8 @@ enum DemoMode {
         vm.selfDevice = mac
         vm.allPeers = [phone]
         vm.presence = [phone.id: PeerPresence(online: true, battery: 76, publicKey: nil, lanAddress: nil)]
-        vm.connected = [phone.id]
+        // FUSE_DEMO_UNLINKED=1 renders the no-phone state, for reviewing that design too.
+        vm.connected = ProcessInfo.processInfo.environment["FUSE_DEMO_UNLINKED"] == nil ? [phone.id] : []
         let now = Date()
         vm.syncLatency = SyncLatency(lastMs: 38, p95Ms: 64, samples: 50)
         vm.recentNotifications = [
