@@ -1,8 +1,5 @@
 import { IconDownload } from '@tabler/icons-react';
 
-// Plain asset URLs don't get next.config's basePath (the Pages build lives under /FuseOS).
-const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
-
 /** The launch film: everything FuseOS does, in 36 seconds. */
 export function Film() {
   return (
@@ -22,8 +19,8 @@ export function Film() {
         <div className="mt-10 overflow-hidden rounded-3xl border border-white/[0.08] bg-[#0e1017] shadow-[0_40px_120px_-40px_rgba(255,122,69,0.35)]">
           <video
             className="block aspect-video w-full"
-            src={`${BASE}/fuseos-film.mp4`}
-            poster={`${BASE}/fuseos-film.jpg`}
+            src="/fuseos-film.mp4"
+            poster="/fuseos-film.jpg"
             controls
             playsInline
             preload="metadata"
@@ -31,7 +28,7 @@ export function Film() {
           />
         </div>
         <a
-          href={`${BASE}/fuseos-film-1080p.mp4`}
+          href="/fuseos-film-1080p.mp4"
           download="FuseOS-film-1080p.mp4"
           className="mt-4 inline-flex items-center gap-2 text-sm text-muted transition-colors hover:text-ink"
         >
