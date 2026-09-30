@@ -58,14 +58,12 @@ function createAuth() {
       maxPasswordLength: 200,
       autoSignIn: true,
       password: { hash: hashPassword, verify: verifyAnyPassword },
-      // The email links to this server's own reset page (auth/routes.ts), so no web app is
-      // needed. A reset signs every device out: a forgotten password and a stolen one look
+      // The email links to the website's /reset page, which posts to /auth/reset-password
+      // (auth/routes.ts). A reset signs every device out: a forgotten password and a stolen one look
       // the same from here.
-      sendResetPassword: async ({ user, token, url }) => {
-        // The configured address, never one derived from a request (env.ts requires it in
-        // production); a laptop without one falls back to Better Auth's own base.
-        const base = env.BETTER_AUTH_URL ?? new URL(url).origin;
-        const page = `${new URL('/auth/reset', base).href}?token=${encodeURIComponent(token)}`;
+      sendResetPassword: async ({ user, token }) => {
+        // The website's /reset page (a configured address, never one taken from a request).
+        const page = `${new URL('/reset', env.WEB_URL).href}?token=${encodeURIComponent(token)}`;
         emit({ name: 'auth/password-reset.requested', data: { userId: user.id, url: page } });
       },
       revokeSessionsOnPasswordReset: true,

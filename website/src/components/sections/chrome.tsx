@@ -1,6 +1,5 @@
 import { Wordmark } from '@/components/fuse-mark';
-
-const GITHUB = 'https://github.com/mrstrange1708/FuseOS';
+import { CONTACT, GITHUB, ISSUES } from '@/lib/site';
 
 const FAQ = [
   {
@@ -24,8 +23,8 @@ const FAQ = [
     a: 'No — Android lets no app past its own lock screen, so unlocking the Mac only wakes the phone. The other way works: unlock the phone next to the Mac and the Mac unlocks. That part is experimental and opt-in: the Mac keeps your password in its Keychain and types it at the lock screen.',
   },
   {
-    q: 'Is it open source?',
-    a: 'Yes. The Android app, the Mac app and the server are all on GitHub.',
+    q: 'Can I read the code?',
+    a: 'Yes. The Android app, the Mac app and the server are all public on GitHub, so you can check exactly what they do. The code is source-available, not open source: all rights are reserved.',
   },
 ];
 
@@ -57,16 +56,66 @@ export function Faq() {
   );
 }
 
+const FOOTER = [
+  {
+    title: 'Product',
+    links: [
+      { href: '/download', label: 'Download' },
+      { href: '/#film', label: 'Watch the film' },
+      { href: '/#continuity', label: 'Features' },
+    ],
+  },
+  {
+    title: 'Help',
+    links: [
+      { href: '/help', label: 'Help & setup' },
+      { href: '/help#not-linking', label: "Devices won't link" },
+      { href: ISSUES, label: 'Report a bug' },
+    ],
+  },
+  {
+    title: 'Legal',
+    links: [
+      { href: '/privacy', label: 'Privacy policy' },
+      { href: '/terms', label: 'Terms of use' },
+      { href: `mailto:${CONTACT}`, label: CONTACT },
+    ],
+  },
+];
+
 export function Footer() {
   return (
     <footer className="border-t border-white/[0.07] bg-void">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-6 px-4 py-10 text-sm text-muted sm:px-6">
-        <Wordmark />
-        <span>Android ⇄ macOS continuity · clipboard, files, share sheet</span>
-        <a className="hover:text-ink" href={GITHUB}>
-          github.com/mrstrange1708/FuseOS
-        </a>
+      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 text-sm sm:px-6 md:grid-cols-[1.4fr_repeat(3,1fr)]">
+        <div className="space-y-3">
+          <Wordmark />
+          <p className="max-w-[30ch] text-muted">
+            Your Android phone and your Mac, as one. Straight over your Wi-Fi.
+          </p>
+          <a className="inline-block text-muted hover:text-ink" href={GITHUB}>
+            github.com/mrstrange1708/FuseOS
+          </a>
+        </div>
+        {FOOTER.map((column) => (
+          <nav key={column.title} aria-label={column.title}>
+            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-ember">
+              {column.title}
+            </p>
+            <ul className="mt-4 space-y-2.5">
+              {column.links.map((link) => (
+                <li key={link.href}>
+                  <a className="text-muted transition-colors hover:text-ink" href={link.href}>
+                    {link.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        ))}
       </div>
+      <p className="mx-auto max-w-6xl px-4 pb-6 text-xs text-muted/70 sm:px-6">
+        © 2026 Shaik Junaid Sami. All rights reserved.
+      </p>
       <p
         aria-hidden="true"
         className="pointer-events-none -mb-[0.2em] select-none bg-gradient-to-b from-white/[0.07] to-transparent bg-clip-text text-center font-display text-[clamp(80px,22vw,320px)] leading-none font-black tracking-[-0.06em] text-transparent"

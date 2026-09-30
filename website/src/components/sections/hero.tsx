@@ -68,7 +68,7 @@ export function Hero() {
           </p>
           <div className="hero-fade mt-9 flex flex-wrap gap-3">
             <a
-              href="#download"
+              href="/download"
               className="group inline-flex items-center gap-2.5 rounded-2xl bg-gradient-to-b from-ember to-ember-deep px-6 py-4 font-semibold text-white shadow-[0_10px_40px_-10px_rgb(255_122_69/0.8),inset_0_1px_0_rgb(255_255_255/0.25)] transition-transform hover:-translate-y-0.5"
             >
               <IconBrandApple size={19} /> <IconBrandAndroid size={19} /> Download the preview
