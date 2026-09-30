@@ -1,5 +1,6 @@
 package com.fuseos.app.data
 
+import com.fuseos.app.core.Usage
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Coordinates auth calls and session persistence. The UI talks only to this. */
@@ -35,5 +36,6 @@ class AuthRepository(
     suspend fun signOut() {
         session.currentToken()?.let { token -> withTimeoutOrNull(3_000) { api.signOut(token) } }
         session.clear()
+        Usage.reset()
     }
 }

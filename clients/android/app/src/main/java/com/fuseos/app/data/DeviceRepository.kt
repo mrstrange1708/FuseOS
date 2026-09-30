@@ -1,6 +1,7 @@
 package com.fuseos.app.data
 
 import com.fuseos.app.core.DeviceInfo
+import com.fuseos.app.core.Usage
 
 /** Coordinates device registration, listing, and manual linking. The UI talks to this. */
 class DeviceRepository(
@@ -35,6 +36,7 @@ class DeviceRepository(
             ),
         )
         session.saveDeviceId(response.id)
+        response.userId?.let(Usage::identify)
         return response.id
     }
 

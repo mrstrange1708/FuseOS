@@ -903,6 +903,7 @@ private struct AccountPane: View {
 
     @State private var draftName = ""
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
+    @State private var usageStatistics = Analytics.enabled
     @AppStorage(DockIcon.key) private var showInDock = true
     @AppStorage(DashboardViewModel.askBeforeSendKey) private var askBeforeSend = false
     @AppStorage(MacPointer.enabledKey) private var phoneControlsMac = false
@@ -966,6 +967,16 @@ private struct AccountPane: View {
                             title: "Ask before sending copies",
                             detail: "Each copy waits in the island for you to click Send.",
                             isOn: $askBeforeSend,
+                        )
+                        Divider().opacity(0.5)
+                        SettingSwitch(
+                            symbol: "chart.bar",
+                            title: "Usage statistics",
+                            detail: "Share which features you use, never what you copy or send. Helps decide what to fix first.",
+                            isOn: Binding(
+                                get: { usageStatistics },
+                                set: { Analytics.enabled = $0; usageStatistics = Analytics.enabled },
+                            ),
                         )
                     }
                 }

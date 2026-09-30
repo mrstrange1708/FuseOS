@@ -1,6 +1,7 @@
 package com.fuseos.app
 
 import android.app.Application
+import com.fuseos.app.core.Usage
 import com.fuseos.app.data.ServiceLocator
 import io.sentry.android.core.SentryAndroid
 
@@ -8,6 +9,7 @@ class FuseApp : Application() {
     override fun onCreate() {
         super.onCreate()
         startSentry()
+        Usage.start(this)
         ServiceLocator.init(this)
     }
 

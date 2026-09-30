@@ -74,6 +74,20 @@ export default function PrivacyPage() {
           devices only.
         </p>
 
+        <h2>Usage statistics</h2>
+        <p>
+          The apps tell PostHog when they open and which features you use — “sent a copy”, “sent a
+          file of 2 MB”, “started screen mirroring” — with your account ID, the app and its version,
+          your device model and system version, and roughly where you are (city and country, which
+          PostHog works out from your IP address). Never what you copied, a file&apos;s name or
+          contents, a notification, or anything on your screen. It tells us how many people use
+          FuseOS and which features matter, so we know what to fix first.
+        </p>
+        <p>
+          Turn it off any time with <b>Usage statistics</b>: on the Mac under Account → Everyday, on
+          the phone under You → Account.
+        </p>
+
         <h2>Emails we send</h2>
         <ul>
           <li>Confirming your email, welcome, and password reset — when you ask for them.</li>
@@ -104,10 +118,10 @@ export default function PrivacyPage() {
             <b>Google</b> — only if you choose Continue with Google.
           </li>
           <li>
-            <b>Sentry</b> (error reports) and <b>PostHog</b> (usage counts): they receive technical
-            details such as event names, app platform, sizes and timings — never anything you copy,
-            send or receive. On this website, PostHog counts page views without cookies or stored
-            identifiers, and without the part of the address after “?”.
+            <b>Sentry</b> (error reports) and <b>PostHog</b> (usage statistics, above): they receive
+            technical details such as event names, app platform, sizes and timings — never anything
+            you copy, send or receive. On this website, PostHog counts page views without cookies or
+            stored identifiers, and without the part of the address after “?”.
           </li>
           <li>Our server host, which runs the FuseOS server.</li>
         </ul>

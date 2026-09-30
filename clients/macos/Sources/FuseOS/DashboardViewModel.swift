@@ -313,6 +313,7 @@ final class DashboardViewModel: ObservableObject {
         files.stop()
         clipboard.forget()
         transport.stop()
+        Analytics.reset()
     }
 
     private func bootstrap() async {

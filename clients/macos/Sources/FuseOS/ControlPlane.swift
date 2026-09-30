@@ -12,6 +12,7 @@ struct DeviceRegisterRequest: Encodable {
 
 struct DeviceRegisterResponse: Decodable {
     let id: String
+    let userId: String? // absent from servers before analytics
     let name: String
     let platform: String
 }
@@ -89,6 +90,7 @@ struct ControlPlane {
             path: "/devices", method: "POST", body: body,
         )
         SessionStore.shared.setDeviceId(response.id)
+        if let userId = response.userId { Analytics.identify(userId) }
         return response.id
     }
 
