@@ -1,5 +1,5 @@
 import { Wordmark } from '@/components/fuse-mark';
-import { CONTACT, GITHUB, ISSUES } from '@/lib/site';
+import { CONTACT, GITHUB } from '@/lib/site';
 
 const FAQ = [
   {
@@ -70,7 +70,7 @@ const FOOTER = [
     links: [
       { href: '/help', label: 'Help & setup' },
       { href: '/help#not-linking', label: "Devices won't link" },
-      { href: ISSUES, label: 'Report a bug' },
+      { href: '/report', label: 'Report a bug' },
     ],
   },
   {

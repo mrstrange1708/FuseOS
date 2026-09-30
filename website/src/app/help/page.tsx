@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { PageShell, Prose } from '@/components/page-shell';
-import { CONTACT, ISSUES } from '@/lib/site';
+import { CONTACT } from '@/lib/site';
 
 export const metadata: Metadata = {
   title: 'Help · FuseOS',
@@ -136,8 +136,7 @@ export default function HelpPage() {
 
         <h2 id="contact">Still stuck?</h2>
         <p>
-          <a href={ISSUES}>Open an issue on GitHub</a> or email{' '}
-          <a href={`mailto:${CONTACT}`}>{CONTACT}</a>.
+          <a href="/report">Report it here</a> or email <a href={`mailto:${CONTACT}`}>{CONTACT}</a>.
         </p>
       </Prose>
     </PageShell>

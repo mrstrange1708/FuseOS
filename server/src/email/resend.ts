@@ -20,7 +20,7 @@ async function expectOk(response: Response): Promise<void> {
 }
 
 /** One email to one person: HTML, with the text version for clients that want it. */
-export async function sendEmail(to: string, email: Email): Promise<void> {
+export async function sendEmail(to: string, email: Email, replyTo?: string): Promise<void> {
   await expectOk(
     await resend('/emails', {
       from: env.EMAIL_FROM,
@@ -28,6 +28,7 @@ export async function sendEmail(to: string, email: Email): Promise<void> {
       subject: email.subject,
       html: email.html,
       text: email.text,
+      ...(replyTo ? { reply_to: replyTo } : {}),
     }),
   );
 }
