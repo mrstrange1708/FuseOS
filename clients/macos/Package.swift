@@ -15,6 +15,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.38.0"),
         // Crash and error reports for the app (never content — docs/observability.md).
         .package(url: "https://github.com/getsentry/sentry-cocoa", from: "9.29.2"),
+        // Feature counts and daily actives (never content — docs/observability.md).
+        .package(url: "https://github.com/PostHog/posthog-ios", from: "3.86.0"),
     ],
     targets: [
         .target(
@@ -34,6 +36,7 @@ let package = Package(
             dependencies: [
                 "FuseOSCore", "VirtualDisplay",
                 .product(name: "Sentry", package: "sentry-cocoa"),
+                .product(name: "PostHog", package: "posthog-ios"),
             ],
             path: "Sources/FuseOS",
         ),

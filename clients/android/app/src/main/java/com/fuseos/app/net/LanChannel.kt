@@ -1,5 +1,6 @@
 package com.fuseos.app.net
 
+import com.fuseos.app.core.Usage
 import com.fuseos.proto.Envelope
 import java.io.Closeable
 import java.io.DataInputStream
@@ -46,6 +47,7 @@ class LanChannel private constructor(
         output.writeInt(frame.size)
         output.write(frame)
         output.flush()
+        Usage.sent(envelope)
     }
 
     /**

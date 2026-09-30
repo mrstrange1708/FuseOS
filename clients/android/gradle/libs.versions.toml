@@ -16,10 +16,12 @@ protobufPlugin = "0.9.4"
 junit = "4.13.2"
 credentials = "1.3.0"
 sentry = "8.58.0"
+posthog = "3.71.3"
 googleid = "1.1.1"
 
 [libraries]
 sentry-android = { module = "io.sentry:sentry-android", version.ref = "sentry" }
+posthog-android = { module = "com.posthog:posthog-android", version.ref = "posthog" }
 androidx-credentials = { module = "androidx.credentials:credentials", version.ref = "credentials" }
 androidx-credentials-play-services = { module = "androidx.credentials:credentials-play-services-auth", version.ref = "credentials" }
 googleid = { module = "com.google.android.libraries.identity.googleid:googleid", version.ref = "googleid" }

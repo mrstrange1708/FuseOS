@@ -72,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.startSentry()
+        Analytics.start()
         DockIcon.watch()
         if let directory = DemoMode.directory {
             Task { @MainActor in await DemoMode.snapshot(to: directory) }

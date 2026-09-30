@@ -94,6 +94,9 @@ export function registerDeviceRoutes(app: FastifyInstance): void {
     }
     return reply.status(201).send({
       id: device.id,
+      // The apps name their analytics after the account, as the server does, so one person
+      // counts once across phone, Mac and web.
+      userId,
       name: device.name,
       platform: device.platform,
       createdAt: device.createdAt,

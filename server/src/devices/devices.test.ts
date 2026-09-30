@@ -74,6 +74,7 @@ describe.skipIf(!process.env.DATABASE_URL)('device registry', () => {
     expect(second.statusCode).toBe(201);
     expect(second.json().id).toBe(first.json().id);
     expect(second.json().name).toBe('Mac Studio');
+    expect(second.json().userId).toBe(user.userId);
 
     const list = await app.inject({ method: 'GET', url: '/devices', headers: auth(user.token) });
     const matches = (list.json().devices as { id: string }[]).filter(

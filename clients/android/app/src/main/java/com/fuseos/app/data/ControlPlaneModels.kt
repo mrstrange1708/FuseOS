@@ -13,7 +13,12 @@ data class DeviceRegisterRequest(
 )
 
 @Serializable
-data class DeviceRegisterResponse(val id: String, val name: String, val platform: String)
+data class DeviceRegisterResponse(
+    val id: String,
+    val name: String,
+    val platform: String,
+    val userId: String? = null, // absent from servers before analytics
+)
 
 @Serializable
 data class DeviceItem(

@@ -1,5 +1,6 @@
 package com.fuseos.app.ui.shell
 
+import com.fuseos.app.core.Usage
 import com.fuseos.app.ui.components.glassCard
 import androidx.compose.foundation.background
 import androidx.compose.material3.Button
@@ -261,6 +262,18 @@ fun ProfileScreen(
                     trailing = "Link",
                 )
             }
+            // Read here, not passed down: PostHog itself remembers the choice.
+            var usageOn by remember { mutableStateOf(Usage.enabled) }
+            SettingItem(
+                "Usage statistics",
+                "Share which features you use, never what you copy or send. Helps decide what to fix first.",
+                onClick = {
+                    Usage.enabled = !usageOn
+                    usageOn = Usage.enabled
+                },
+                trailing = if (usageOn) "On" else "Off",
+                trailingLit = usageOn,
+            )
             SettingItem("Sign out", "Clears this phone's session and clipboard history.", onSignOut, destructive = true)
         }
 

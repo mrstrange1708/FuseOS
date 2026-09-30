@@ -30,6 +30,12 @@ android {
         val sentryDsn = (project.findProperty("sentryDsn") as String?)
             ?: "https://199bd032d05807bb504609b57d7b01be@o4512173573799936.ingest.us.sentry.io/4512173578846208"
         buildConfigField("String", "SENTRY_DSN", "\"$sentryDsn\"")
+        // PostHog's project key is a client key too (it can only send events); -PposthogKey=
+        // turns analytics off.
+        val posthogKey = (project.findProperty("posthogKey") as String?)
+            ?: "phc_y8RWGPAEQYEDoMox8WcZk4gKuccTVDo9RWKadU6u62nw"
+        buildConfigField("String", "POSTHOG_KEY", "\"$posthogKey\"")
+        buildConfigField("String", "POSTHOG_HOST", "\"https://us.i.posthog.com\"")
     }
 
     // Release signing comes from the environment (the release workflow decodes the keystore
@@ -112,6 +118,7 @@ dependencies {
 
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.sentry.android)
+    implementation(libs.posthog.android)
     // Sign in with Google: the system account picker hands back an ID token (docs/api.md).
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services)

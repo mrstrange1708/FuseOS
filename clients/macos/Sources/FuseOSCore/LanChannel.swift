@@ -66,6 +66,7 @@ actor LanChannel {
         }
         lastWrite = write
         try await write.value
+        Usage.sent(envelope)
     }
 
     /// Throws at end of stream, on a malformed length, or when the tag check fails — all

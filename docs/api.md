@@ -62,8 +62,9 @@ Android uses Credential Manager (`GetGoogleIdOption` with the web client as serv
 // request  (battery optional, 0–100)
 { "name": "Pixel 8", "platform": "android", "publicKey": "base64…", "battery": 47 }
 // response 201
-{ "id": "uuid", "name": "Pixel 8", "platform": "android", "createdAt": "…" }
+{ "id": "uuid", "userId": "…", "name": "Pixel 8", "platform": "android", "createdAt": "…" }
 ```
+`userId` is the account the device belongs to; the apps use it as their analytics id, the same one the server uses, so a person counts once across phone, Mac and web (`docs/observability.md`).
 Validation: `platform ∈ {android, macos}`, `name` length 1–100, `publicKey` non-empty and unique. Bound to the caller's user. **Idempotent by `publicKey`** — a client may call this on every launch and always gets back its stable device id.
 
 **`GET /devices`** — lists the caller's devices for the dashboard. Optional `?self=<deviceId>` marks which row is the caller; every other row on the account comes back `trusted: true` (see [Trust](#trust) below). Without `?self=` nothing is flagged — "other" has no reference point.
