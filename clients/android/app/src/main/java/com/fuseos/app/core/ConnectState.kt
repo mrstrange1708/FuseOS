@@ -57,6 +57,25 @@ object ConnectStateEvaluator {
     }
 
     /**
+     * Whether two `ip:port` addresses share a network of [prefixLength] bits — this device's
+     * real netmask, so a campus /19 (10.7.19.x and 10.7.25.x) is one network, not two.
+     * Null when either is not a dotted quad.
+     */
+    fun sameNetwork(a: String, b: String, prefixLength: Int): Boolean? {
+        val x = ipv4(a) ?: return null
+        val y = ipv4(b) ?: return null
+        val bits = prefixLength.coerceIn(0, 32)
+        val mask = if (bits == 0) 0 else -1 shl (32 - bits)
+        return (x and mask) == (y and mask)
+    }
+
+    private fun ipv4(address: String): Int? {
+        val octets = address.substringBefore(':').split('.').map { it.toIntOrNull() ?: return null }
+        if (octets.size != 4 || octets.any { it !in 0..255 }) return null
+        return octets.fold(0) { acc, octet -> (acc shl 8) or octet }
+    }
+
+    /**
      * Collapses the device roster into the single state the connect screen renders.
      *
      * Pure and Android-free so both clients agree on the rules, and so the ordering is
@@ -67,6 +86,7 @@ object ConnectStateEvaluator {
         peerIds: List<String>,
         presence: Map<String, PeerPresence>,
         connected: Set<String>,
+        selfPrefixLength: Int = 24,
     ): ConnectState {
         var best = ConnectState(ConnectStage.Alone)
         for (peerId in peerIds) {
@@ -75,6 +95,7 @@ object ConnectStateEvaluator {
                 selfLanAddress = selfLanAddress,
                 presence = presence[peerId],
                 isConnected = peerId in connected,
+                selfPrefixLength = selfPrefixLength,
             )
             if (candidate.stage >= best.stage) best = candidate
         }
@@ -86,6 +107,7 @@ object ConnectStateEvaluator {
         selfLanAddress: String?,
         presence: PeerPresence?,
         isConnected: Boolean,
+        selfPrefixLength: Int,
     ): ConnectState {
         // A live channel outranks everything. Presence arrives over the control plane and
         // can lag or be stale; the channel is ground truth, so it is checked first.
@@ -101,7 +123,7 @@ object ConnectStateEvaluator {
         if (selfSubnet == null || peerSubnet == null) {
             return ConnectState(ConnectStage.Connecting, peerId)
         }
-        if (selfSubnet != peerSubnet) {
+        if (sameNetwork(selfLanAddress.orEmpty(), presence.lanAddress.orEmpty(), selfPrefixLength) == false) {
             return ConnectState(ConnectStage.DifferentNetwork, peerId, selfSubnet, peerSubnet)
         }
         return ConnectState(ConnectStage.Connecting, peerId)

@@ -55,6 +55,7 @@ fun HistoryScreen(
     entries: List<ClipEntry>,
     peerName: String?,
     onCopy: (ClipEntry) -> Unit,
+    onSend: (ClipEntry) -> com.fuseos.app.clipboard.SendOutcome,
     modifier: Modifier = Modifier,
 ) {
     var window by remember { mutableStateOf(HistoryWindow.Day) }
@@ -90,7 +91,7 @@ fun HistoryScreen(
             ) {
                 items(days(shown), key = { it.first }) { (title, group) ->
                     Panel(title = title) {
-                        group.forEach { entry -> ClipListRow(entry, peerName, onCopy) }
+                        group.forEach { entry -> ClipListRow(entry, peerName, onCopy, onSend) }
                     }
                 }
             }

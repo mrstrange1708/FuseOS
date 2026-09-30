@@ -51,6 +51,23 @@ public enum ConnectStateEvaluator {
     /// consumer router and phone hotspot, and we have no way to learn the real one from a
     /// peer's advertised address. Getting it wrong only ever mislabels the *reason* on
     /// screen; `connected` is still decided by a real channel existing, never by this.
+    /// Whether two `ip:port` addresses share a network of `prefixLength` bits — this Mac's
+    /// real netmask, so a campus /19 (10.7.19.x and 10.7.25.x) is one network, not two.
+    /// Nil when either is not a dotted quad.
+    public static func sameNetwork(_ a: String, _ b: String, prefixLength: Int) -> Bool? {
+        guard let x = ipv4(a), let y = ipv4(b) else { return nil }
+        let bits = min(max(prefixLength, 0), 32)
+        let mask: UInt32 = bits == 0 ? 0 : ~UInt32(0) << UInt32(32 - bits)
+        return x & mask == y & mask
+    }
+
+    private static func ipv4(_ address: String) -> UInt32? {
+        let host = address.split(separator: ":", maxSplits: 1).first.map(String.init) ?? address
+        let octets = host.split(separator: ".").compactMap { UInt32($0) }
+        guard octets.count == 4, host.split(separator: ".").count == 4, octets.allSatisfy({ $0 <= 255 }) else { return nil }
+        return octets.reduce(0) { $0 << 8 | $1 }
+    }
+
     public static func subnet(of address: String) -> String? {
         let host = address.split(separator: ":").first.map(String.init) ?? address
         let octets = host.split(separator: ".")
@@ -67,6 +84,7 @@ public enum ConnectStateEvaluator {
         peerIds: [String],
         presence: [String: PeerPresence],
         connected: Set<String>,
+        selfPrefixLength: Int = 24,
     ) -> ConnectState {
         var best = ConnectState(stage: .alone)
         for peerId in peerIds {
@@ -75,6 +93,7 @@ public enum ConnectStateEvaluator {
                 selfLanAddress: selfLanAddress,
                 presence: presence[peerId],
                 isConnected: connected.contains(peerId),
+                selfPrefixLength: selfPrefixLength,
             )
             if candidate.stage >= best.stage { best = candidate }
         }
@@ -86,6 +105,7 @@ public enum ConnectStateEvaluator {
         selfLanAddress: String?,
         presence: PeerPresence?,
         isConnected: Bool,
+        selfPrefixLength: Int,
     ) -> ConnectState {
         // A live channel outranks everything. Presence arrives over the control plane and
         // can lag or be stale; the channel is ground truth, so it is checked first.
@@ -102,7 +122,7 @@ public enum ConnectStateEvaluator {
             // rather than accusing the user of being on the wrong WiFi.
             return ConnectState(stage: .connecting, peerId: peerId)
         }
-        guard selfSubnet == peerSubnet else {
+        guard sameNetwork(selfLanAddress ?? "", presence.lanAddress ?? "", prefixLength: selfPrefixLength) != false else {
             return ConnectState(
                 stage: .differentNetwork,
                 peerId: peerId,

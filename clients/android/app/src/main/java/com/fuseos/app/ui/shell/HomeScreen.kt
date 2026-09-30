@@ -6,6 +6,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.spring
+import androidx.compose.material3.Button
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -83,6 +84,7 @@ fun HomeScreen(
     selfBattery: Int?,
     peerBattery: (String) -> Int?,
     onCopy: (ClipEntry) -> Unit,
+    onSend: (ClipEntry) -> com.fuseos.app.clipboard.SendOutcome,
     onSeeAll: () -> Unit,
     peerName: String?,
     transfers: List<TransferProgress>,
@@ -92,6 +94,7 @@ fun HomeScreen(
     latency: SyncLatency? = null,
     macStatus: com.fuseos.app.core.PeerStatus? = null,
     onOpenLinkOnMac: () -> Unit = {},
+    onConnectNow: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val connect = state.connect
@@ -115,6 +118,7 @@ fun HomeScreen(
             // The newest clip crossed the link: from here when this phone copied it.
             crossing = history.firstOrNull()?.let { Crossing(it.id, toMac = it.fromSelf) },
             streamToMac = transfers.firstOrNull { it.state == TransferProgress.State.Active }?.outgoing,
+            onConnectNow = onConnectNow,
         )
 
         Panel(title = "Files") {
@@ -204,7 +208,7 @@ fun HomeScreen(
                 )
             } else {
                 // Five proves sync is alive without turning Home into History.
-                history.take(5).forEach { entry -> ClipListRow(entry, peerName, onCopy) }
+                history.take(5).forEach { entry -> ClipListRow(entry, peerName, onCopy, onSend) }
             }
         }
         Spacer(Modifier.height(110.dp)) // clears the floating nav bar
@@ -226,6 +230,7 @@ private fun LinkHero(
     latency: SyncLatency?,
     crossing: Crossing?,
     streamToMac: Boolean?,
+    onConnectNow: () -> Unit,
 ) {
     val linked = stage == ConnectStage.Connected
     // Which end last caught something, so it can take the hit.
@@ -299,6 +304,26 @@ private fun LinkHero(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
+        // The Mac is up but there is no link: dial it now rather than wait out a retry, and
+        // whatever the network guess says — a guess is not worth being stuck behind.
+        if (stage == ConnectStage.Connecting || stage == ConnectStage.DifferentNetwork) {
+            var trying by remember { mutableStateOf(false) }
+            LaunchedEffect(trying) {
+                if (trying) {
+                    kotlinx.coroutines.delay(5_000)
+                    trying = false
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = {
+                    trying = true
+                    onConnectNow()
+                },
+                enabled = !trying,
+                shape = RoundedCornerShape(50),
+            ) { Text(if (trying) "Connecting…" else "Connect now") }
+        }
         // The PRD's yardstick — p95 under 300 ms — shown where people look.
         val sync = latency?.takeIf { linked }?.let { "Sync ${it.lastMs} ms · p95 ${it.p95Ms} ms" }
         if (peerBattery != null || sync != null) {

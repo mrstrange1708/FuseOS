@@ -555,6 +555,7 @@ final class DashboardViewModel: ObservableObject {
             peerIds: peers.map(\.id),
             presence: presence,
             connected: connected,
+            selfPrefixLength: transport.lanPrefixLength() ?? 24,
         )
     }
 
@@ -655,10 +656,16 @@ final class DashboardViewModel: ObservableObject {
         }
     }
 
-    /// Send an earlier copy from this Mac to the phone again (the popover's Send).
-    func sendToPhone(_ entry: ClipEntry) {
-        guard !connected.isEmpty else { return notLinked("Nothing was sent. Open FuseOS on your phone, on the same Wi-Fi.") }
+    /// Send an earlier copy to the phone (again) — a history row's Send. False when nothing
+    /// could go, so the row says "Not linked" instead of a tick that pretends.
+    @discardableResult
+    func sendToPhone(_ entry: ClipEntry) -> Bool {
+        guard !connected.isEmpty else {
+            notLinked("Nothing was sent. Open FuseOS on your phone, on the same Wi-Fi.")
+            return false
+        }
         clipboard.resend(entry)
+        return true
     }
 
     /// Clicking a history entry puts it back on this Mac's clipboard.

@@ -54,6 +54,20 @@ class ConnectStateTest {
     }
 
     @Test
+    fun `a wide campus network is one network, judged by this device's netmask`() {
+        val peers = mapOf("b" to presence(true, "10.7.25.109:61866"))
+        val campus = ConnectStateEvaluator.evaluate(
+            selfLanAddress = "10.7.19.107:37523",
+            peerIds = listOf("b"),
+            presence = peers,
+            connected = emptySet(),
+            selfPrefixLength = 19,
+        )
+        assertEquals(ConnectStage.Connecting, campus.stage)
+        assertEquals(ConnectStage.DifferentNetwork, evaluate("10.7.19.107:37523", peers).stage)
+    }
+
+    @Test
     fun `same subnet without channel is connecting`() {
         val state = evaluate(
             "192.168.43.24:9000",

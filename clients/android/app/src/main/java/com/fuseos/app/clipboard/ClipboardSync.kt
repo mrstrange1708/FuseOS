@@ -338,6 +338,26 @@ class ClipboardSync(
     private fun linkedPeer(): String? = transport.connectedPeers.value.firstOrNull()
 
     /**
+     * Sends an earlier clip again — a history row's Send. It is in the history already, so
+     * unlike [share] it is not recorded a second time. A peer applies it and never re-emits
+     * it, so sending one back where it came from cannot loop.
+     */
+    fun resend(entry: ClipEntry): SendOutcome {
+        val bytes = entry.imageBytes
+        if (bytes == null && entry.text.isNullOrEmpty()) return SendOutcome.Nothing
+        if (bytes != null && (bytes.isEmpty() || bytes.size > MAX_INLINE_IMAGE_BYTES)) return SendOutcome.Nothing
+        if (transport.connectedPeers.value.isEmpty()) return SendOutcome.NotLinked
+        broadcast {
+            if (bytes != null) {
+                it.setClipImage(ClipImage.newBuilder().setMime(entry.mime.orEmpty()).setData(ByteString.copyFrom(bytes)))
+            } else {
+                it.setClipText(ClipText.newBuilder().setText(entry.text))
+            }
+        }
+        return SendOutcome.Sent
+    }
+
+    /**
      * Sends whatever is on the clipboard right now, on the user's explicit request.
      *
      * The nav bar's centre button. Reading the clipboard succeeds here because the app is

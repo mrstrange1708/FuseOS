@@ -88,4 +88,17 @@ final class ConnectStateTests: XCTestCase {
         XCTAssertNil(ConnectStateEvaluator.subnet(of: "999.1.1.1:9000"))
         XCTAssertNil(ConnectStateEvaluator.subnet(of: "hostname:9000"))
     }
+
+    func testAWideCampusNetworkIsOneNetworkJudgedByThisMacsNetmask() {
+        let presence = ["b": PeerPresence(online: true, battery: nil, publicKey: nil, lanAddress: "10.7.19.107:37523")]
+        let campus = ConnectStateEvaluator.evaluate(
+            selfLanAddress: "10.7.25.109:61866", peerIds: ["b"], presence: presence, connected: [],
+            selfPrefixLength: 19,
+        )
+        XCTAssertEqual(campus.stage, .connecting)
+        let home = ConnectStateEvaluator.evaluate(
+            selfLanAddress: "10.7.25.109:61866", peerIds: ["b"], presence: presence, connected: [],
+        )
+        XCTAssertEqual(home.stage, .differentNetwork)
+    }
 }
