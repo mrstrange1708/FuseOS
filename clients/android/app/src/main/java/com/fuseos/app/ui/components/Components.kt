@@ -22,7 +22,16 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -96,6 +105,8 @@ fun FuseTextField(
     errorText: String? = null,
     enabled: Boolean = true,
 ) {
+    // The eye: a password you can check before you send it is one you get right first time.
+    var shown by remember { mutableStateOf(false) }
     Column(modifier = modifier.fillMaxWidth()) {
         OutlinedTextField(
             value = value,
@@ -105,7 +116,15 @@ fun FuseTextField(
             enabled = enabled,
             isError = errorText != null,
             visualTransformation =
-                if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
+                if (isPassword && !shown) PasswordVisualTransformation() else VisualTransformation.None,
+            trailingIcon = if (!isPassword) null else ({
+                IconButton(onClick = { shown = !shown }) {
+                    Icon(
+                        if (shown) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                        contentDescription = if (shown) "Hide password" else "Show password",
+                    )
+                }
+            }),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
             keyboardActions = KeyboardActions(
                 onNext = { onImeAction() },

@@ -1,4 +1,6 @@
+import CryptoKit
 import Foundation
+import IOKit
 import FuseOSCore
 
 // MARK: - Wire models (see docs/api.md)
@@ -8,6 +10,7 @@ struct DeviceRegisterRequest: Encodable {
     let platform: String
     let publicKey: String
     let battery: Int?
+    let installId: String?
 }
 
 struct DeviceRegisterResponse: Decodable {
@@ -78,6 +81,18 @@ struct ControlPlane {
         }
     }
 
+    /// This Mac, as the same Mac across keys and accounts: a hash of its hardware UUID, so the
+    /// raw id never leaves. Nil if IOKit gives none.
+    private static let installId: String? = {
+        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPlatformExpertDevice"))
+        defer { IOObjectRelease(service) }
+        guard service != 0,
+              let uuid = IORegistryEntryCreateCFProperty(service, "IOPlatformUUID" as CFString, kCFAllocatorDefault, 0)?
+                  .takeRetainedValue() as? String
+        else { return nil }
+        return SHA256.hash(data: Data("fuseos:\(uuid)".utf8)).map { String(format: "%02x", $0) }.joined()
+    }()
+
     @MainActor
     private static func register(battery: Int?) async throws -> String {
         let body = DeviceRegisterRequest(
@@ -85,6 +100,7 @@ struct ControlPlane {
             platform: "macos",
             publicKey: try SessionStore.shared.deviceKey,
             battery: battery,
+            installId: Self.installId,
         )
         let response: DeviceRegisterResponse = try await send(
             path: "/devices", method: "POST", body: body,

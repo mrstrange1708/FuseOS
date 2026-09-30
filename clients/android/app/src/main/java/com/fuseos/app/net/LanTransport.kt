@@ -79,6 +79,19 @@ class LanTransport(
 
     private val channels = ConcurrentHashMap<String, LanChannel>()
 
+    private val _paused = MutableStateFlow(false)
+
+    /**
+     * The user's Disconnect: no link until they choose Connect — channels closed, callers
+     * refused, nothing dialled. The listener stays bound, so Connect needs no restart.
+     */
+    val paused: StateFlow<Boolean> = _paused.asStateFlow()
+
+    fun setPaused(on: Boolean) {
+        _paused.value = on
+        if (on) channels.values.forEach { it.close() }
+    }
+
     /** When each channel last delivered anything (elapsed ms) — how a dead link is noticed. */
     private val lastHeard = ConcurrentHashMap<LanChannel, Long>()
 
@@ -168,6 +181,7 @@ class LanTransport(
      */
     fun retryNow() {
         val selfId = selfDeviceId ?: return
+        if (_paused.value) return
         scope.launch(Dispatchers.IO) {
             for ((peerId, peer) in peers.value) {
                 if (channels.containsKey(peerId) || !peer.online || peer.publicKey == null) continue
@@ -201,6 +215,10 @@ class LanTransport(
                 listener.accept()
             } catch (e: Exception) {
                 break // listener closed, or we are shutting down
+            }
+            if (_paused.value) {
+                runCatching { socket.close() }
+                continue
             }
             launch(Dispatchers.IO) {
                 try {
@@ -236,7 +254,7 @@ class LanTransport(
             val peer = peers.value[peerId]
             // A channel already up (an inbound one, or "Connect now"'s) needs no second dial.
             if (peer != null && peer.online && peer.lanAddress != null && peer.publicKey != null &&
-                !channels.containsKey(peerId)
+                !channels.containsKey(peerId) && !_paused.value
             ) {
                 val ok = try {
                     dial(peerId, peer.lanAddress, selfId)

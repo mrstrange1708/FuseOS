@@ -33,6 +33,7 @@ class DeviceRepository(
                 platform = "android",
                 publicKey = session.deviceKey(),
                 battery = deviceInfo.batteryPercent(),
+                installId = deviceInfo.installId(),
             ),
         )
         session.saveDeviceId(response.id)

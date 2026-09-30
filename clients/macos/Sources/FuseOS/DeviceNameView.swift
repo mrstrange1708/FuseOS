@@ -58,5 +58,8 @@ struct DeviceNameView: View {
     private func save() {
         guard !trimmed.isEmpty else { return }
         session.setDeviceName(trimmed)
+        // The link may already be up (it starts at sign-in, with the Mac's own name):
+        // re-registering is the rename, and the server tells the phone at once.
+        Task { _ = try? await ControlPlane.registerThisDevice(battery: Battery.currentPercent()) }
     }
 }
