@@ -39,9 +39,12 @@ if (env.POSTHOG_API_KEY && env.NODE_ENV !== 'test') {
   client = new PostHog(env.POSTHOG_API_KEY, { host: env.POSTHOG_HOST });
 }
 
+// Tagged like the apps' events, so the dashboard can show production alone.
+const environment = env.NODE_ENV === 'production' ? 'production' : 'debug';
+
 export function capture(distinctId: string, event: string, properties: AnalyticsProps = {}): void {
   assertNoPayload(properties);
-  client?.capture({ distinctId, event, properties });
+  client?.capture({ distinctId, event, properties: { ...properties, environment } });
 }
 
 export async function shutdownAnalytics(): Promise<void> {
