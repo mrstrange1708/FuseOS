@@ -26,6 +26,21 @@ class AuthApi(
     suspend fun signInWithGoogle(request: GoogleSignInRequest): AuthResponse =
         post("/auth/google", request)
 
+    /**
+     * Emails a reset link (a page on the server). The answer is the same whether or not the
+     * account exists, so success carries nothing.
+     */
+    suspend fun requestPasswordReset(email: String) {
+        val response: HttpResponse = client.post(baseUrl + "/auth/request-password-reset") {
+            contentType(ContentType.Application.Json)
+            setBody(PasswordResetRequest(email))
+        }
+        if (response.status.isSuccess()) return
+        val message = runCatching { response.body<ApiError>().error.message }
+            .getOrDefault("Couldn't reach the FuseOS server. Try again.")
+        throw AuthException(message)
+    }
+
     /** Ends this session on the server, so the token stops working at once. Best effort:
      *  signing out locally must not wait on, or fail with, the network. */
     suspend fun signOut(token: String) {

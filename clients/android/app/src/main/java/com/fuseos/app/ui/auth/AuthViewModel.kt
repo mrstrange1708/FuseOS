@@ -21,6 +21,8 @@ data class AuthUiState(
     val name: String = "",
     val isSubmitting: Boolean = false,
     val error: String? = null,
+    /** A good-news line under the form, e.g. after asking for a reset link. */
+    val notice: String? = null,
     val emailError: String? = null,
     val passwordError: String? = null,
     val nameError: String? = null,
@@ -42,7 +44,7 @@ class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
 
     fun switchTo(mode: AuthMode) =
         _state.update {
-            it.copy(mode = mode, error = null, emailError = null, passwordError = null, nameError = null)
+            it.copy(mode = mode, error = null, notice = null, emailError = null, passwordError = null, nameError = null)
         }
 
     fun submit() {
@@ -89,6 +91,30 @@ class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
                 // On success the session flow updates and AppRoot swaps to Home.
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.message ?: "Unable to continue. Try again.") }
+            } finally {
+                _state.update { it.copy(isSubmitting = false) }
+            }
+        }
+    }
+
+    /** "Forgot password?": a reset link to the email typed above. */
+    fun forgotPassword() {
+        val email = _state.value.email.trim()
+        if (!EMAIL_REGEX.matches(email)) {
+            _state.update { it.copy(emailError = "Enter your email above, then tap Forgot password") }
+            return
+        }
+        _state.update { it.copy(isSubmitting = true, error = null, notice = null) }
+        viewModelScope.launch {
+            try {
+                repository.requestPasswordReset(email)
+                _state.update {
+                    it.copy(notice = "If there's an account for $email, a reset link is on its way. Check your inbox.")
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.message ?: "Couldn't reach the FuseOS server. Try again.") }
             } finally {
                 _state.update { it.copy(isSubmitting = false) }
             }

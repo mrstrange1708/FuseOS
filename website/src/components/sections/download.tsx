@@ -3,7 +3,9 @@ import { CardBody, CardContainer, CardItem } from '@/components/ui/3d-card';
 import { AndroidAppScreen, PixelPhone } from '@/components/devices';
 
 // The newest release's assets; .github/workflows/release.yml publishes them under these names.
-const RELEASE = 'https://github.com/mrstrange1708/FuseOS/releases/latest/download';
+// Our own addresses: website/vercel.json redirects them to the newest GitHub release's files,
+// which the release workflow builds and signs. The binaries stay out of git and Vercel.
+const DOWNLOAD = { mac: '/download/mac', android: '/download/android' };
 
 const PLATFORMS = [
   {
@@ -11,7 +13,7 @@ const PLATFORMS = [
     Icon: IconBrandApple,
     file: 'FuseOS.dmg',
     meta: 'macOS 13 Ventura or later · Apple silicon',
-    href: `${RELEASE}/FuseOS.dmg`,
+    href: DOWNLOAD.mac,
     steps: [
       <>
         Open the DMG and drag <b>FuseOS</b> into <b>Applications</b>.
@@ -32,7 +34,7 @@ const PLATFORMS = [
     Icon: IconBrandAndroid,
     file: 'FuseOS.apk',
     meta: 'Android 8.0 or later',
-    href: `${RELEASE}/FuseOS.apk`,
+    href: DOWNLOAD.android,
     steps: [
       <>Download the APK on your phone and open it.</>,
       <>

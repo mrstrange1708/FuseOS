@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    {
+      "source": "/download/mac",
+      "destination": "https://github.com/mrstrange1708/FuseOS/releases/latest/download/FuseOS.dmg",
+      "permanent": false
+    },
+    {
+      "source": "/download/android",
+      "destination": "https://github.com/mrstrange1708/FuseOS/releases/latest/download/FuseOS.apk",
+      "permanent": false
+    }
+  ]
+}

@@ -45,9 +45,25 @@ struct LoginView: View {
             Spacer().frame(height: 12)
             FuseTextField(title: "Password", text: $viewModel.password, isSecure: true, error: viewModel.passwordError)
                 .onSubmit { viewModel.submit() }
+            HStack {
+                Spacer()
+                Button("Forgot password?") { viewModel.forgotPassword() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(FuseColor.accent)
+                    .disabled(viewModel.isSubmitting)
+            }
+            .padding(.top, 8)
 
             if let error = viewModel.error {
                 ErrorBanner(message: error).padding(.top, 14)
+            }
+            if let notice = viewModel.notice {
+                Text(notice)
+                    .font(.system(size: 13))
+                    .foregroundStyle(FuseColor.ink.opacity(0.85))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 14)
             }
 
             Spacer().frame(height: 22)

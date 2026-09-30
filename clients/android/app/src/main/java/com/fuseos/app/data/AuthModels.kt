@@ -12,6 +12,9 @@ data class SignInRequest(val email: String, val password: String)
 data class GoogleSignInRequest(val idToken: String)
 
 @Serializable
+data class PasswordResetRequest(val email: String)
+
+@Serializable
 data class AuthUser(val id: String, val email: String, val name: String? = null)
 
 @Serializable

@@ -90,3 +90,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" FuseOS.apk FuseOS.dmg --repo "$GITHUB_REPOSITORY" --generate-notes
+      # Emails everyone on the release list (Inngest `releases-announce` → a Resend Broadcast).
+      # The tag is the event id, so a re-run cannot email twice; pre-releases (v1.1.0-beta) stay quiet.
+      - name: Release email
+        env:
+          INNGEST_EVENT_KEY: ${{ secrets.INNGEST_EVENT_KEY }}
+        run: |
+          # Only a plain vX.Y.Z tag emails anyone (it also goes into the JSON below).
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a plain release tag: no email"; exit 0; }
+          test -n "$INNGEST_EVENT_KEY" || { echo "::notice::secret INNGEST_EVENT_KEY not set: no release email"; exit 0; }
+          curl -fsS -X POST "https://inn.gs/e/$INNGEST_EVENT_KEY" -H 'content-type: application/json' \
+            -d "{\"name\":\"releases/published\",\"id\":\"release-$GITHUB_REF_NAME\",\"data\":{\"version\":\"${GITHUB_REF_NAME#v}\",\"notesUrl\":\"https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME\"}}"
