@@ -39,7 +39,10 @@ Configuration (see `server/.env.example`): `SENTRY_DSN`, `POSTHOG_API_KEY`, `POS
 
 What arrives is the stack trace, the device model and OS, and the app version. The DSNs ship in the apps (a client DSN can only send events); `-PsentryDsn=` (Android) and `FuseSentryDSN` in Info.plist (macOS) override them, and an empty value turns reporting off. Sentry's own Android auto-init is disabled so only ours runs. Release builds are not minified, so stack traces are readable without uploading mappings.
 
-PostHog in the apps is not wired yet; it follows the same rule when it is: metadata only (link success, sync latency, connection drops), never content.
+**PostHog** (US cloud, project 636967) is on for the server and the website; the apps are next, under the same rule.
+
+- **Server events** (distinct id = the account's random id, never an email): `server_started`, `signed_up` / `signed_in` (`method: email|google`), `email_verified`, `device_registered` (`platform`, `new`), `password_reset_requested` (anonymous — the answer must not depend on whether the account exists). Off under test (`NODE_ENV=test`), so the suite's throwaway accounts never reach the project.
+- **Website** (`website/src/components/analytics.tsx`, posthog-js): page views and page leaves only — memory persistence (no cookies or storage, so no consent banner), no autocapture (it can record text), no session recording, no surveys, and `before_send` strips the query and fragment from every address, so `/reset?token=…` never leaves as a token.
 
 ## Suggested events (metadata only)
 

@@ -5,6 +5,7 @@ import { authenticate } from '../auth/session.js';
 import { getDb } from '../db/client.js';
 import { devices } from '../db/schema.js';
 import { emit } from '../jobs/inngest.js';
+import { capture } from '../observability/analytics.js';
 import { presence } from '../signal/presence.js';
 import { trustedPeerIds } from './trust.js';
 
@@ -77,6 +78,7 @@ export function registerDeviceRoutes(app: FastifyInstance): void {
     }
     if (device.inserted)
       emit({ name: 'devices/device.added', data: { userId, deviceId: device.id } });
+    capture(userId, 'device_registered', { platform: device.platform, new: device.inserted });
 
     // Peers draw names from their REST roster, which nothing refreshed on a rename: tell
     // the online ones, so the other device shows the new name at once, not next launch.

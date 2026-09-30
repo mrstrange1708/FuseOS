@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Instrument_Sans, JetBrains_Mono, Schibsted_Grotesk } from 'next/font/google';
 import './globals.css';
+import { Analytics } from '@/components/analytics';
 import { SmoothScroll } from '@/components/smooth-scroll';
 
 const display = Schibsted_Grotesk({
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
     <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable} antialiased`}>
       <body className="grain min-h-full">
         <SmoothScroll />
+        <Analytics />
         {children}
       </body>
     </html>

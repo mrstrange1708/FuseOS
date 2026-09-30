@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { env } from '../config/env.js';
+import { capture } from '../observability/analytics.js';
 import { getAuth } from './auth.js';
 
 /**
@@ -73,6 +74,8 @@ async function forward(
   body: unknown,
   successStatus?: number,
   path?: string,
+  /** On success, an analytics event for the account: its id and how, nothing else. */
+  track?: { event: string; method: 'email' | 'google' },
 ): Promise<FastifyReply> {
   const url = new URL(path ?? request.url, `http://${request.headers.host ?? 'localhost'}`);
   const headers = new Headers({ 'content-type': 'application/json' });
@@ -101,6 +104,10 @@ async function forward(
       },
     });
   }
+  if (track) {
+    const account = z.object({ user: z.object({ id: z.string() }) }).safeParse(json);
+    if (account.success) capture(account.data.user.id, track.event, { method: track.method });
+  }
   return reply.status(successStatus ?? response.status).send(json);
 }
 
@@ -116,7 +123,14 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       });
     }
     // 201, as this route always answered: an account was created.
-    return forward(request, reply, { ...parsed.data, email: parsed.data.email.toLowerCase() }, 201);
+    return forward(
+      request,
+      reply,
+      { ...parsed.data, email: parsed.data.email.toLowerCase() },
+      201,
+      undefined,
+      { event: 'signed_up', method: 'email' },
+    );
   });
 
   app.post('/auth/sign-in/email', async (request, reply) => {
@@ -126,7 +140,14 @@ export function registerAuthRoutes(app: FastifyInstance): void {
         error: { code: 'invalid_request', message: 'Enter your email and password.' },
       });
     }
-    return forward(request, reply, { ...parsed.data, email: parsed.data.email.toLowerCase() });
+    return forward(
+      request,
+      reply,
+      { ...parsed.data, email: parsed.data.email.toLowerCase() },
+      undefined,
+      undefined,
+      { event: 'signed_in', method: 'email' },
+    );
   });
 
   // Sign in (or sign up) with Google: the app hands over the ID token it got on the
@@ -144,6 +165,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       { provider: 'google', idToken: { token: parsed.data.idToken } },
       undefined,
       '/auth/sign-in/social',
+      { event: 'signed_in', method: 'google' },
     );
   });
 
@@ -180,6 +202,8 @@ export function registerAuthRoutes(app: FastifyInstance): void {
         body: JSON.stringify({ email: parsed.data.email.toLowerCase() }),
       }),
     );
+    // No account id: the answer must not depend on whether the account exists.
+    capture('anonymous', 'password_reset_requested');
     if (response.status === 429) {
       return reply.status(429).send({
         error: { code: 'rate_limited', message: 'Too many tries. Wait a minute and try again.' },

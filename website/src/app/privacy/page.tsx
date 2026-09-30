@@ -104,9 +104,10 @@ export default function PrivacyPage() {
             <b>Google</b> — only if you choose Continue with Google.
           </li>
           <li>
-            <b>Sentry</b> (error reports) and <b>PostHog</b> (usage counts), when enabled: they
-            receive technical details such as event names, app platform, sizes and timings — never
-            anything you copy, send or receive.
+            <b>Sentry</b> (error reports) and <b>PostHog</b> (usage counts): they receive technical
+            details such as event names, app platform, sizes and timings — never anything you copy,
+            send or receive. On this website, PostHog counts page views without cookies or stored
+            identifiers, and without the part of the address after “?”.
           </li>
           <li>Our server host, which runs the FuseOS server.</li>
         </ul>
