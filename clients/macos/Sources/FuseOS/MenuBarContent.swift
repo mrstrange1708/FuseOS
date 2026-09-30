@@ -479,7 +479,7 @@ struct MenuBarContent: View {
     private var activeTransfers: [TransferProgress] { viewModel.transfers.filter { !$0.finished } }
 
     private func statusLine(linked: Bool, online: Bool, hasPeer: Bool) -> String {
-        if !hasPeer { return SessionStore.shared.email.map { "Sign in on your phone as \($0)" } ?? "Sign in on your phone to link it" }
+        if !hasPeer { return "Sign in on your phone with the same account" }
         if linked {
             if let latency = viewModel.syncLatency { return "Linked · direct · \(latency.lastMs) ms" }
             return "Linked · direct"

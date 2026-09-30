@@ -57,6 +57,7 @@ fun FuseShell() {
     val state by viewModel.state.collectAsState()
     val history by viewModel.history.collectAsState()
     val email by ServiceLocator.session.emailFlow.collectAsState(initial = null)
+    val paused by viewModel.paused.collectAsState()
     val deviceName by ServiceLocator.session.deviceNameFlow.collectAsState(initial = null)
     val context = LocalContext.current
     val transfers by ServiceLocator.transfers.list.collectAsState()
@@ -130,7 +131,7 @@ fun FuseShell() {
                         latency = latency,
                         macStatus = macStatus,
                         onConnectNow = viewModel::connectNow,
-                        accountEmail = email,
+                        paused = paused,
                         onOpenLinkOnMac = {
                             // Read here: FuseOS is in front, the one time Android lets it.
                             val clip = context.getSystemService(android.content.ClipboardManager::class.java)
@@ -177,6 +178,9 @@ fun FuseShell() {
                         deviceName = deviceName,
                         selfBattery = viewModel.selfBattery(),
                         onRename = viewModel::renameThisDevice,
+                        paused = paused,
+                        onDisconnect = viewModel::disconnect,
+                        onConnect = viewModel::connectNow,
                         onLinkManually = { showPairing = true },
                         // Read on every recomposition rather than cached: the user grants
                         // this in Settings and comes back, so a snapshot taken on first

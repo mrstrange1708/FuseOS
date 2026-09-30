@@ -30,6 +30,7 @@ class SessionStore(private val context: Context) {
         val DEVICE_NAME = stringPreferencesKey("device_name")
         val DEVICE_ID = stringPreferencesKey("device_id")
         val CONNECT_DONE = booleanPreferencesKey("connect_done")
+        val LINK_PAUSED = booleanPreferencesKey("link_paused")
 
         // Deliberately not the old "device_key": that held a random stand-in in a
         // different format, and a fresh name lets stale installs re-register cleanly
@@ -53,6 +54,13 @@ class SessionStore(private val context: Context) {
 
     /** Whether the user has been through the connect screen once. */
     val connectDoneFlow: Flow<Boolean> = context.authDataStore.data.map { it[Keys.CONNECT_DONE] == true }
+
+    /** The user's Disconnect, kept across launches until they choose Connect. */
+    suspend fun linkPaused(): Boolean = context.authDataStore.data.first()[Keys.LINK_PAUSED] == true
+
+    suspend fun setLinkPaused(on: Boolean) {
+        context.authDataStore.edit { it[Keys.LINK_PAUSED] = on }
+    }
 
     suspend fun markConnectDone() {
         context.authDataStore.edit { it[Keys.CONNECT_DONE] = true }

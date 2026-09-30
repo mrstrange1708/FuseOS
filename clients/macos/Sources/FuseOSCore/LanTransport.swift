@@ -69,6 +69,14 @@ public final class LanTransport {
     private var peers: [String: PeerPresence] = [:]
     private var channels: [String: LanChannel] = [:]
     private var supervisors: [String: Task<Void, Never>] = [:]
+    /// The user's Disconnect: no link until they choose Connect — channels closed, callers
+    /// refused, nothing dialled. The listener stays up, so Connect needs no restart.
+    public private(set) var paused = false
+
+    public func setPaused(_ on: Bool) {
+        paused = on
+        if on { for channel in channels.values { channel.close() } }
+    }
     /// When each peer's channel last delivered anything (uptime ns) — how a dead link shows.
     private var lastHeard: [String: UInt64] = [:]
     static let silenceLimit: UInt64 = 45_000_000_000 // three unanswered heartbeats
@@ -171,6 +179,7 @@ public final class LanTransport {
     /// A peer that normally dials us is dialled too: its dialer may be stuck, and a second
     /// channel only replaces the first (`register`); supervisors skip a peer with a channel.
     public func retryNow() {
+        guard !paused else { return }
         for (peerId, task) in supervisors where channels[peerId] == nil {
             task.cancel()
             supervisors[peerId] = nil
@@ -220,7 +229,7 @@ public final class LanTransport {
 
     private func accept(_ connection: NWConnection) {
         Task { [weak self] in
-            guard let self, let selfId = self.selfDeviceId else {
+            guard let self, let selfId = self.selfDeviceId, !self.paused else {
                 connection.cancel()
                 return
             }
@@ -240,7 +249,7 @@ public final class LanTransport {
         var backoff: UInt64 = 500
         while !Task.isCancelled {
             // A channel already up (an inbound one, or Connect's) needs no second dial.
-            if let peer = peers[peerId], peer.online, channels[peerId] == nil,
+            if let peer = peers[peerId], peer.online, channels[peerId] == nil, !paused,
                let address = peer.lanAddress, peer.publicKey != nil
             {
                 let connected = await dial(peerId, address: address, selfId: selfId)

@@ -10,6 +10,7 @@ data class DeviceRegisterRequest(
     val platform: String,
     val publicKey: String,
     val battery: Int? = null,
+    val installId: String? = null,
 )
 
 @Serializable

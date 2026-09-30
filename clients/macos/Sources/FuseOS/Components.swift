@@ -48,14 +48,24 @@ struct FuseTextField: View {
     @Binding var text: String
     var isSecure = false
     var error: String?
+    /// The eye: a password you can check before you send it is one you get right first time.
+    @State private var revealed = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Group {
-                if isSecure {
+            HStack(spacing: 8) {
+                if isSecure && !revealed {
                     SecureField(title, text: $text)
                 } else {
                     TextField(title, text: $text)
+                }
+                if isSecure {
+                    Button { revealed.toggle() } label: {
+                        Image(systemName: revealed ? "eye.slash" : "eye")
+                            .foregroundStyle(FuseColor.muted)
+                    }
+                    .buttonStyle(.plain)
+                    .help(revealed ? "Hide password" : "Show password")
                 }
             }
             .textFieldStyle(.plain)

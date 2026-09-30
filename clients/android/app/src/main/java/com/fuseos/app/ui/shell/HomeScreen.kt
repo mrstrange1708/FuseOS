@@ -95,7 +95,7 @@ fun HomeScreen(
     macStatus: com.fuseos.app.core.PeerStatus? = null,
     onOpenLinkOnMac: () -> Unit = {},
     onConnectNow: () -> Unit = {},
-    accountEmail: String? = null,
+    paused: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val connect = state.connect
@@ -120,7 +120,7 @@ fun HomeScreen(
             crossing = history.firstOrNull()?.let { Crossing(it.id, toMac = it.fromSelf) },
             streamToMac = transfers.firstOrNull { it.state == TransferProgress.State.Active }?.outgoing,
             onConnectNow = onConnectNow,
-            accountEmail = accountEmail,
+            paused = paused,
         )
 
         Panel(title = "Files") {
@@ -233,28 +233,25 @@ private fun LinkHero(
     crossing: Crossing?,
     streamToMac: Boolean?,
     onConnectNow: () -> Unit,
-    accountEmail: String?,
+    paused: Boolean,
 ) {
     val linked = stage == ConnectStage.Connected
     // Which end last caught something, so it can take the hit.
     var caught by remember { mutableStateOf<Pair<Boolean, Any>?>(null) }
     val ember = MaterialTheme.colorScheme.primary
-    val pill = when (stage) {
+    val pill = if (paused) "Disconnected" else when (stage) {
         ConnectStage.Connected -> "Linked · direct"
         ConnectStage.Connecting -> "Connecting"
         ConnectStage.DifferentNetwork -> "Different networks"
         ConnectStage.PeerOffline -> "Mac offline"
         ConnectStage.Alone -> "Waiting for a Mac"
     }
-    val detail = when (stage) {
+    val detail = if (paused) "You disconnected. Nothing syncs until you connect again." else when (stage) {
         ConnectStage.Connected -> "Clipboard, files and notifications move straight over your Wi-Fi."
         ConnectStage.Connecting -> "Finding ${peerName ?: "your Mac"} on this Wi-Fi…"
         ConnectStage.DifferentNetwork -> "Put both devices on the same Wi-Fi."
         ConnectStage.PeerOffline -> "Open FuseOS on ${peerName ?: "your Mac"} to link it."
-        // Named: two accounts (Google here, a password there) look alike until they are.
-        ConnectStage.Alone ->
-            if (accountEmail != null) "Sign in on your Mac as $accountEmail — both need the same account."
-            else "Sign in on your Mac with this account."
+        ConnectStage.Alone -> "Sign in on your Mac with the same account as this phone."
     }
     Column(
         modifier = Modifier
@@ -332,7 +329,8 @@ private fun LinkHero(
                 val online = stage == ConnectStage.Connecting || stage == ConnectStage.DifferentNetwork
                 Text(
                     when {
-                        trying -> if (online) "Connecting…" else "Checking…"
+                        trying -> if (online || paused) "Connecting…" else "Checking…"
+                        paused -> "Connect"
                         online -> "Connect now"
                         else -> "Check again"
                     },

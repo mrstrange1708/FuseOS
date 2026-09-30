@@ -207,10 +207,23 @@ class DashboardViewModel(
      */
     fun connectNow() {
         viewModelScope.launch {
+            session.setLinkPaused(false)
+            transport.setPaused(false)
             runCatching { refresh() }
             transport.retryNow()
         }
     }
+
+    /** Settings' Disconnect: the link stays down, across launches, until Connect. */
+    fun disconnect() {
+        viewModelScope.launch {
+            session.setLinkPaused(true)
+            transport.setPaused(true)
+        }
+    }
+
+    /** Whether the user disconnected (see [disconnect]). */
+    val paused = transport.paused
 
     fun signOut() {
         // MainActivity stops the foreground service when the token clears.

@@ -14,6 +14,7 @@ const registerSchema = z.object({
   platform: z.enum(['android', 'macos']),
   publicKey: z.string().trim().min(1).max(1000),
   battery: z.number().int().min(0).max(100).optional(),
+  installId: z.string().trim().min(16).max(128).optional(),
 });
 
 const deviceParamsSchema = z.object({ id: z.string().uuid() });
@@ -39,35 +40,64 @@ export function registerDeviceRoutes(app: FastifyInstance): void {
       });
     }
     const now = new Date();
-    // Upsert by public key, but only ever update a row the caller already owns
-    // (`setWhere`). A public key registered to another account must NOT be
-    // reassigned — that would let anyone who learns a (non-secret) device public
-    // key take over that device. Such a conflict updates 0 rows → 409.
-    const [device] = await getDb()
-      .insert(devices)
-      .values({
-        userId,
-        name: parsed.data.name,
-        platform: parsed.data.platform,
-        publicKey: parsed.data.publicKey,
-        battery: parsed.data.battery ?? null,
-        lastSeen: now,
-      })
-      .onConflictDoUpdate({
-        target: devices.publicKey,
-        set: {
-          name: parsed.data.name,
-          platform: parsed.data.platform,
-          // Only overwrite battery when the client actually reported one. This runs on
-          // every launch, and a re-register that omits it must not erase the last known
-          // level — the dashboard would show a peer's battery blanking out for no reason.
-          ...(parsed.data.battery !== undefined ? { battery: parsed.data.battery } : {}),
-          lastSeen: now,
-        },
-        setWhere: eq(devices.userId, userId),
-      })
-      // xmax = 0 marks a row this statement inserted, not one it updated: a new device.
-      .returning({ ...getTableColumns(devices), inserted: sql<boolean>`(xmax = 0)` });
+    const { installId, publicKey } = parsed.data;
+    const [device] = await getDb().transaction(async (tx) => {
+      // The same physical device back with a new key (it signed in to another account in
+      // between, and had to mint one): it keeps its row, its id and its name here — a
+      // re-keyed device is not a new device. Only ever this account's own row.
+      if (installId) {
+        const [prior] = await tx
+          .select({ id: devices.id, publicKey: devices.publicKey })
+          .from(devices)
+          .where(and(eq(devices.userId, userId), eq(devices.installId, installId)));
+        if (prior && prior.publicKey !== publicKey) {
+          const [holder] = await tx
+            .select({ userId: devices.userId })
+            .from(devices)
+            .where(eq(devices.publicKey, publicKey));
+          if (!holder) {
+            await tx.update(devices).set({ publicKey }).where(eq(devices.id, prior.id));
+          } else if (holder.userId === userId) {
+            // Both rows are this device on this account: the one holding the key wins.
+            await tx.delete(devices).where(eq(devices.id, prior.id));
+          }
+          // Held by another account: the upsert below refuses it (409), as it must.
+        }
+      }
+      // Upsert by public key, but only ever update a row the caller already owns
+      // (`setWhere`). A public key registered to another account must NOT be
+      // reassigned — that would let anyone who learns a (non-secret) device public
+      // key take over that device. Such a conflict updates 0 rows → 409.
+      return (
+        tx
+          .insert(devices)
+          .values({
+            userId,
+            name: parsed.data.name,
+            platform: parsed.data.platform,
+            publicKey,
+            installId: installId ?? null,
+            battery: parsed.data.battery ?? null,
+            lastSeen: now,
+          })
+          .onConflictDoUpdate({
+            target: devices.publicKey,
+            set: {
+              name: parsed.data.name,
+              platform: parsed.data.platform,
+              ...(installId ? { installId } : {}),
+              // Only overwrite battery when the client actually reported one. This runs on
+              // every launch, and a re-register that omits it must not erase the last known
+              // level — the dashboard would show a peer's battery blanking out for no reason.
+              ...(parsed.data.battery !== undefined ? { battery: parsed.data.battery } : {}),
+              lastSeen: now,
+            },
+            setWhere: eq(devices.userId, userId),
+          })
+          // xmax = 0 marks a row this statement inserted, not one it updated: a new device.
+          .returning({ ...getTableColumns(devices), inserted: sql<boolean>`(xmax = 0)` })
+      );
+    });
     if (!device) {
       return reply.status(409).send({
         error: {

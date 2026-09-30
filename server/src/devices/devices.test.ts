@@ -64,6 +64,48 @@ describe.skipIf(!process.env.DATABASE_URL)('device registry', () => {
     }
   });
 
+  it('keeps one row per physical device when it comes back with a new key', async () => {
+    const installId = `install-${unique()}-0123456789`;
+    const first = await register({
+      name: 'Realme',
+      platform: 'android',
+      publicKey: `pk-${unique()}`,
+      installId,
+    });
+    expect(first.statusCode).toBe(201);
+    // Signed in to another account in between, so it had to mint a new key.
+    const rekeyed = await register({
+      name: 'Realme',
+      platform: 'android',
+      publicKey: `pk-${unique()}`,
+      installId,
+    });
+    expect(rekeyed.statusCode).toBe(201);
+    expect(rekeyed.json().id).toBe(first.json().id);
+    const list = await app.inject({ method: 'GET', url: '/devices', headers: auth(user.token) });
+    const mine = (list.json().devices as { id: string }[]).filter((d) => d.id === first.json().id);
+    expect(mine).toHaveLength(1);
+  });
+
+  it('never moves a key another account holds, install id or not', async () => {
+    const other = await signUp(app);
+    try {
+      const publicKey = `pk-${unique()}`;
+      const installId = `install-${unique()}-0123456789`;
+      await app.inject({
+        method: 'POST',
+        url: '/devices',
+        headers: auth(other.token),
+        payload: { name: 'Theirs', platform: 'macos', publicKey, installId },
+      });
+      await register({ name: 'Mine', platform: 'macos', publicKey: `pk-${unique()}`, installId });
+      const grab = await register({ name: 'Mine', platform: 'macos', publicKey, installId });
+      expect(grab.statusCode).toBe(409);
+    } finally {
+      await deleteUsers(other.userId);
+    }
+  });
+
   it('is idempotent by publicKey — the same key always returns the same device id', async () => {
     const publicKey = `pk-${unique()}`;
     const first = await register({ name: 'Mac mini', platform: 'macos', publicKey, battery: 80 });

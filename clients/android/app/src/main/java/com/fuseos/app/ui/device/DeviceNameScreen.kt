@@ -77,7 +77,14 @@ fun DeviceNameScreen() {
             // An empty name would show as a blank row on the Mac, so the only way past
             // this screen is with something to display.
             enabled = trimmed.isNotEmpty(),
-            onClick = { scope.launch { repository.setDeviceName(trimmed) } },
+            onClick = {
+                scope.launch {
+                    repository.setDeviceName(trimmed)
+                    // The link may already be up (it starts at sign-in, with the model name):
+                    // re-registering is the rename, and the server tells the Mac at once.
+                    runCatching { ServiceLocator.deviceRepository.registerThisDevice() }
+                }
+            },
         )
 
         Spacer(Modifier.height(24.dp))

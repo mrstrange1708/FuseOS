@@ -714,6 +714,7 @@ private struct LinkHero: View {
     }
 
     private var status: String {
+        if viewModel.paused { return "Disconnected" }
         if search == .searching { return "Searching this Wi-Fi" }
         switch viewModel.connectState.stage {
         case .connected: return "Linked · direct"
@@ -726,6 +727,7 @@ private struct LinkHero: View {
 
     private func detail(linked: Bool) -> String {
         if linked { return "Clipboard, files and notifications move straight over your Wi-Fi." }
+        if viewModel.paused { return "You disconnected. Nothing syncs until you Connect." }
         switch search {
         case .searching: return "Dialling every device on your account that's on this network."
         case .notFound:
@@ -736,10 +738,7 @@ private struct LinkHero: View {
         case .connected, .connecting: return "Finding your phone on this Wi-Fi…"
         case .differentNetwork: return "Put both devices on the same Wi-Fi network, then Connect."
         case .peerOffline: return "Open FuseOS on your phone, then Connect."
-        // Named: two accounts (Google there, a password here) look alike until they are.
-        case .alone:
-            guard let email = SessionStore.shared.email else { return "Sign in on your phone with this account, then Connect." }
-            return "Sign in on your phone as \(email) — both need the same account — then Connect."
+        case .alone: return "Sign in on your phone with the same account as this Mac, then Connect."
         }
     }
 
@@ -906,7 +905,6 @@ private struct AccountPane: View {
 
     @State private var draftName = ""
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
-    @State private var usageStatistics = Analytics.enabled
     @AppStorage(DockIcon.key) private var showInDock = true
     @AppStorage(DashboardViewModel.askBeforeSendKey) private var askBeforeSend = false
     @AppStorage(MacPointer.enabledKey) private var phoneControlsMac = false
@@ -970,16 +968,6 @@ private struct AccountPane: View {
                             title: "Ask before sending copies",
                             detail: "Each copy waits in the island for you to click Send.",
                             isOn: $askBeforeSend,
-                        )
-                        Divider().opacity(0.5)
-                        SettingSwitch(
-                            symbol: "chart.bar",
-                            title: "Usage statistics",
-                            detail: "Share which features you use, never what you copy or send. Helps decide what to fix first.",
-                            isOn: Binding(
-                                get: { usageStatistics },
-                                set: { Analytics.enabled = $0; usageStatistics = Analytics.enabled },
-                            ),
                         )
                     }
                 }
@@ -1048,16 +1036,22 @@ private struct AccountPane: View {
                         HStack {
                             let linked = !viewModel.connected.isEmpty
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(linked ? "Linked with \(viewModel.peerName ?? "your phone")" : "Not linked")
+                                Text(viewModel.paused ? "Disconnected" : linked ? "Linked with \(viewModel.peerName ?? "your phone")" : "Not linked")
                                     .font(.system(size: 13, weight: .medium))
-                                Text(linked
-                                    ? "Your devices are already connected."
+                                Text(viewModel.paused
+                                    ? "Nothing syncs with your phone until you connect again."
+                                    : linked
+                                    ? "Disconnect to stop syncing. It stays off until you Connect."
                                     : "Find your phone, or link it with a code, in Devices.")
                                     .font(.system(size: 11.5)).foregroundStyle(FuseColor.muted)
                             }
                             Spacer()
-                            if linked {
-                                StatusPill(linked: true, text: "Linked")
+                            if viewModel.paused {
+                                Button("Connect") { Task { await viewModel.connect() } }
+                                    .buttonStyle(CapsuleButtonStyle(prominent: true))
+                            } else if linked {
+                                Button("Disconnect") { viewModel.disconnect() }
+                                    .buttonStyle(CapsuleButtonStyle(prominent: false))
                             } else {
                                 Button("Open Devices", action: onOpenDevices)
                                     .buttonStyle(CapsuleButtonStyle(prominent: true))

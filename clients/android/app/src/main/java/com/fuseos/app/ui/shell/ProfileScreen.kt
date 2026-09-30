@@ -1,6 +1,5 @@
 package com.fuseos.app.ui.shell
 
-import com.fuseos.app.core.Usage
 import com.fuseos.app.ui.components.glassCard
 import androidx.compose.foundation.background
 import androidx.compose.material3.Button
@@ -57,6 +56,9 @@ fun ProfileScreen(
     onCopyPopup: () -> Unit,
     selfBattery: Int?,
     onRename: (String) -> Unit,
+    paused: Boolean,
+    onDisconnect: () -> Unit,
+    onConnect: () -> Unit,
     onBatterySettings: () -> Unit,
     notificationAccess: Boolean,
     notificationsOn: Boolean,
@@ -246,13 +248,20 @@ fun ProfileScreen(
             // Linked already: say so, rather than offer a code nobody needs. Not linked: the
             // linking screen, where the Mac is found or a code is entered.
             val linkedMac = state.allPeers.firstOrNull { it.id in state.connected }
-            if (linkedMac != null) {
+            if (paused) {
+                SettingItem(
+                    "Disconnected",
+                    "Nothing syncs with your Mac until you connect again.",
+                    onConnect,
+                    trailing = "Connect",
+                    trailingLit = true,
+                )
+            } else if (linkedMac != null) {
                 SettingItem(
                     "Linked with ${linkedMac.name}",
-                    "Your devices are already connected.",
-                    onClick = {},
-                    trailing = "Linked",
-                    trailingLit = true,
+                    "Tap to disconnect. It stays off until you tap Connect.",
+                    onDisconnect,
+                    trailing = "Disconnect",
                 )
             } else {
                 SettingItem(
@@ -262,18 +271,6 @@ fun ProfileScreen(
                     trailing = "Link",
                 )
             }
-            // Read here, not passed down: PostHog itself remembers the choice.
-            var usageOn by remember { mutableStateOf(Usage.enabled) }
-            SettingItem(
-                "Usage statistics",
-                "Share which features you use, never what you copy or send. Helps decide what to fix first.",
-                onClick = {
-                    Usage.enabled = !usageOn
-                    usageOn = Usage.enabled
-                },
-                trailing = if (usageOn) "On" else "Off",
-                trailingLit = usageOn,
-            )
             SettingItem("Sign out", "Clears this phone's session and clipboard history.", onSignOut, destructive = true)
         }
 
