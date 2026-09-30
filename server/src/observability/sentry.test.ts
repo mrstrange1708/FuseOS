@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { buildApp } from '../app.js';
 import { scrub } from './sentry.js';
 
 describe('sentry scrub', () => {
@@ -20,5 +21,17 @@ describe('sentry scrub', () => {
       url: 'https://fuseos-api.theshaik.dev/auth/verify-email',
     });
     expect(JSON.stringify(event)).not.toContain('secret');
+  });
+});
+
+describe('the error handler', () => {
+  it('answers a malformed body with 400, not an internal error', async () => {
+    const res = await buildApp().inject({
+      method: 'POST',
+      url: '/feedback',
+      headers: { 'content-type': 'application/json' },
+      payload: '{not json',
+    });
+    expect(res.statusCode).toBe(400);
   });
 });
