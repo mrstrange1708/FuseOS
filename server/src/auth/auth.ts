@@ -6,6 +6,7 @@ import { scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { env } from '../config/env.js';
 import { emit } from '../jobs/inngest.js';
+import { capture } from '../observability/analytics.js';
 import { getDb } from '../db/client.js';
 import { account, session, user, verification } from '../db/schema.js';
 
@@ -78,6 +79,7 @@ function createAuth() {
         emit({ name: 'auth/verification.requested', data: { userId: user.id, url } });
       },
       afterEmailVerification: async (user) => {
+        capture(user.id, 'email_verified');
         emit({ name: 'auth/email.verified', data: { userId: user.id } });
       },
     },

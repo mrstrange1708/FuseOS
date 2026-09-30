@@ -34,7 +34,8 @@ export function assertNoPayload(properties: AnalyticsProps): void {
 }
 
 let client: PostHog | null = null;
-if (env.POSTHOG_API_KEY) {
+// Off under test: the suite signs up throwaway accounts, which are not product usage.
+if (env.POSTHOG_API_KEY && env.NODE_ENV !== 'test') {
   client = new PostHog(env.POSTHOG_API_KEY, { host: env.POSTHOG_HOST });
 }
 
