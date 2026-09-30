@@ -130,6 +130,7 @@ fun FuseShell() {
                         latency = latency,
                         macStatus = macStatus,
                         onConnectNow = viewModel::connectNow,
+                        accountEmail = email,
                         onOpenLinkOnMac = {
                             // Read here: FuseOS is in front, the one time Android lets it.
                             val clip = context.getSystemService(android.content.ClipboardManager::class.java)

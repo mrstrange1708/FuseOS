@@ -95,6 +95,7 @@ fun HomeScreen(
     macStatus: com.fuseos.app.core.PeerStatus? = null,
     onOpenLinkOnMac: () -> Unit = {},
     onConnectNow: () -> Unit = {},
+    accountEmail: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val connect = state.connect
@@ -119,6 +120,7 @@ fun HomeScreen(
             crossing = history.firstOrNull()?.let { Crossing(it.id, toMac = it.fromSelf) },
             streamToMac = transfers.firstOrNull { it.state == TransferProgress.State.Active }?.outgoing,
             onConnectNow = onConnectNow,
+            accountEmail = accountEmail,
         )
 
         Panel(title = "Files") {
@@ -231,6 +233,7 @@ private fun LinkHero(
     crossing: Crossing?,
     streamToMac: Boolean?,
     onConnectNow: () -> Unit,
+    accountEmail: String?,
 ) {
     val linked = stage == ConnectStage.Connected
     // Which end last caught something, so it can take the hit.
@@ -248,7 +251,10 @@ private fun LinkHero(
         ConnectStage.Connecting -> "Finding ${peerName ?: "your Mac"} on this Wi-Fi…"
         ConnectStage.DifferentNetwork -> "Put both devices on the same Wi-Fi."
         ConnectStage.PeerOffline -> "Open FuseOS on ${peerName ?: "your Mac"} to link it."
-        ConnectStage.Alone -> "Sign in on your Mac with this account."
+        // Named: two accounts (Google here, a password there) look alike until they are.
+        ConnectStage.Alone ->
+            if (accountEmail != null) "Sign in on your Mac as $accountEmail — both need the same account."
+            else "Sign in on your Mac with this account."
     }
     Column(
         modifier = Modifier
@@ -304,9 +310,9 @@ private fun LinkHero(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
-        // The Mac is up but there is no link: dial it now rather than wait out a retry, and
-        // whatever the network guess says — a guess is not worth being stuck behind.
-        if (stage == ConnectStage.Connecting || stage == ConnectStage.DifferentNetwork) {
+        // Not linked: always a way forward. The Mac is up — dial it now, whatever the network
+        // guess says. It is not (or there is none) — check the account's devices again.
+        if (!linked) {
             var trying by remember { mutableStateOf(false) }
             LaunchedEffect(trying) {
                 if (trying) {
@@ -322,7 +328,16 @@ private fun LinkHero(
                 },
                 enabled = !trying,
                 shape = RoundedCornerShape(50),
-            ) { Text(if (trying) "Connecting…" else "Connect now") }
+            ) {
+                val online = stage == ConnectStage.Connecting || stage == ConnectStage.DifferentNetwork
+                Text(
+                    when {
+                        trying -> if (online) "Connecting…" else "Checking…"
+                        online -> "Connect now"
+                        else -> "Check again"
+                    },
+                )
+            }
         }
         // The PRD's yardstick — p95 under 300 ms — shown where people look.
         val sync = latency?.takeIf { linked }?.let { "Sync ${it.lastMs} ms · p95 ${it.p95Ms} ms" }

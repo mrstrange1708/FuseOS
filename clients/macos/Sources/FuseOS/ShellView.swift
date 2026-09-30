@@ -736,7 +736,10 @@ private struct LinkHero: View {
         case .connected, .connecting: return "Finding your phone on this Wi-Fi…"
         case .differentNetwork: return "Put both devices on the same Wi-Fi network, then Connect."
         case .peerOffline: return "Open FuseOS on your phone, then Connect."
-        case .alone: return "Sign in on your phone with this account, then Connect."
+        // Named: two accounts (Google there, a password here) look alike until they are.
+        case .alone:
+            guard let email = SessionStore.shared.email else { return "Sign in on your phone with this account, then Connect." }
+            return "Sign in on your phone as \(email) — both need the same account — then Connect."
         }
     }
 

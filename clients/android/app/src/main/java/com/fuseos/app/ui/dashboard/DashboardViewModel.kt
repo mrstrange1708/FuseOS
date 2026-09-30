@@ -201,8 +201,16 @@ class DashboardViewModel(
         viewModelScope.launch { session.markConnectDone() }
     }
 
-    /** Home's "Connect now": dial the Mac at once instead of after the retry backoff. */
-    fun connectNow() = transport.retryNow()
+    /**
+     * Home's Connect: re-read the account's devices (a Mac that just signed in), then dial
+     * every unlinked one at once instead of after the retry backoff.
+     */
+    fun connectNow() {
+        viewModelScope.launch {
+            runCatching { refresh() }
+            transport.retryNow()
+        }
+    }
 
     fun signOut() {
         // MainActivity stops the foreground service when the token clears.
