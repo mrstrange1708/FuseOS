@@ -14,7 +14,7 @@ This is the **data plane**: the actual clipboard and file bytes moving **directl
 4. **Channel keys:** ECDH over the two static keys, salted with both nonces, expanded by HKDF-SHA256 into **one key per direction** (`fuseos:lan:v1:low-to-high` and `…:high-to-low`, ordered by device id so both ends agree without extra negotiation). Every frame after the handshake is `[4-byte BE length][AES-GCM ciphertext || 16-byte tag]` over a serialised `Envelope`, with the frame counter as the GCM nonce.
 
    This is TLS-shaped rather than literally TLS: the same guarantees (authenticated peers, per-session keys, per-frame integrity) without a certificate chain, because the control plane already distributes the keys that a PKI would otherwise establish.
-5. **Maintain:** the channel is persistent and bidirectional; a `Heartbeat` envelope every 15s (and once as the channel comes up) keeps it alive and times it; loss triggers reconnection with exponential backoff capped at 15s.
+5. **Maintain:** the channel is persistent and bidirectional; a `Heartbeat` envelope every 15s (and once as the channel comes up) keeps it alive and times it; loss triggers reconnection with exponential backoff capped at 15s. A channel that has delivered nothing for 45 s (three heartbeats, each echoed at once) is dead — a peer that left the Wi-Fi without a FIN leaves the read blocked and writes still "succeed" into the buffer — so it is closed and redialled. A handshake that has not finished in 10 s is abandoned the same way. A dialer skips a peer that already has a channel, and "Connect now" (the phone's Home, the Mac popover's Connect) dials every unlinked peer at once — the listening side too, since its dialer may be the stuck one; a second channel just replaces the first.
 
 > **No forward secrecy.** The ECDH is static-static, so an attacker holding a device's private key can decrypt recorded sessions. The upgrade is ephemeral keys plus signatures (Noise IK); it was skipped because it costs a full handshake protocol to defend against someone who already has the device.
 
@@ -211,7 +211,7 @@ Both clients implement this in `FileTransfer` (`FuseOSCore/FileTransfer.swift`, 
 
 - A dropped frame or lost peer degrades gracefully: the channel reconnects with backoff; the app never crashes on data-plane errors.
 - No indefinite queuing of clipboard events — if a peer is offline, the copy simply isn't delivered (the clipboard is not a durable outbox in v1).
-- Heartbeats detect half-open connections and trigger reconnect.
+- Heartbeats detect half-open connections and trigger reconnect: 45 s of silence closes the channel (§ Maintain, above).
 
 ## 9. History catch-up
 

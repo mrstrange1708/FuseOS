@@ -69,6 +69,10 @@ public final class LanTransport {
     private var peers: [String: PeerPresence] = [:]
     private var channels: [String: LanChannel] = [:]
     private var supervisors: [String: Task<Void, Never>] = [:]
+    /// When each peer's channel last delivered anything (uptime ns) — how a dead link shows.
+    private var lastHeard: [String: UInt64] = [:]
+    static let silenceLimit: UInt64 = 45_000_000_000 // three unanswered heartbeats
+    static let handshakeTimeout: UInt64 = 10_000_000_000
     private var acceptTask: Task<Void, Never>?
     private var heartbeatTask: Task<Void, Never>?
     private var sequenceNumber: UInt64 = 0
@@ -82,7 +86,7 @@ public final class LanTransport {
     public init() {}
 
     public func lanAddress() -> String? {
-        guard let port = listener?.port?.rawValue, let ip = Self.localIPv4() else { return nil }
+        guard let port = listener?.port?.rawValue, let ip = Self.localIPv4()?.address else { return nil }
         return "\(ip):\(port)"
     }
 
@@ -163,12 +167,22 @@ public final class LanTransport {
     /// Dials every unconnected peer now instead of waiting out its backoff, which grows to
     /// 15 s. What the popover's Connect button runs, so a phone that just joined the Wi-Fi
     /// links while the user is still looking rather than on the next retry.
+    ///
+    /// A peer that normally dials us is dialled too: its dialer may be stuck, and a second
+    /// channel only replaces the first (`register`); supervisors skip a peer with a channel.
     public func retryNow() {
         for (peerId, task) in supervisors where channels[peerId] == nil {
             task.cancel()
             supervisors[peerId] = nil
         }
         updatePeers(peers)
+        guard let selfId = selfDeviceId else { return }
+        for (peerId, peer) in peers where channels[peerId] == nil && peer.online && peer.publicKey != nil
+            && !Self.dialsFirst(selfId: selfId, peerId: peerId)
+        {
+            guard let address = peer.lanAddress else { continue }
+            Task { [weak self] in _ = await self?.dial(peerId, address: address, selfId: selfId) }
+        }
     }
 
     /// Ordered, back-pressured send to every connected peer.
@@ -225,7 +239,8 @@ public final class LanTransport {
     private func maintain(_ peerId: String, selfId: String) async {
         var backoff: UInt64 = 500
         while !Task.isCancelled {
-            if let peer = peers[peerId], peer.online,
+            // A channel already up (an inbound one, or Connect's) needs no second dial.
+            if let peer = peers[peerId], peer.online, channels[peerId] == nil,
                let address = peer.lanAddress, peer.publicKey != nil
             {
                 let connected = await dial(peerId, address: address, selfId: selfId)
@@ -256,6 +271,13 @@ public final class LanTransport {
     private func handshake(_ connection: NWConnection, selfId: String) async throws -> LanChannel {
         let privateKey = try DeviceKey.privateKey()
         let known = peers
+        // A peer that accepts and then says nothing must not hold a dial loop forever:
+        // cancelling the connection fails the handshake's pending read.
+        let watchdog = Task {
+            try await Task.sleep(nanoseconds: Self.handshakeTimeout)
+            connection.cancel()
+        }
+        defer { watchdog.cancel() }
         return try await LanChannel.handshake(
             connection: connection,
             selfDeviceId: selfId,
@@ -276,6 +298,9 @@ public final class LanTransport {
         while !Task.isCancelled {
             do {
                 let envelope = try await channel.receive()
+                if channels[channel.peerDeviceId] === channel {
+                    lastHeard[channel.peerDeviceId] = DispatchTime.now().uptimeNanoseconds
+                }
                 noteTraffic(envelope)
                 switch envelope.body {
                 case .some(.heartbeat(let heartbeat)):
@@ -317,7 +342,22 @@ public final class LanTransport {
         while !Task.isCancelled {
             try? await Task.sleep(nanoseconds: 15_000_000_000)
             guard !channels.isEmpty else { continue }
-            ping()
+            // Every ping is echoed at once, so a live link is never quiet this long. A phone
+            // that left the Wi-Fi without a FIN leaves the read blocked for good, and writes
+            // still "succeed" into the buffer — silence is the only sign. Closing ends its
+            // pump, and the supervisor (or the peer) reconnects.
+            let now = DispatchTime.now().uptimeNanoseconds
+            var live: Set<String> = []
+            for (peerId, channel) in channels {
+                let heard = lastHeard[peerId] ?? now
+                if now - heard > Self.silenceLimit {
+                    FuseLog.lan.warning("no word from \(peerId, privacy: .public) in \((now - heard) / 1_000_000_000) s: reconnecting")
+                    channel.close()
+                } else {
+                    live.insert(peerId)
+                }
+            }
+            if !live.isEmpty { ping(only: live) }
         }
     }
 
@@ -362,6 +402,7 @@ public final class LanTransport {
         // A reconnect replaces the previous channel rather than racing it.
         channels[channel.peerDeviceId]?.close()
         channels[channel.peerDeviceId] = channel
+        lastHeard[channel.peerDeviceId] = DispatchTime.now().uptimeNanoseconds
         setConnected(connectedPeers.union([channel.peerDeviceId]))
         // Every channel, reconnects included: a merge drops what the peer already has.
         onPeersJoined?([channel.peerDeviceId])
@@ -403,8 +444,11 @@ public final class LanTransport {
         return (host, port)
     }
 
-    /// This Mac's LAN IPv4 address, as peers must dial it.
-    private static func localIPv4() -> String? {
+    /// This Mac's netmask in bits, which decides whether a peer is on the same Wi-Fi.
+    public func lanPrefixLength() -> Int? { Self.localIPv4()?.prefixLength }
+
+    /// This Mac's LAN IPv4 address, as peers must dial it, and its netmask in bits.
+    private static func localIPv4() -> (address: String, prefixLength: Int)? {
         var addresses: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&addresses) == 0, let first = addresses else { return nil }
         defer { freeifaddrs(addresses) }
@@ -423,7 +467,13 @@ public final class LanTransport {
 
             let address = String(cString: host)
             // Skip link-local; a peer cannot route to 169.254.x.x without the interface.
-            if !address.hasPrefix("169.254") { return address }
+            guard !address.hasPrefix("169.254") else { continue }
+            let prefix = pointer.pointee.ifa_netmask.map { mask in
+                mask.withMemoryRebound(to: sockaddr_in.self, capacity: 1) {
+                    UInt32(bigEndian: $0.pointee.sin_addr.s_addr).nonzeroBitCount
+                }
+            } ?? 24
+            return (address, prefix)
         }
         return nil
     }

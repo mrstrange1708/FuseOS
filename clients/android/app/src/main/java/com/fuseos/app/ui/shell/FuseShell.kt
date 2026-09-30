@@ -121,6 +121,7 @@ fun FuseShell() {
                         selfBattery = viewModel.selfBattery(),
                         peerBattery = { id -> state.presence[id]?.battery },
                         onCopy = viewModel::copyToClipboard,
+                        onSend = viewModel::sendToMac,
                         onSeeAll = { tab = FuseTab.History },
                         peerName = peerName,
                         transfers = transfers,
@@ -128,6 +129,8 @@ fun FuseShell() {
                         onCancelTransfer = ServiceLocator.transfers::cancel,
                         latency = latency,
                         macStatus = macStatus,
+                        onConnectNow = viewModel::connectNow,
+                        accountEmail = email,
                         onOpenLinkOnMac = {
                             // Read here: FuseOS is in front, the one time Android lets it.
                             val clip = context.getSystemService(android.content.ClipboardManager::class.java)
@@ -165,6 +168,7 @@ fun FuseShell() {
                         entries = history,
                         peerName = peerName,
                         onCopy = viewModel::copyToClipboard,
+                        onSend = viewModel::sendToMac,
                     )
 
                     FuseTab.Profile -> ProfileScreen(

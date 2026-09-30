@@ -28,7 +28,15 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.ContentCopy
+import com.fuseos.app.clipboard.SendOutcome
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -92,15 +100,35 @@ fun IconTile(icon: ImageVector, tint: Color = MaterialTheme.colorScheme.primary)
     }
 }
 
-/** One clipboard entry: what, where from, when. Tap to put it back on the clipboard. */
+/**
+ * One clipboard entry: what, where from, when. Tap it, or Copy, to put it back on this
+ * clipboard; Send puts it on the Mac's. What happened shows in the row for a moment — and
+ * "Not linked" when it could not go, never a tick that pretends.
+ */
 @Composable
-fun ClipListRow(entry: ClipEntry, peerName: String?, onCopy: (ClipEntry) -> Unit) {
+fun ClipListRow(
+    entry: ClipEntry,
+    peerName: String?,
+    onCopy: (ClipEntry) -> Unit,
+    onSend: (ClipEntry) -> SendOutcome,
+) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    var result by remember(entry.id) { mutableStateOf<Pair<String, Boolean>?>(null) }
+    LaunchedEffect(result) {
+        if (result != null) {
+            delay(1_600)
+            result = null
+        }
+    }
+    val copy = {
+        onCopy(entry)
+        result = "Copied" to true
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .clickable { onCopy(entry) }
+            .clickable(onClick = copy)
             .padding(horizontal = 4.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -138,6 +166,37 @@ fun ClipListRow(entry: ClipEntry, peerName: String?, onCopy: (ClipEntry) -> Unit
                 color = muted,
                 maxLines = 1,
             )
+        }
+        val shown = result
+        if (shown != null) {
+            Text(
+                shown.first,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (shown.second) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(horizontal = 8.dp),
+            )
+        } else {
+            IconButton(onClick = copy, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = muted, modifier = Modifier.size(19.dp))
+            }
+            IconButton(
+                onClick = {
+                    result = when (onSend(entry)) {
+                        SendOutcome.Sent -> "Sent" to true
+                        SendOutcome.NotLinked -> "Not linked" to false
+                        SendOutcome.Nothing -> "Too big" to false
+                    }
+                },
+                modifier = Modifier.size(40.dp),
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Send,
+                    contentDescription = "Send to ${peerName ?: "your Mac"}",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(19.dp),
+                )
+            }
         }
     }
 }

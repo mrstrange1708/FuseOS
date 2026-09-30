@@ -6,6 +6,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.spring
+import androidx.compose.material3.Button
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -83,6 +84,7 @@ fun HomeScreen(
     selfBattery: Int?,
     peerBattery: (String) -> Int?,
     onCopy: (ClipEntry) -> Unit,
+    onSend: (ClipEntry) -> com.fuseos.app.clipboard.SendOutcome,
     onSeeAll: () -> Unit,
     peerName: String?,
     transfers: List<TransferProgress>,
@@ -92,6 +94,8 @@ fun HomeScreen(
     latency: SyncLatency? = null,
     macStatus: com.fuseos.app.core.PeerStatus? = null,
     onOpenLinkOnMac: () -> Unit = {},
+    onConnectNow: () -> Unit = {},
+    accountEmail: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val connect = state.connect
@@ -115,6 +119,8 @@ fun HomeScreen(
             // The newest clip crossed the link: from here when this phone copied it.
             crossing = history.firstOrNull()?.let { Crossing(it.id, toMac = it.fromSelf) },
             streamToMac = transfers.firstOrNull { it.state == TransferProgress.State.Active }?.outgoing,
+            onConnectNow = onConnectNow,
+            accountEmail = accountEmail,
         )
 
         Panel(title = "Files") {
@@ -204,7 +210,7 @@ fun HomeScreen(
                 )
             } else {
                 // Five proves sync is alive without turning Home into History.
-                history.take(5).forEach { entry -> ClipListRow(entry, peerName, onCopy) }
+                history.take(5).forEach { entry -> ClipListRow(entry, peerName, onCopy, onSend) }
             }
         }
         Spacer(Modifier.height(110.dp)) // clears the floating nav bar
@@ -226,6 +232,8 @@ private fun LinkHero(
     latency: SyncLatency?,
     crossing: Crossing?,
     streamToMac: Boolean?,
+    onConnectNow: () -> Unit,
+    accountEmail: String?,
 ) {
     val linked = stage == ConnectStage.Connected
     // Which end last caught something, so it can take the hit.
@@ -243,7 +251,10 @@ private fun LinkHero(
         ConnectStage.Connecting -> "Finding ${peerName ?: "your Mac"} on this Wi-Fi…"
         ConnectStage.DifferentNetwork -> "Put both devices on the same Wi-Fi."
         ConnectStage.PeerOffline -> "Open FuseOS on ${peerName ?: "your Mac"} to link it."
-        ConnectStage.Alone -> "Sign in on your Mac with this account."
+        // Named: two accounts (Google here, a password there) look alike until they are.
+        ConnectStage.Alone ->
+            if (accountEmail != null) "Sign in on your Mac as $accountEmail — both need the same account."
+            else "Sign in on your Mac with this account."
     }
     Column(
         modifier = Modifier
@@ -299,6 +310,35 @@ private fun LinkHero(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
+        // Not linked: always a way forward. The Mac is up — dial it now, whatever the network
+        // guess says. It is not (or there is none) — check the account's devices again.
+        if (!linked) {
+            var trying by remember { mutableStateOf(false) }
+            LaunchedEffect(trying) {
+                if (trying) {
+                    kotlinx.coroutines.delay(5_000)
+                    trying = false
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = {
+                    trying = true
+                    onConnectNow()
+                },
+                enabled = !trying,
+                shape = RoundedCornerShape(50),
+            ) {
+                val online = stage == ConnectStage.Connecting || stage == ConnectStage.DifferentNetwork
+                Text(
+                    when {
+                        trying -> if (online) "Connecting…" else "Checking…"
+                        online -> "Connect now"
+                        else -> "Check again"
+                    },
+                )
+            }
+        }
         // The PRD's yardstick — p95 under 300 ms — shown where people look.
         val sync = latency?.takeIf { linked }?.let { "Sync ${it.lastMs} ms · p95 ${it.p95Ms} ms" }
         if (peerBattery != null || sync != null) {
