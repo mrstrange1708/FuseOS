@@ -25,9 +25,21 @@ Enforcement in the server:
 
 Configuration (see `server/.env.example`): `SENTRY_DSN`, `POSTHOG_API_KEY`, `POSTHOG_HOST`. Absent values disable the integration cleanly, so local dev and CI need no external services.
 
-## Client integration (later)
+## Client integration
 
-The Android (PostHog Android + Sentry Android) and macOS (PostHog + Sentry Cocoa) apps will adopt the same rule: capture UX/reliability metadata only — link success, sync latency, connection drops, error reports — **never** the synced content. Wire these when the client apps are built.
+**Sentry is wired in both apps** (organisation `fuseos-y2`, projects `android` and `macos`), with every channel that could carry content turned off:
+
+| | Android (`FuseApp.kt`, `io.sentry:sentry-android`) | macOS (`AppDelegate.startSentry`, `sentry-cocoa`, linked statically) |
+| --- | --- | --- |
+| Personal data (IP, user) | off (`isSendDefaultPii = false`) | off (`sendDefaultPii = false`) |
+| Screenshots / view hierarchy | off | not collected on macOS |
+| Tap breadcrumbs / UI tracing | off — a tapped Compose node can carry its text | — |
+| Performance traces | — | off (`tracesSampleRate = 0`) |
+| Environment | `debug` / `production` by build type | `debug` / `production` by build config |
+
+What arrives is the stack trace, the device model and OS, and the app version. The DSNs ship in the apps (a client DSN can only send events); `-PsentryDsn=` (Android) and `FuseSentryDSN` in Info.plist (macOS) override them, and an empty value turns reporting off. Sentry's own Android auto-init is disabled so only ours runs. Release builds are not minified, so stack traces are readable without uploading mappings.
+
+PostHog in the apps is not wired yet; it follows the same rule when it is: metadata only (link success, sync latency, connection drops), never content.
 
 ## Suggested events (metadata only)
 

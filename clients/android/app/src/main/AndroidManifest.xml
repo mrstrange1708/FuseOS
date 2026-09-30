@@ -50,6 +50,8 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true"
         android:theme="@style/Theme.FuseOS">
+        <!-- Sentry starts in FuseApp, with our privacy options; not from its own provider. -->
+        <meta-data android:name="io.sentry.auto-init" android:value="false" />
 
         <activity
             android:name=".MainActivity"

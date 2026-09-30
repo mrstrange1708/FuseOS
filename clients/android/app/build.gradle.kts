@@ -24,6 +24,12 @@ android {
         // current LAN IP; the default is the emulator's alias for the host.
         val serverUrl = (project.findProperty("serverUrl") as String?) ?: "http://10.0.2.2:3000"
         buildConfigField("String", "SERVER_URL", "\"$serverUrl\"")
+
+        // Sentry (error reports, never content — docs/observability.md). A client DSN only
+        // lets an app *send* events, so it ships in the app; -PsentryDsn= turns reporting off.
+        val sentryDsn = (project.findProperty("sentryDsn") as String?)
+            ?: "https://199bd032d05807bb504609b57d7b01be@o4512173573799936.ingest.us.sentry.io/4512173578846208"
+        buildConfigField("String", "SENTRY_DSN", "\"$sentryDsn\"")
     }
 
     // Release signing comes from the environment (the release workflow decodes the keystore
@@ -105,6 +111,7 @@ dependencies {
     implementation(libs.mlkit.barcode.scanning)
 
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.sentry.android)
     // Sign in with Google: the system account picker hands back an ID token (docs/api.md).
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services)
