@@ -182,9 +182,24 @@ final class ClipboardSyncTests: XCTestCase {
 
     // MARK: - Latency
 
+    /// Now, as a sender would stamp it: acks are only for frames that arrived fresh
+    /// (`RoundTrip.staleMs`), so latency tests must not use the small `at:` values the
+    /// ordering tests use.
+    private static var nowMs: Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
+
     func testApplyingAClipAcknowledgesItOnce() {
-        let sent = envelopesSent { sync.apply(inbound(text: "ack me", from: "peer", seq: 7, at: 100)) }
+        let sent = envelopesSent { sync.apply(inbound(text: "ack me", from: "peer", seq: 7, at: Self.nowMs)) }
         XCTAssertEqual(sent, 1, "one Ack, and nothing else, goes back for an applied clip")
+    }
+
+    /// A clip that sat in a buffer while this device slept is still applied — it is the
+    /// user's copy — but not acknowledged: the round trip would time the sleep.
+    func testAStaleClipIsAppliedButNotAcknowledged() {
+        let sent = envelopesSent {
+            sync.apply(inbound(text: "late", from: "peer", seq: 8, at: Self.nowMs - RoundTrip.staleMs - 1_000))
+        }
+        XCTAssertEqual(sent, 0)
+        XCTAssertEqual(pasteboard.string(forType: .string), "late")
     }
 
     func testAnAckForASentClipReportsItsRoundTrip() {
@@ -195,6 +210,7 @@ final class ClipboardSyncTests: XCTestCase {
         let seq = transport.newEnvelope().seq - 1 // the clip was the envelope before this probe
         var ack = FuseEnvelope()
         ack.sourceDeviceID = "peer"
+        ack.sentAtUnixMs = Self.nowMs
         ack.ack = FuseAck.with { $0.refSeq = seq }
         sync.apply(ack)
         XCTAssertEqual(reported?.samples, 1)
