@@ -181,12 +181,22 @@ describe.skipIf(!process.env.DATABASE_URL)('auth (Better Auth, Postgres)', () =>
     expect(res.json().error.code).toBe('invalid_token');
   });
 
-  it('serves the reset page without letting it be framed or leak its token', async () => {
-    const res = await buildApp().inject({ method: 'GET', url: '/auth/reset?token=abc' });
-    expect(res.statusCode).toBe(200);
-    expect(res.headers['x-frame-options']).toBe('DENY');
-    expect(res.headers['referrer-policy']).toBe('no-referrer');
-    expect(res.body).not.toContain('abc');
+  it('lets only the website call the reset endpoint from a browser', async () => {
+    const app = buildApp();
+    const preflight = (origin: string) =>
+      app.inject({ method: 'OPTIONS', url: '/auth/reset-password', headers: { origin } });
+    const ours = await preflight('https://fuseos.theshaik.dev');
+    expect(ours.statusCode).toBe(204);
+    expect(ours.headers['access-control-allow-origin']).toBe('https://fuseos.theshaik.dev');
+    const theirs = await preflight('https://evil.example');
+    expect(theirs.statusCode).toBe(403);
+    expect(theirs.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('sends a clicked confirmation link to the website', async () => {
+    const res = await buildApp().inject({ method: 'GET', url: '/auth/verify-email?token=nope' });
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toBe('https://fuseos.theshaik.dev/verified?error=expired');
   });
 
   it('resets a password end to end, and signs every device out', async () => {

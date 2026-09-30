@@ -89,7 +89,7 @@ ${paragraphs}${button}${note}
   return { html, text };
 }
 
-const DOWNLOADS = `${SITE}/#download`;
+const DOWNLOADS = `${SITE}/download`;
 
 export function verifyEmail(name: string, url: string): Email {
   return {
@@ -134,6 +134,7 @@ export function newDevice(name: string, deviceName: string, kind: string): Email
         `A ${kind} named “${deviceName}” just signed in to your FuseOS account. Devices on one account share their clipboard, files and notifications.`,
         "If this was you, there's nothing to do. If not, reset your password now and remove the device in FuseOS → Devices.",
       ],
+      button: { label: "Wasn't you? Secure your account", url: `${SITE}/help#not-you` },
       note: 'We send this for every new device, so you always know what is linked.',
     }),
   };

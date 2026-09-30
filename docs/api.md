@@ -21,11 +21,10 @@ Better Auth (`server/src/auth/auth.ts`) serves these routes behind a thin adapte
 | POST | `/auth/sign-in/email` | `{ email, password }` | `200 { token, user }` |
 | POST | `/auth/google` | `{ idToken }` — a Google ID token | `200 { token, user }`; signs up on first use |
 | POST | `/auth/request-password-reset` | `{ email }` | `200 { ok: true }` whether or not the account exists (no enumeration); `429 rate_limited` |
-| GET | `/auth/reset?token=` | — | The new-password page the reset email links to (served here, so its POST is same-origin; framing and referrers blocked; the token is read by the page, never written into it) |
-| POST | `/auth/reset-password` | `{ token, newPassword (8–200) }` | `200 { ok: true }` and **every session is revoked** (a forgotten and a stolen password look alike); `400 invalid_token` |
+| POST | `/auth/reset-password` | `{ token, newPassword (8–200) }` | `200 { ok: true }` and **every session is revoked** (a forgotten and a stolen password look alike); `400 invalid_token`. Called by the website's `/reset` page, so this route alone answers CORS — for `WEB_URL`'s origin only |
 
 Emailed links (reset, confirmation) are built from `BETTER_AUTH_URL`, which the server requires in production: without it Better Auth takes its address from each request's `Host` header, and a forged `Host` on a reset request would send the victim a link — and their token — to someone else's site.
-| GET | `/auth/verify-email?token=` | — | The link in the confirmation email; answers with a page |
+| GET | `/auth/verify-email?token=` | — | The link in the confirmation email; redirects to the website's `/verified` (or `/verified?error=expired`) |
 | POST | `/auth/sign-out` | — (bearer token) | `200`; the token stops working at once |
 
 Errors: `400 invalid_request` (failed validation), `409 email_taken`, `401 invalid_credentials` (unknown email and wrong password answer the same), anything else Better Auth reports as its own code, lower-cased. Google adds `401 invalid_google_token`, `409 use_password` and `503 google_unavailable` (below).

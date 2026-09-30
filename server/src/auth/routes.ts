@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { env } from '../config/env.js';
 import { getAuth } from './auth.js';
 
 /**
@@ -153,17 +154,10 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     const response = await getAuth().handler(new Request(url, { method: 'GET' }));
     const failed =
       response.status >= 400 || (response.headers.get('location') ?? '').includes('error=');
-    return reply
-      .status(failed ? 400 : 200)
-      .type('text/html; charset=utf-8')
-      .send(
-        page(
-          failed ? 'That link has expired' : 'Email confirmed',
-          failed
-            ? 'Sign in to FuseOS and ask for a new confirmation email.'
-            : 'Thanks — your FuseOS account is confirmed. You can close this page.',
-        ),
-      );
+    // A person clicked this in their inbox: land them on the website, not on JSON.
+    return reply.redirect(
+      new URL(failed ? '/verified?error=expired' : '/verified', env.WEB_URL).href,
+    );
   });
 
   // "Forgot password?" in the apps. Always the same answer, account or not, so the form
@@ -194,22 +188,25 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     return reply.send({ ok: true });
   });
 
-  // The page the reset email links to: a new-password form served from here, so the POST
-  // below is same-origin (no CORS, no web app). The token stays in the URL for the page's
-  // script to read; it is never written into the HTML.
-  app.get('/auth/reset', async (_request, reply) =>
+  // The website's /reset page posts here from another origin (fuseos.theshaik.dev → the API),
+  // so this one route answers CORS — for the website only, no credentials involved.
+  const website = new URL(env.WEB_URL).origin;
+  const allowWebsite = (request: FastifyRequest, reply: FastifyReply): boolean => {
+    if (request.headers.origin !== website) return false;
     reply
-      .header('referrer-policy', 'no-referrer')
-      .header('x-frame-options', 'DENY')
-      .header(
-        'content-security-policy',
-        "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; form-action 'none'",
-      )
-      .type('text/html; charset=utf-8')
-      .send(RESET_PAGE),
+      .header('access-control-allow-origin', website)
+      .header('access-control-allow-methods', 'POST')
+      .header('access-control-allow-headers', 'content-type')
+      .header('access-control-max-age', '600')
+      .header('vary', 'origin');
+    return true;
+  };
+  app.options('/auth/reset-password', async (request, reply) =>
+    reply.status(allowWebsite(request, reply) ? 204 : 403).send(),
   );
 
   app.post('/auth/reset-password', async (request, reply) => {
+    allowWebsite(request, reply);
     const parsed = resetSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({
@@ -238,34 +235,3 @@ export function registerAuthRoutes(app: FastifyInstance): void {
   // Ends this device's session; the token stops working at once.
   app.post('/auth/sign-out', async (request, reply) => forward(request, reply, {}));
 }
-
-/** A minimal page for links opened in a browser. Only fixed strings go in — nothing echoed. */
-function page(title: string, body: string): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · FuseOS</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0a0b10;color:#f3f4f6;font:16px/1.5 system-ui,sans-serif}main{max-width:26rem;padding:2rem;text-align:center}h1{color:#ff7a45;font-size:1.6rem;margin:0 0 .5rem}</style></head><body><main><h1>${title}</h1><p>${body}</p></main></body></html>`;
-}
-
-/** The reset form. Fixed markup; the script reads the token from the URL and posts JSON. */
-const RESET_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Choose a new password · FuseOS</title>
-<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0a0b10;color:#f3f4f6;font:16px/1.5 system-ui,sans-serif}main{width:min(24rem,calc(100% - 2rem))}h1{color:#ff7a45;font-size:1.5rem;margin:0 0 .25rem}p{color:#9aa1ad;margin:0 0 1.25rem}label{display:block;font-size:.85rem;margin:.75rem 0 .3rem}input{box-sizing:border-box;width:100%;padding:.75rem;border-radius:10px;border:1px solid #2a2e38;background:#12141b;color:#f3f4f6;font-size:1rem}button{margin-top:1.25rem;width:100%;padding:.8rem;border:0;border-radius:10px;background:#ff6a3d;color:#fff;font-weight:600;font-size:1rem;cursor:pointer}button:disabled{opacity:.6}#msg{margin-top:1rem;min-height:1.5rem}.err{color:#ff8a80}.ok{color:#7ee2a8}</style></head>
-<body><main><h1>Choose a new password</h1><p>For your FuseOS account. Every device signs out after this.</p>
-<form id="f"><label for="a">New password</label><input id="a" type="password" minlength="8" maxlength="200" autocomplete="new-password" required>
-<label for="b">Type it again</label><input id="b" type="password" minlength="8" maxlength="200" autocomplete="new-password" required>
-<button id="go" type="submit">Save password</button></form><div id="msg"></div></main>
-<script>
-const token = new URLSearchParams(location.search).get('token') || '';
-const msg = document.getElementById('msg');
-const say = (text, ok) => { msg.textContent = text; msg.className = ok ? 'ok' : 'err'; };
-if (!token) say('This link is missing its code. Ask for a new one in the app.', false);
-document.getElementById('f').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const a = document.getElementById('a').value, b = document.getElementById('b').value;
-  if (a !== b) return say('The two passwords are different.', false);
-  const go = document.getElementById('go'); go.disabled = true;
-  try {
-    const r = await fetch('/auth/reset-password', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token, newPassword: a }) });
-    const body = await r.json();
-    if (r.ok) { document.getElementById('f').remove(); say('Done. Sign in to FuseOS on your devices with the new password.', true); }
-    else { say(body.error && body.error.message || 'That did not work. Try again.', false); go.disabled = false; }
-  } catch { say('No connection. Try again.', false); go.disabled = false; }
-});
-</script></body></html>`;

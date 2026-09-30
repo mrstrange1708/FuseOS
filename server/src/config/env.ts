@@ -26,6 +26,10 @@ const schema = z.object({
   // request when unset, which is fine on a laptop and warned about everywhere else.
   BETTER_AUTH_URL: z.string().url().optional(),
 
+  // The public website: the reset and email-confirmed pages live there, and it is the one
+  // origin allowed to call /auth/reset-password from a browser.
+  WEB_URL: z.string().url().default('https://fuseos.theshaik.dev'),
+
   // Sign in with Google (docs/api.md). The web client verifies Android's ID tokens (its
   // audience) and holds the secret; the Mac signs in through an iOS-type client, whose
   // tokens carry that client's id instead. Google sign-in is off unless all are set.

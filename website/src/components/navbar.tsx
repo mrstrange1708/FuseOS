@@ -3,15 +3,16 @@
 import { useEffect, useState } from 'react';
 import { IconBrandGithub } from '@tabler/icons-react';
 import { FuseMark, Wordmark } from '@/components/fuse-mark';
+import { GITHUB } from '@/lib/site';
 import { cn } from '@/lib/utils';
 
+// Absolute paths, so the bar works from every page, not only the home page.
 const LINKS = [
-  { href: '#film', label: 'Watch' },
-  { href: '#notch', label: 'The island' },
-  { href: '#story', label: 'How it feels' },
-  { href: '#menubar', label: 'Menu bar' },
-  { href: '#continuity', label: 'Continuity' },
-  { href: '#privacy', label: 'Privacy' },
+  { href: '/#film', label: 'Watch' },
+  { href: '/#notch', label: 'The island' },
+  { href: '/#continuity', label: 'Features' },
+  { href: '/help', label: 'Help' },
+  { href: '/privacy', label: 'Privacy' },
 ];
 
 /** A glass pill across the top. It darkens once the page moves, so text never shows through. */
@@ -36,7 +37,7 @@ export function Navbar() {
           scrolled ? 'bg-[#0c0e14]/70' : 'bg-white/[0.03]',
         )}
       >
-        <a href="#top" aria-label="FuseOS home" className="shrink-0">
+        <a href="/" aria-label="FuseOS home" className="shrink-0">
           <span className="hidden sm:block">
             <Wordmark />
           </span>
@@ -55,14 +56,14 @@ export function Navbar() {
           ))}
           <a
             className="rounded-full p-2 transition-colors hover:bg-white/5 hover:text-ink"
-            href="https://github.com/mrstrange1708/FuseOS"
+            href={GITHUB}
             aria-label="Source on GitHub"
           >
             <IconBrandGithub size={19} />
           </a>
           <a
             className="rounded-full bg-gradient-to-b from-ember to-ember-deep px-4 py-2 font-semibold text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.25)] transition-[filter] hover:brightness-110"
-            href="#download"
+            href="/download"
           >
             Download
           </a>
