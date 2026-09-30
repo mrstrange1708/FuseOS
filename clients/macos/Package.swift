@@ -13,6 +13,8 @@ let package = Package(
         // build-app.sh, which needs `protoc` and `protoc-gen-swift` on PATH
         // (brew install protobuf swift-protobuf).
         .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.38.0"),
+        // Crash and error reports for the app (never content — docs/observability.md).
+        .package(url: "https://github.com/getsentry/sentry-cocoa", from: "9.29.2"),
     ],
     targets: [
         .target(
@@ -29,7 +31,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "FuseOS",
-            dependencies: ["FuseOSCore", "VirtualDisplay"],
+            dependencies: [
+                "FuseOSCore", "VirtualDisplay",
+                .product(name: "Sentry", package: "sentry-cocoa"),
+            ],
             path: "Sources/FuseOS",
         ),
         .testTarget(

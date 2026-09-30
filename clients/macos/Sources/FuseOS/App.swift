@@ -1,8 +1,33 @@
 import SwiftUI
 import AppKit
 import FuseOSCore
+import Sentry
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Crash and error reports, and nothing a person copied, typed or received (CLAUDE.md
+    /// principle 6): no PII (no IP), no screenshots or view hierarchy, no traces. What arrives
+    /// is the stack, the Mac model and OS, and the app version. A client DSN only lets the app
+    /// send; `FuseSentryDSN` in Info.plist overrides it, empty turns reporting off.
+    private static func startSentry() {
+        let dsn = (Bundle.main.object(forInfoDictionaryKey: "FuseSentryDSN") as? String)
+            ?? "https://03d9a4740ce3ba5309402b70f064549d@o4512173573799936.ingest.us.sentry.io/4512173588545536"
+        guard !dsn.isEmpty else { return }
+        SentrySDK.start { options in
+            options.dsn = dsn
+            options.sendDefaultPii = false
+            options.tracesSampleRate = 0
+            #if DEBUG
+            options.environment = "debug"
+            #else
+            options.environment = "production"
+            #endif
+            let info = Bundle.main.infoDictionary
+            if let version = info?["CFBundleShortVersionString"] as? String, let build = info?["CFBundleVersion"] as? String {
+                options.releaseName = "fuseos-macos@\(version)+\(build)"
+            }
+        }
+    }
+
     /// Set once the app's scenes exist. Services can arrive before that (a Finder
     /// "Send to Phone" that launched the app), so those wait in `pending` until it is.
     @MainActor var dashboard: DashboardViewModel? {
@@ -46,6 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Self.startSentry()
         DockIcon.watch()
         if let directory = DemoMode.directory {
             Task { @MainActor in await DemoMode.snapshot(to: directory) }
