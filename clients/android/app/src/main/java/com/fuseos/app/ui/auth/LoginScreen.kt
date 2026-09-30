@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -86,9 +87,23 @@ fun LoginScreen(viewModel: AuthViewModel) {
             enabled = !state.isSubmitting,
         )
 
+        TextButton(
+            onClick = viewModel::forgotPassword,
+            enabled = !state.isSubmitting,
+            modifier = Modifier.align(Alignment.End),
+        ) { Text("Forgot password?") }
+
         if (state.error != null) {
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
             ErrorBanner(state.error!!)
+        }
+        if (state.notice != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                state.notice!!,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
         }
 
         Spacer(Modifier.height(24.dp))

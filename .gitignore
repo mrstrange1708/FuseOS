@@ -40,3 +40,6 @@ website/next-env.d.ts
 
 # The server's production environment (deploy/README.md)
 deploy/server.env
+
+# oh-my-claudecode (a local Claude Code plugin) keeps its session state here
+.omc/

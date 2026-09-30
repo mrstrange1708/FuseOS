@@ -37,6 +37,9 @@ const schema = z.object({
   // verified in Resend, only onboarding@resend.dev -> the Resend account's own address works.
   RESEND_API_KEY: z.string().min(1).optional(),
   EMAIL_FROM: z.string().min(3).default('FuseOS <onboarding@resend.dev>'),
+  // The Resend segment that is the release list (Resend → Audience → Segments). Needs a
+  // full-access API key; release emails and list sign-up are off without it.
+  RESEND_SEGMENT_ID: z.string().min(1).optional(),
 
   // Error tracking (Sentry) — optional; disabled if absent.
   SENTRY_DSN: z.string().url().optional(),
@@ -52,5 +55,11 @@ export const env: Env = schema
   .refine((e) => e.NODE_ENV !== 'production' || e.BETTER_AUTH_SECRET !== undefined, {
     message: 'BETTER_AUTH_SECRET is required in production',
     path: ['BETTER_AUTH_SECRET'],
+  })
+  // Without it Better Auth takes its own address from each request's Host header — and the
+  // links it emails (password reset, confirmation) would point wherever a caller claimed.
+  .refine((e) => e.NODE_ENV !== 'production' || e.BETTER_AUTH_URL !== undefined, {
+    message: 'BETTER_AUTH_URL is required in production',
+    path: ['BETTER_AUTH_URL'],
   })
   .parse(process.env);

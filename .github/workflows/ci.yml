@@ -94,6 +94,6 @@ jobs:
       # Boots and answers /health: proves the image carries everything it imports.
       - name: Boot
         run: |
-          docker run -d --name fuse -p 3000:3000 -e BETTER_AUTH_SECRET="$(openssl rand -base64 48)" fuseos-server
+          docker run -d --name fuse -p 3000:3000 -e BETTER_AUTH_SECRET="$(openssl rand -base64 48)" -e BETTER_AUTH_URL=https://example.invalid fuseos-server
           for i in $(seq 1 20); do curl -fsS localhost:3000/health && exit 0; sleep 1; done
           docker logs fuse; exit 1

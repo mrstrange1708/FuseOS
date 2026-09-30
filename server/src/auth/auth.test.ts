@@ -1,10 +1,11 @@
 import { randomBytes, scryptSync } from 'node:crypto';
+import { and, eq, like } from 'drizzle-orm';
 import { afterAll, describe, it, expect } from 'vitest';
 import { buildApp } from '../app.js';
 import { auth, deleteUsers } from '../test-support.js';
 import { verifyAnyPassword } from './auth.js';
 import { getDb } from '../db/client.js';
-import { account, user } from '../db/schema.js';
+import { account, user, verification } from '../db/schema.js';
 
 // Accounts carried over from the dev-auth stand-in keep their passwords (migration 0003).
 describe('legacy password hashes', () => {
@@ -151,6 +152,80 @@ describe.skipIf(!process.env.DATABASE_URL)('auth (Better Auth, Postgres)', () =>
       (await app.inject({ method: 'GET', url: '/devices', headers: auth(token) })).statusCode,
     ).toBe(401);
     await app.close();
+  });
+
+  it('answers a reset request the same way whether or not the account exists', async () => {
+    const app = buildApp();
+    const nobody = await app.inject({
+      method: 'POST',
+      url: '/auth/request-password-reset',
+      payload: { email: `nobody+${Date.now()}@stylicaa.com` },
+    });
+    expect(nobody.statusCode).toBe(200);
+    expect(nobody.json()).toEqual({ ok: true });
+    const bad = await app.inject({
+      method: 'POST',
+      url: '/auth/request-password-reset',
+      payload: {},
+    });
+    expect(bad.statusCode).toBe(400);
+  });
+
+  it('refuses a reset with a made-up token, in its own words', async () => {
+    const res = await buildApp().inject({
+      method: 'POST',
+      url: '/auth/reset-password',
+      payload: { token: 'made-up', newPassword: 'another-password' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('invalid_token');
+  });
+
+  it('serves the reset page without letting it be framed or leak its token', async () => {
+    const res = await buildApp().inject({ method: 'GET', url: '/auth/reset?token=abc' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['x-frame-options']).toBe('DENY');
+    expect(res.headers['referrer-policy']).toBe('no-referrer');
+    expect(res.body).not.toContain('abc');
+  });
+
+  it('resets a password end to end, and signs every device out', async () => {
+    const app = buildApp();
+    const email = `pragya+${Date.now()}@stylicaa.com`;
+    const signUp = track(
+      await app.inject({
+        method: 'POST',
+        url: '/auth/sign-up/email',
+        payload: { email, password: 'old-password', name: 'Pragya' },
+      }),
+    );
+    const { token: session, user: created } = signUp.json();
+
+    await app.inject({ method: 'POST', url: '/auth/request-password-reset', payload: { email } });
+    // The email is an Inngest job (off under test); the token Better Auth stored is the link's.
+    const [row] = await getDb()
+      .select({ identifier: verification.identifier })
+      .from(verification)
+      .where(
+        and(like(verification.identifier, 'reset-password:%'), eq(verification.value, created.id)),
+      );
+    const token = row?.identifier.slice('reset-password:'.length);
+    expect(token).toBeTruthy();
+
+    const reset = await app.inject({
+      method: 'POST',
+      url: '/auth/reset-password',
+      payload: { token, newPassword: 'new-password' },
+    });
+    expect(reset.statusCode).toBe(200);
+
+    const signIn = (password: string) =>
+      app.inject({ method: 'POST', url: '/auth/sign-in/email', payload: { email, password } });
+    expect((await signIn('old-password')).statusCode).toBe(401);
+    expect((await signIn('new-password')).statusCode).toBe(200);
+    // The session from before the reset no longer works.
+    const devices = await app.inject({ method: 'GET', url: '/devices', headers: auth(session) });
+    expect(devices.statusCode).toBe(401);
   });
 
   it('asks for a Google ID token', async () => {

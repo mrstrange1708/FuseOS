@@ -20,6 +20,12 @@ Better Auth (`server/src/auth/auth.ts`) serves these routes behind a thin adapte
 | POST | `/auth/sign-up/email` | `{ email, password (8–200), name (1–100) }` | `201 { token, user: { id, email, name, … } }` |
 | POST | `/auth/sign-in/email` | `{ email, password }` | `200 { token, user }` |
 | POST | `/auth/google` | `{ idToken }` — a Google ID token | `200 { token, user }`; signs up on first use |
+| POST | `/auth/request-password-reset` | `{ email }` | `200 { ok: true }` whether or not the account exists (no enumeration); `429 rate_limited` |
+| GET | `/auth/reset?token=` | — | The new-password page the reset email links to (served here, so its POST is same-origin; framing and referrers blocked; the token is read by the page, never written into it) |
+| POST | `/auth/reset-password` | `{ token, newPassword (8–200) }` | `200 { ok: true }` and **every session is revoked** (a forgotten and a stolen password look alike); `400 invalid_token` |
+
+Emailed links (reset, confirmation) are built from `BETTER_AUTH_URL`, which the server requires in production: without it Better Auth takes its address from each request's `Host` header, and a forged `Host` on a reset request would send the victim a link — and their token — to someone else's site.
+| GET | `/auth/verify-email?token=` | — | The link in the confirmation email; answers with a page |
 | POST | `/auth/sign-out` | — (bearer token) | `200`; the token stops working at once |
 
 Errors: `400 invalid_request` (failed validation), `409 email_taken`, `401 invalid_credentials` (unknown email and wrong password answer the same), anything else Better Auth reports as its own code, lower-cased. Google adds `401 invalid_google_token`, `409 use_password` and `503 google_unavailable` (below).
@@ -161,6 +167,10 @@ Served at `/api/inngest` (`server/src/jobs/`). Locally the Inngest dev server (`
 | `auth-send-verification` | `auth/verification.requested` (sign-up) | Emails the confirmation link; the link (`GET /auth/verify-email`) answers with a small page |
 | `auth-welcome` | `auth/email.verified` | Welcome email with the download link |
 | `devices-new-device-alert` | `devices/device.added` (a new public key, not a re-register) | "New device on your FuseOS account" — every device on an account is trusted with its clipboard, so the owner hears of each one. Not for the first device. |
+| `auth-password-reset` | `auth/password-reset.requested` | The reset link — to confirmed or unconfirmed addresses alike, since only the mailbox owner can use it |
+| `releases-announce` | `releases/published`, sent by `release.yml` for a plain `vX.Y.Z` tag with the tag as event id (no double send) | One **Resend Broadcast** to the release list. Confirmed users join it with the welcome email; Resend keeps unsubscribes. Needs `RESEND_SEGMENT_ID` and a full-access key |
+
+Every email is branded HTML with a plain-text twin (`server/src/email/templates.ts`): inline styles in tables, because mail clients drop `<style>`; a light card, because dark backgrounds get inverted by client dark modes; and anything a person typed is HTML-escaped. Sender: `FuseOS <noreply@fuseos.theshaik.dev>` (verified in Resend: SPF, DKIM and DMARC records under `fuseos.theshaik.dev`).
 
 Events carry ids (`userId`, `deviceId`), never the address: the job reads it when it sends.
 

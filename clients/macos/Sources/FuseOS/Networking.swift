@@ -14,6 +14,10 @@ struct SignInRequest: Encodable {
     let password: String
 }
 
+struct PasswordResetRequest: Encodable {
+    let email: String
+}
+
 struct GoogleSignInRequest: Encodable {
     let idToken: String
 }
@@ -59,6 +63,25 @@ struct AuthAPI {
 
     func signUp(email: String, password: String, name: String) async throws -> AuthResponse {
         try await post(path: "/auth/sign-up/email", body: SignUpRequest(email: email, password: password, name: name))
+    }
+
+    /// Emails a reset link (a page on the server). The answer is the same whether or not the
+    /// account exists, so there is nothing to decode on success.
+    func requestPasswordReset(email: String) async throws {
+        guard let url = URL(string: Config.baseURL.absoluteString + "/auth/request-password-reset") else {
+            throw AuthError(message: "Invalid server URL.")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(PasswordResetRequest(email: email))
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
+            if let apiError = try? JSONDecoder().decode(APIError.self, from: data) {
+                throw AuthError(message: apiError.error.message, code: apiError.error.code)
+            }
+            throw AuthError(message: "Couldn't reach the FuseOS server. Try again.")
+        }
     }
 
     /// Ends this session on the server, so the token stops working everywhere at once.

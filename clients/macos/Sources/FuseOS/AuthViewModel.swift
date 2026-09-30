@@ -14,6 +14,8 @@ final class AuthViewModel: ObservableObject {
     @Published var name = ""
     @Published var isSubmitting = false
     @Published var error: String?
+    /// A good-news line under the form, e.g. after asking for a reset link.
+    @Published var notice: String?
     @Published var emailError: String?
     @Published var passwordError: String?
     @Published var nameError: String?
@@ -25,6 +27,7 @@ final class AuthViewModel: ObservableObject {
     func switchTo(_ newMode: Mode) {
         mode = newMode
         error = nil
+        notice = nil
         emailError = nil
         passwordError = nil
         nameError = nil
@@ -49,6 +52,27 @@ final class AuthViewModel: ObservableObject {
                     try await repository.signUp(email: trimmedEmail, password: password, name: trimmedName)
                 }
                 // On success, SessionStore updates and the app swaps to Home.
+            } catch {
+                self.error = (error as? AuthError)?.message ?? error.localizedDescription
+            }
+            isSubmitting = false
+        }
+    }
+
+    /// "Forgot password?": a reset link to the email typed above.
+    func forgotPassword() {
+        let trimmedEmail = email.trimmed
+        guard Self.isValidEmail(trimmedEmail) else {
+            emailError = "Enter your email above, then tap Forgot password"
+            return
+        }
+        error = nil
+        notice = nil
+        isSubmitting = true
+        Task {
+            do {
+                try await AuthAPI().requestPasswordReset(email: trimmedEmail)
+                notice = "If there's an account for \(trimmedEmail), a reset link is on its way. Check your inbox."
             } catch {
                 self.error = (error as? AuthError)?.message ?? error.localizedDescription
             }
