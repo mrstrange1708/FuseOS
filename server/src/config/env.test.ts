@@ -21,6 +21,7 @@ afterEach(() => {
     else process.env[key] = value;
   }
   vi.resetModules();
+  vi.restoreAllMocks();
 });
 
 describe('env validation', () => {
@@ -31,6 +32,8 @@ describe('env validation', () => {
   });
 
   it('leaves optional integrations undefined when unset', async () => {
+    // A developer's server/.env would fill SENTRY_DSN back in; this is about the environment.
+    vi.spyOn(process, 'loadEnvFile').mockImplementation(() => undefined);
     const env = await loadEnv({ SENTRY_DSN: undefined });
     expect(env.SENTRY_DSN).toBeUndefined();
     expect(env.POSTHOG_HOST).toMatch(/^https?:\/\//);

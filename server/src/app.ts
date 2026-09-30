@@ -1,4 +1,4 @@
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import { serve } from 'inngest/fastify';
 import { registerAuthRoutes } from './auth/routes.js';
 import { registerDeviceRoutes } from './devices/routes.js';
@@ -29,7 +29,14 @@ export function buildApp(): FastifyInstance {
     handler: serve({ client: inngest, functions }),
   });
 
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler<FastifyError>((error, _request, reply) => {
+    // A malformed body or oversize payload is the client's mistake: say so, and keep it out
+    // of Sentry, which is for the server's own faults.
+    if (error.statusCode && error.statusCode < 500) {
+      return reply.status(error.statusCode).send({
+        error: { code: 'invalid_request', message: error.message },
+      });
+    }
     Sentry.captureException(error);
     app.log.error(error);
     void reply.status(500).send({
