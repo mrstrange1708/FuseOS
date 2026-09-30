@@ -150,6 +150,29 @@ export const announceRelease = inngest.createFunction(
   },
 );
 
+const feedbackEvent = z.object({
+  kind: z.enum(['bug', 'idea', 'other']),
+  platform: z.enum(['mac', 'android', 'both', 'website']),
+  message: z.string().min(1).max(5000),
+  steps: z.string().max(5000).optional(),
+  appVersion: z.string().max(40).optional(),
+  email: z.string().email().optional(),
+});
+
+/** `feedback/email`: a report from the website's /report form, to the owner (`FEEDBACK_TO`). */
+export const emailFeedback = inngest.createFunction(
+  { id: 'feedback-email', triggers: [{ event: 'feedback/submitted' }] },
+  async ({ event, step }) => {
+    const report = parse(feedbackEvent, event.data, 'feedback/submitted');
+    return step.run('send the email', async () => {
+      requireResend();
+      if (!env.FEEDBACK_TO) throw new NonRetriableError('FEEDBACK_TO is not set');
+      await sendEmail(env.FEEDBACK_TO, templates.feedbackReport(report), report.email);
+      return { sent: true };
+    });
+  },
+);
+
 export const functions = [
   sweepPresence,
   sendVerification,
@@ -157,4 +180,5 @@ export const functions = [
   alertNewDevice,
   sendPasswordReset,
   announceRelease,
+  emailFeedback,
 ];

@@ -174,3 +174,35 @@ export function release(version: string, notesUrl: string): Email {
     }),
   };
 }
+
+const KIND = { bug: 'Bug', idea: 'Idea', other: 'Message' } as const;
+const PLATFORM = { mac: 'Mac', android: 'Android', both: 'Mac and Android', website: 'Website' };
+
+/** A report from the website's /report form, to the owner. Every field is the reporter's. */
+export function feedbackReport(report: {
+  kind: keyof typeof KIND;
+  platform: keyof typeof PLATFORM;
+  message: string;
+  steps?: string;
+  appVersion?: string;
+  email?: string;
+}): Email {
+  const first = report.message.split('\n')[0]?.slice(0, 70) ?? '';
+  return {
+    subject: `[FuseOS ${KIND[report.kind].toLowerCase()}] ${first}`,
+    ...render({
+      preheader: `${KIND[report.kind]} on ${PLATFORM[report.platform]}`,
+      heading: `${KIND[report.kind]} · ${PLATFORM[report.platform]}`,
+      paragraphs: [
+        report.message,
+        ...(report.steps ? [`Steps: ${report.steps}`] : []),
+        `App version: ${report.appVersion || 'not given'}`,
+        report.email
+          ? `From: ${report.email} — reply to this email to answer.`
+          : 'No reply address given.',
+      ],
+      footerHtml: 'Sent from the Report a bug form on fuseos.theshaik.dev.',
+      footerText: 'Sent from the Report a bug form on fuseos.theshaik.dev.',
+    }),
+  };
+}

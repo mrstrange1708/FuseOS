@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { serve } from 'inngest/fastify';
 import { registerAuthRoutes } from './auth/routes.js';
 import { registerDeviceRoutes } from './devices/routes.js';
+import { registerFeedbackRoutes } from './feedback/routes.js';
 import { registerPairingRoutes } from './pairing/routes.js';
 import { attachSignal } from './signal/ws.js';
 import { functions } from './jobs/functions.js';
@@ -16,6 +17,7 @@ export function buildApp(): FastifyInstance {
 
   registerAuthRoutes(app);
   registerDeviceRoutes(app);
+  registerFeedbackRoutes(app);
   registerPairingRoutes(app);
   attachSignal(app);
 

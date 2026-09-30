@@ -45,6 +45,10 @@ Android uses Credential Manager (`GetGoogleIdOption` with the web client as serv
 
 > Email verification is sent on sign-up via an Inngest job (below). Sign-in does not wait for it (`requireEmailVerification` off); a confirmed email is what lets a Google sign-in link to the account.
 
+## Feedback
+
+`POST /feedback` — the website's **Report a bug** form (`/report`). Body: `{ kind: bug|idea|other, platform: mac|android|both|website, message (10–5000), steps?, appVersion?, email?, website? }`. Answers `{ ok: true }`; `400` when the message is too short, `429` after 5 reports an hour from one address (in-memory, one instance). `website` is a honeypot: filled means a bot, which is answered `ok` and dropped. CORS for `WEB_URL`'s origin only (`http/website-cors.ts`, shared with `/auth/reset-password`). The report travels as an Inngest event and is emailed to the owner — it is feedback someone chose to send, not synced content, and the form asks people not to paste anything private.
+
 ## Devices
 
 | Method | Path | Purpose |
@@ -167,6 +171,7 @@ Served at `/api/inngest` (`server/src/jobs/`). Locally the Inngest dev server (`
 | `auth-welcome` | `auth/email.verified` | Welcome email with the download link |
 | `devices-new-device-alert` | `devices/device.added` (a new public key, not a re-register) | "New device on your FuseOS account" — every device on an account is trusted with its clipboard, so the owner hears of each one. Not for the first device. |
 | `auth-password-reset` | `auth/password-reset.requested` | The reset link — to confirmed or unconfirmed addresses alike, since only the mailbox owner can use it |
+| `feedback-email` | `feedback/submitted` (`POST /feedback`) | Emails a website bug report or idea to `FEEDBACK_TO`, with Reply-To set to the reporter's address when they gave one |
 | `releases-announce` | `releases/published`, sent by `release.yml` for a plain `vX.Y.Z` tag with the tag as event id (no double send) | One **Resend Broadcast** to the release list. Confirmed users join it with the welcome email; Resend keeps unsubscribes. Needs `RESEND_SEGMENT_ID` and a full-access key |
 
 Every email is branded HTML with a plain-text twin (`server/src/email/templates.ts`): inline styles in tables, because mail clients drop `<style>`; a light card, because dark backgrounds get inverted by client dark modes; and anything a person typed is HTML-escaped. Sender: `FuseOS <noreply@fuseos.theshaik.dev>` (verified in Resend: SPF, DKIM and DMARC records under `fuseos.theshaik.dev`).

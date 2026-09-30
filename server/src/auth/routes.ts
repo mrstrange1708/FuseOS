@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { env } from '../config/env.js';
+import { allowWebsite, websitePreflight } from '../http/website-cors.js';
 import { capture } from '../observability/analytics.js';
 import { getAuth } from './auth.js';
 
@@ -214,20 +215,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
 
   // The website's /reset page posts here from another origin (fuseos.theshaik.dev → the API),
   // so this one route answers CORS — for the website only, no credentials involved.
-  const website = new URL(env.WEB_URL).origin;
-  const allowWebsite = (request: FastifyRequest, reply: FastifyReply): boolean => {
-    if (request.headers.origin !== website) return false;
-    reply
-      .header('access-control-allow-origin', website)
-      .header('access-control-allow-methods', 'POST')
-      .header('access-control-allow-headers', 'content-type')
-      .header('access-control-max-age', '600')
-      .header('vary', 'origin');
-    return true;
-  };
-  app.options('/auth/reset-password', async (request, reply) =>
-    reply.status(allowWebsite(request, reply) ? 204 : 403).send(),
-  );
+  websitePreflight(app, '/auth/reset-password');
 
   app.post('/auth/reset-password', async (request, reply) => {
     allowWebsite(request, reply);

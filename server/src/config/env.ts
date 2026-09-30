@@ -44,6 +44,8 @@ const schema = z.object({
   // The Resend segment that is the release list (Resend → Audience → Segments). Needs a
   // full-access API key; release emails and list sign-up are off without it.
   RESEND_SEGMENT_ID: z.string().min(1).optional(),
+  // Where the website's bug reports and ideas are emailed. Reports are off without it.
+  FEEDBACK_TO: z.string().email().optional(),
 
   // Error tracking (Sentry) — optional; disabled if absent.
   SENTRY_DSN: z.string().url().optional(),
