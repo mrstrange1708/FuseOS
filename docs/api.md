@@ -23,6 +23,8 @@ Better Auth (`server/src/auth/auth.ts`) serves these routes behind a thin adapte
 | POST | `/auth/request-password-reset` | `{ email }` | `200 { ok: true }` whether or not the account exists (no enumeration); `429 rate_limited` |
 | GET | `/auth/reset?token=` | — | The new-password page the reset email links to (served here, so its POST is same-origin; framing and referrers blocked; the token is read by the page, never written into it) |
 | POST | `/auth/reset-password` | `{ token, newPassword (8–200) }` | `200 { ok: true }` and **every session is revoked** (a forgotten and a stolen password look alike); `400 invalid_token` |
+
+Emailed links (reset, confirmation) are built from `BETTER_AUTH_URL`, which the server requires in production: without it Better Auth takes its address from each request's `Host` header, and a forged `Host` on a reset request would send the victim a link — and their token — to someone else's site.
 | GET | `/auth/verify-email?token=` | — | The link in the confirmation email; answers with a page |
 | POST | `/auth/sign-out` | — (bearer token) | `200`; the token stops working at once |
 

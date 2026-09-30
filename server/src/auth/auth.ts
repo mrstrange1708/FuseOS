@@ -62,7 +62,10 @@ function createAuth() {
       // needed. A reset signs every device out: a forgotten password and a stolen one look
       // the same from here.
       sendResetPassword: async ({ user, token, url }) => {
-        const page = `${new URL(url).origin}/auth/reset?token=${encodeURIComponent(token)}`;
+        // The configured address, never one derived from a request (env.ts requires it in
+        // production); a laptop without one falls back to Better Auth's own base.
+        const base = env.BETTER_AUTH_URL ?? new URL(url).origin;
+        const page = `${new URL('/auth/reset', base).href}?token=${encodeURIComponent(token)}`;
         emit({ name: 'auth/password-reset.requested', data: { userId: user.id, url: page } });
       },
       revokeSessionsOnPasswordReset: true,

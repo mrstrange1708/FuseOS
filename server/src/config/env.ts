@@ -56,4 +56,10 @@ export const env: Env = schema
     message: 'BETTER_AUTH_SECRET is required in production',
     path: ['BETTER_AUTH_SECRET'],
   })
+  // Without it Better Auth takes its own address from each request's Host header — and the
+  // links it emails (password reset, confirmation) would point wherever a caller claimed.
+  .refine((e) => e.NODE_ENV !== 'production' || e.BETTER_AUTH_URL !== undefined, {
+    message: 'BETTER_AUTH_URL is required in production',
+    path: ['BETTER_AUTH_URL'],
+  })
   .parse(process.env);
