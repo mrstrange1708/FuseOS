@@ -90,6 +90,7 @@ fun FuseShell() {
         val message = when (ServiceLocator.transfers.send(uri)) {
             Transfers.SendResult.Started -> null
             Transfers.SendResult.NoPeer -> "No device connected. Open FuseOS on your Mac."
+            Transfers.SendResult.NeedsWifi -> "Files need both devices on the same Wi-Fi. Copies and notifications still go."
             Transfers.SendResult.Unreadable -> "Couldn't read that file."
             Transfers.SendResult.TooLarge -> "That file is over the 1 GB limit."
         }

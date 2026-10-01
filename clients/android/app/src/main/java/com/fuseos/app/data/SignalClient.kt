@@ -56,8 +56,24 @@ private data class Heartbeat(
 )
 
 @Serializable
+private data class RelayOut(
+    val type: String = "relay",
+    val to: String,
+    val stream: String,
+    val data: String? = null,
+    val close: Boolean? = null,
+)
+
+/** A piece of a relayed channel from [from] (docs/protocol.md §18): sealed bytes, or the end. */
+class RelayIn(val from: String, val stream: String, val data: ByteArray?, val close: Boolean)
+
+@Serializable
 private data class SignalEvent(
     val type: String,
+    val from: String? = null,
+    val stream: String? = null,
+    val data: String? = null,
+    val close: Boolean? = null,
     val deviceId: String? = null,
     val battery: Int? = null,
     val online: Boolean? = null,
@@ -97,6 +113,21 @@ class SignalClient(
 
     private var job: Job? = null
 
+    /** The live socket's outbox; null between connections, so nothing stale is replayed. */
+    @Volatile private var outbox: kotlinx.coroutines.channels.Channel<String>? = null
+
+    private val _relay = kotlinx.coroutines.flow.MutableSharedFlow<RelayIn>(extraBufferCapacity = 256)
+
+    /** Relayed channel pieces from this account's other devices, in order. */
+    val relay: kotlinx.coroutines.flow.SharedFlow<RelayIn> = _relay
+
+    /** Sends a piece of a relayed channel; false when there is no live socket to send it on. */
+    fun sendRelay(to: String, stream: String, data: ByteArray?, close: Boolean = false): Boolean {
+        val box = outbox ?: return false
+        val encoded = data?.let { android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP) }
+        return box.trySend(json.encodeToString(RelayOut(to = to, stream = stream, data = encoded, close = close.takeIf { it }))).isSuccess
+    }
+
     fun start(token: String, deviceId: String) {
         stop()
         job = scope.launch { loop(token, deviceId) }
@@ -124,6 +155,9 @@ class SignalClient(
                             ),
                         ),
                     )
+                    val box = kotlinx.coroutines.channels.Channel<String>(capacity = 256)
+                    outbox = box
+                    val sender = launch { for (message in box) send(Frame.Text(message)) }
                     val heartbeat = launch {
                         while (isActive) {
                             delay(20_000)
@@ -145,6 +179,9 @@ class SignalClient(
                         }
                     } finally {
                         heartbeat.cancel()
+                        outbox = null
+                        box.close()
+                        sender.cancel()
                     }
                 }
             } catch (e: CancellationException) {
@@ -157,13 +194,19 @@ class SignalClient(
         }
     }
 
-    private fun handle(text: String) {
+    private suspend fun handle(text: String) {
         val event = try {
             json.decodeFromString<SignalEvent>(text)
         } catch (e: Exception) {
             return
         }
         when (event.type) {
+            "relay" -> {
+                val from = event.from ?: return
+                val stream = event.stream ?: return
+                val bytes = event.data?.let { runCatching { android.util.Base64.decode(it, android.util.Base64.NO_WRAP) }.getOrNull() }
+                _relay.emit(RelayIn(from, stream, bytes, event.close == true))
+            }
             "hello-ok" -> event.peers?.forEach {
                 setPresence(it.deviceId, it.online ?: true, it.battery, it.publicKey, it.lanAddress, it.name)
             }

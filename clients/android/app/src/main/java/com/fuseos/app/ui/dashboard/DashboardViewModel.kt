@@ -41,6 +41,8 @@ class DashboardViewModel(
         val presence: Map<String, PeerPresence> = emptyMap(),
         /** Peers reachable over a direct LAN channel, not merely online. */
         val connected: Set<String> = emptySet(),
+        /** Of [connected], those linked over the relay rather than directly (§18). */
+        val relayed: Set<String> = emptySet(),
         val error: String? = null,
         val loading: Boolean = false,
         /** This device's advertised `ip:port`, or null until the LAN listener is bound. */
@@ -130,6 +132,7 @@ class DashboardViewModel(
             }
         }
         viewModelScope.launch {
+            launch { transport.relayedPeers.collect { r -> _state.update { it.copy(relayed = r) } } }
             transport.connectedPeers.collect { c ->
                 _state.update { it.copy(connected = c, selfLanAddress = transport.lanAddress(), selfPrefixLength = transport.lanPrefixLength()) }
             }

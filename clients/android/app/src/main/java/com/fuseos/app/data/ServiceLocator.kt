@@ -154,6 +154,7 @@ object ServiceLocator {
             // changes across restarts — hence a provider rather than a fixed value.
             lanAddressProvider = { transport.lanAddress() },
         )
+        transport.relay = signalClient
         deviceTrust = com.fuseos.app.trust.DeviceTrust.fromPrefs(
             appContext.getSharedPreferences("fuse_trust", Context.MODE_PRIVATE),
         )

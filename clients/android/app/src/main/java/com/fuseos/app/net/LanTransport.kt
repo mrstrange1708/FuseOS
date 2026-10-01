@@ -118,6 +118,16 @@ class LanTransport(
 
     @Volatile private var server: ServerSocket? = null
 
+    /** The relay through `/signal`, for when the LAN can't link two devices (§18). */
+    @Volatile var relay: com.fuseos.app.data.SignalClient? = null
+    private val relayWires = ConcurrentHashMap<String, RelayWire>()
+    private val relayAttempts = ConcurrentHashMap<String, Job>()
+
+    private val _relayedPeers = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Peers linked over the relay rather than directly: the UI says so, files wait for Wi-Fi. */
+    val relayedPeers: StateFlow<Set<String>> = _relayedPeers.asStateFlow()
+
     @Volatile private var selfDeviceId: String? = null
     private var job: Job? = null
 
@@ -146,6 +156,7 @@ class LanTransport(
     fun broadcast(envelope: Envelope, only: Set<String>? = null) {
         for ((peerId, channel) in channels) {
             if (only != null && peerId !in only) continue
+            if (channel.viaRelay && !Relay.carries(envelope)) continue
             try {
                 channel.send(envelope)
                 noteTraffic(envelope)
@@ -177,6 +188,7 @@ class LanTransport(
                     launch { acceptLoop(listener, deviceId) }
                     launch { dialLoop(deviceId) }
                     launch { heartbeatLoop() }
+                    relay?.let { signal -> launch { signal.relay.collect { onRelay(it, deviceId) } } }
                 }
             } finally {
                 runCatching { listener.close() }
@@ -212,6 +224,9 @@ class LanTransport(
         // them, so tear the channels down explicitly.
         channels.values.forEach { it.close() }
         channels.clear()
+        relayWires.values.forEach { it.close() }
+        relayWires.clear()
+        _relayedPeers.value = emptySet()
         runCatching { server?.close() }
         server = null
         _connectedPeers.value = emptySet()
@@ -233,7 +248,7 @@ class LanTransport(
             }
             launch(Dispatchers.IO) {
                 try {
-                    pump(handshake(socket, selfId))
+                    pump(handshake(SocketWire(socket), selfId))
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -261,11 +276,23 @@ class LanTransport(
 
     private suspend fun maintain(peerId: String, selfId: String) {
         var backoffMs = 500L
+        var unlinkedSince = SystemClock.elapsedRealtime()
         while (currentCoroutineContext().isActive) {
             val peer = peers.value[peerId]
-            // A channel already up (an inbound one, or "Connect now"'s) needs no second dial.
+            val now = SystemClock.elapsedRealtime()
+            if (channels.containsKey(peerId)) unlinkedSince = now
+            // No link for a while — a Wi-Fi that isolates clients, different networks: carry the
+            // channel over the relay meanwhile. The LAN keeps being tried, and wins when it links.
+            if (peer != null && peer.online && peer.publicKey != null && !channels.containsKey(peerId) &&
+                !_paused.value && trusts(peerId) && now - unlinkedSince >= RELAY_AFTER_MS &&
+                relayAttempts[peerId]?.isActive != true
+            ) {
+                relayAttempts[peerId] = scope.launch(Dispatchers.IO) { openRelay(peerId, selfId) }
+            }
+            // A direct channel already up (an inbound one, or "Connect now"'s) needs no dial;
+            // a relayed one does — the LAN is better whenever it works.
             if (peer != null && peer.online && peer.lanAddress != null && peer.publicKey != null &&
-                !channels.containsKey(peerId) && !_paused.value && trusts(peerId)
+                channels[peerId]?.viaRelay != false && !_paused.value && trusts(peerId)
             ) {
                 val ok = try {
                     dial(peerId, peer.lanAddress, selfId)
@@ -294,19 +321,18 @@ class LanTransport(
         val socket = Socket()
         try {
             socket.connect(InetSocketAddress(host, port), CONNECT_TIMEOUT_MS)
-            pump(handshake(socket, selfId))
+            pump(handshake(SocketWire(socket), selfId))
         } catch (e: Exception) {
             runCatching { socket.close() }
             throw e
         }
     }
 
-    private suspend fun handshake(socket: Socket, selfId: String): LanChannel {
-        socket.tcpNoDelay = true // latency is the product; never wait to coalesce a frame
+    private suspend fun handshake(wire: Wire, selfId: String): LanChannel {
         val keyPair = session.deviceKeyPair()
         // A peer that accepts and then says nothing must not hold a dial loop forever.
-        socket.soTimeout = HANDSHAKE_TIMEOUT_MS
-        return LanChannel.handshake(socket, selfId, keyPair.private) { id ->
+        wire.setReadTimeout(HANDSHAKE_TIMEOUT_MS)
+        return LanChannel.handshake(wire, selfId, keyPair.private) { id ->
             // Only devices this phone has approved: an unknown key closes the socket unread.
             peers.value[id]?.publicKey?.takeIf { trusts(id) }?.let { runCatching { DeviceKey.decodePublic(it) }.getOrNull() }
         } // the read deadline stays until the first frame proves the peer (pump)
@@ -327,7 +353,10 @@ class LanTransport(
             throw e
         }
         channel.clearReadTimeout()
-        register(channel)
+        if (!register(channel)) {
+            channel.close() // relayed, and a direct channel won the slot meanwhile
+            return
+        }
         try {
             var envelope = first
             while (true) {
@@ -408,17 +437,81 @@ class LanTransport(
         }
     }
 
-    private fun register(channel: LanChannel) {
-        Log.i(TAG, "channel up with ${channel.peerDeviceId}")
+    /** False when [channel] is relayed and a direct one is already up: the LAN keeps the slot. */
+    @Synchronized
+    private fun register(channel: LanChannel): Boolean {
+        val peerId = channel.peerDeviceId
+        if (channel.viaRelay && channels[peerId]?.viaRelay == false) return false
+        Log.i(TAG, "channel up with $peerId${if (channel.viaRelay) " (relay)" else ""}")
         // A reconnect replaces the previous channel rather than racing it.
-        channels.put(channel.peerDeviceId, channel)?.close()
-        _connectedPeers.update { it + channel.peerDeviceId }
+        channels.put(peerId, channel)?.close()
+        _connectedPeers.update { it + peerId }
+        _relayedPeers.update { if (channel.viaRelay) it + peerId else it - peerId }
+        return true
     }
 
+    @Synchronized
     private fun unregister(peerId: String, channel: LanChannel) {
         if (channels.remove(peerId, channel)) {
             _connectedPeers.update { it - peerId }
+            _relayedPeers.update { it - peerId }
         }
+    }
+
+    // MARK: - The relay (§18)
+
+    /** The dialer's side: one relayed channel to [peerId], run until it ends. */
+    private suspend fun openRelay(peerId: String, selfId: String) {
+        val signal = relay ?: return
+        val stream = java.util.UUID.randomUUID().toString()
+        val wire = RelayWire(peerId, stream) { data, close -> signal.sendRelay(peerId, stream, data, close) }
+        relayWires[stream] = wire
+        try {
+            pump(handshake(wire, selfId))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "relay to $peerId failed: ${e.message}")
+        } finally {
+            relayWires.remove(stream)
+            wire.close()
+        }
+    }
+
+    /** A piece of a relayed channel from the server; the first of a stream answers it. */
+    private fun onRelay(piece: com.fuseos.app.data.RelayIn, selfId: String) {
+        var wire = relayWires[piece.stream]
+        if (piece.close) {
+            wire?.end()
+            relayWires.remove(piece.stream)
+            return
+        }
+        val bytes = piece.data ?: return
+        if (wire == null) {
+            val signal = relay ?: return
+            if (_paused.value || !trusts(piece.from)) {
+                signal.sendRelay(piece.from, piece.stream, null, close = true)
+                return
+            }
+            val accepted = RelayWire(piece.from, piece.stream) { data, close ->
+                signal.sendRelay(piece.from, piece.stream, data, close)
+            }
+            relayWires[piece.stream] = accepted
+            wire = accepted
+            scope.launch(Dispatchers.IO) {
+                try {
+                    pump(handshake(accepted, selfId))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "relayed handshake from ${piece.from} failed: ${e.message}")
+                } finally {
+                    relayWires.remove(piece.stream)
+                    accepted.close()
+                }
+            }
+        }
+        wire.deliver(bytes)
     }
 
     private companion object {
@@ -426,6 +519,7 @@ class LanTransport(
 
         const val CONNECT_TIMEOUT_MS = 3_000
         const val HEARTBEAT_MS = 15_000L
+        const val RELAY_AFTER_MS = 6_000L // unlinked this long → the relay, while the LAN keeps trying
         const val SILENCE_LIMIT_MS = 45_000L // three unanswered heartbeats
         const val HANDSHAKE_TIMEOUT_MS = 10_000
         const val MAX_BACKOFF_MS = 15_000L
