@@ -1,5 +1,17 @@
 # Hosting the control plane
 
+**Live (2026-10-01):** `https://fuseos-api.theshaik.dev` — EC2 `t3.micro` in Sydney, Elastic IP
+`13.236.155.188`, Cloudflare A record set to **DNS only** (a proxied record gives Cloudflare 521s and
+breaks Caddy's certificate). Update it with:
+
+```sh
+ssh -i ~/.ssh/fuseos.pem ubuntu@13.236.155.188
+cd FuseOS && git pull && cd deploy && sudo docker compose up -d --build
+```
+
+`deploy/.env` on the box holds `FUSE_DOMAIN`; `deploy/server.env` is copied from the laptop (`scp`)
+and is gitignored. After a schema change, migrate prod first (`DATABASE_URL=<prod> pnpm db:migrate`).
+
 The server is small: sign-in, the device list, and the `/signal` WebSocket. Clipboard and
 file payloads never reach it (they go device to device), so one small box is enough.
 
