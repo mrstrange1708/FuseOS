@@ -34,6 +34,9 @@ export function Analytics() {
       disable_surveys: true,
       before_send: (event) => {
         if (!event) return event;
+        // Only the real site counts; previews and localhost are dev, as the apps' debug builds.
+        event.properties.environment =
+          window.location.hostname === 'fuseos.theshaik.dev' ? 'production' : 'debug';
         for (const key of ['$current_url', '$referrer', '$initial_referrer'] as const) {
           if (key in event.properties) event.properties[key] = bare(event.properties[key]);
         }
