@@ -75,7 +75,8 @@ class RemoteControlService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         event ?: return
         val texts = buildList {
-            event.text?.forEach { add(it.toString()) }
+            // The list is Java's and can hold nulls (Sentry ANDROID-3: an NPE right here).
+            event.text?.forEach { text -> text?.let { add(it.toString()) } }
             event.contentDescription?.let { add(it.toString()) }
         }
         if (!CopyDetector.looksLikeCopy(event.eventType, event.packageName?.toString(), packageName, texts)) return

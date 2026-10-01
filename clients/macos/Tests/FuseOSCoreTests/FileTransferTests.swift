@@ -301,8 +301,17 @@ final class FileTransferTests: XCTestCase {
         try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)
         try Data("half".utf8).write(to: inbox.appendingPathComponent(".fuseos-partial-stale"))
         try Data("real".utf8).write(to: inbox.appendingPathComponent("kept.txt"))
-        _ = FileTransfer(newEnvelope: { FuseEnvelope() }, emit: { _ in }, directory: inbox)
+        // What FileTransfer.init runs in the background, run here and waited for.
+        FileTransfer.sweepPartials(in: inbox, olderThan: Date().addingTimeInterval(1))
         XCTAssertEqual(inboxContents(), ["kept.txt"])
+    }
+
+    func testAPartialFromThisLaunchIsLeftAlone() throws {
+        try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)
+        let launched = Date().addingTimeInterval(-1)
+        try Data("arriving".utf8).write(to: inbox.appendingPathComponent(".fuseos-partial-live"))
+        FileTransfer.sweepPartials(in: inbox, olderThan: launched)
+        XCTAssertEqual(inboxContents(), [".fuseos-partial-live"])
     }
 
     func testAnAbsurdSizeFromAPeerIsRefusedRatherThanCrashing() async {
