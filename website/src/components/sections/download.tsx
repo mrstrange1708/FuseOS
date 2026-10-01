@@ -42,6 +42,14 @@ const PLATFORMS = [
         Play Store yet.
       </>,
       <>
+        Says <b>App blocked to protect your device</b>? That&apos;s Play Protect. Turn off{' '}
+        <b>Scan apps with Play Protect</b> (Play Store → profile → Play Protect → ⚙), install, then
+        turn it back on.{' '}
+        <a className="text-ember underline-offset-4 hover:underline" href="/help#play-protect">
+          Why
+        </a>
+      </>,
+      <>
         Sign in, then allow <b>notifications</b>. They show when a file arrives, and they keep
         FuseOS connected in the background.
       </>,

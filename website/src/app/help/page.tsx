@@ -94,6 +94,25 @@ export default function HelpPage() {
           Allow your browser to <b>install unknown apps</b> when Android asks. FuseOS isn&apos;t on
           the Play Store.
         </p>
+        <h3 id="play-protect">&ldquo;App blocked to protect your device&rdquo;</h3>
+        <p>
+          In some countries, India among them, Play Protect blocks any app installed from outside
+          the Play Store that asks for notification access or accessibility. FuseOS needs both: one
+          to show your notifications on the Mac, the other for the copy pop-up. To install it:
+        </p>
+        <ol>
+          <li>
+            Open the <b>Play Store</b>, tap your profile picture, then <b>Play Protect</b> and the{' '}
+            <b>⚙ settings</b> icon.
+          </li>
+          <li>
+            Turn off <b>Scan apps with Play Protect</b>.
+          </li>
+          <li>Open the FuseOS APK again and install it.</li>
+          <li>
+            Turn <b>Scan apps with Play Protect</b> back on. FuseOS keeps working.
+          </li>
+        </ol>
         <h3>Sending what you copy</h3>
         <p>
           Android lets only the app on screen read the clipboard, so FuseOS shows a pop-up the
