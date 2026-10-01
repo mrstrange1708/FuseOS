@@ -2,12 +2,16 @@
 
 **Live (2026-10-01):** `https://fuseos-api.theshaik.dev` — EC2 `t3.micro` in Sydney, Elastic IP
 `13.236.155.188`, Cloudflare A record set to **DNS only** (a proxied record gives Cloudflare 521s and
-breaks Caddy's certificate). Update it with:
+breaks Caddy's certificate). Deploy by hand, from the repo root on the dev Mac, after merging to `main`:
 
 ```sh
-ssh -i ~/.ssh/fuseos.pem ubuntu@13.236.155.188
-cd FuseOS && git pull && cd deploy && sudo docker compose up -d --build
+pnpm deploy:server
 ```
+
+It migrates the production database (its URL comes from `deploy/server.env`), copies that file to
+the box, checks out `origin/main` there and rebuilds, then waits for `/health`
+(`deploy/deploy.sh`). The name is `deploy:server` because `pnpm deploy` is a built-in pnpm command.
+SSH is open only to the owner's IP — there is deliberately no CD with a key on GitHub.
 
 `deploy/.env` on the box holds `FUSE_DOMAIN`; `deploy/server.env` is copied from the laptop (`scp`)
 and is gitignored. After a schema change, migrate prod first (`DATABASE_URL=<prod> pnpm db:migrate`).
