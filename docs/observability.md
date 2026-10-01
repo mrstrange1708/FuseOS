@@ -19,7 +19,7 @@ Enforcement in the server:
 
 | Concern | Module | Behavior |
 | --- | --- | --- |
-| Error tracking | `src/observability/sentry.ts` | `initSentry()` runs first in `index.ts`; no-op if `SENTRY_DSN` unset (project `server` in `fuseos-y2`). Errors captured in the Fastify error handler and failed Inngest runs. Errors only, no traces; `scrub()` keeps the route and drops query strings, bodies, headers and cookies (verify and reset links carry tokens). |
+| Error tracking | `src/observability/sentry.ts` | `initSentry()` runs first in `index.ts`; **production only** (`NODE_ENV=production`), and a no-op if `SENTRY_DSN` is unset (project `server` in `fuseos-y2`). Errors captured in the Fastify error handler and failed Inngest runs. Errors only, no traces; `scrub()` keeps the route and drops query strings, bodies, headers and cookies (verify and reset links carry tokens). |
 | Analytics | `src/observability/analytics.ts` | `capture(distinctId, event, props)` with the payload guard; no-op if `POSTHOG_API_KEY` unset. |
 | Config | `src/config/env.ts` | Zod-validated env; both integrations optional in local dev. |
 

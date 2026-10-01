@@ -498,7 +498,7 @@ struct MenuBarContent: View {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
         NSApp.activate(ignoringOtherApps: true)
-        guard panel.runModal() == .OK else { return }
+        guard runModalUntracked({ panel.runModal() }) == .OK else { return }
         viewModel.sendFiles(panel.urls)
     }
 }

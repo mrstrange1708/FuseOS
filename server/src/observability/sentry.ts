@@ -25,11 +25,12 @@ function scrubBreadcrumb(crumb: Breadcrumb): Breadcrumb {
     : crumb;
 }
 
-// Initialise Sentry for error tracking. No-op if SENTRY_DSN is not set, so local
-// dev and tests run without an external dependency. Errors only, as in both apps: no
-// traces, and no personal data (IPs, cookies, headers).
+// Initialise Sentry for error tracking: production only. A laptop's dev server filled the
+// project with its own noise (a schema mid-edit, the database lost while the lid was shut —
+// NODE-1..5), so dev and tests never report, whatever the env says. Errors only, as in both
+// apps: no traces, and no personal data (IPs, cookies, headers).
 export function initSentry(): void {
-  if (!env.SENTRY_DSN) return;
+  if (!env.SENTRY_DSN || env.NODE_ENV !== 'production') return;
   Sentry.init({
     dsn: env.SENTRY_DSN,
     environment: env.NODE_ENV,
