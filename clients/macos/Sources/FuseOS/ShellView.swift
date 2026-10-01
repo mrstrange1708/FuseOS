@@ -303,7 +303,7 @@ private struct HomePane: View {
             } else {
                 VStack(spacing: 2) {
                     ForEach(viewModel.history.prefix(rows)) { entry in
-                        ClipRow(entry: entry, peerName: viewModel.peerName) {
+                        ClipRow(entry: entry, peerName: viewModel.peerName, onSend: { viewModel.sendToPhone(entry) }) {
                             viewModel.copyToClipboard(entry)
                         }
                     }
@@ -714,6 +714,7 @@ private struct LinkHero: View {
     }
 
     private var status: String {
+        if viewModel.paused { return "Disconnected" }
         if search == .searching { return "Searching this Wi-Fi" }
         switch viewModel.connectState.stage {
         case .connected: return "Linked · direct"
@@ -726,6 +727,7 @@ private struct LinkHero: View {
 
     private func detail(linked: Bool) -> String {
         if linked { return "Clipboard, files and notifications move straight over your Wi-Fi." }
+        if viewModel.paused { return "You disconnected. Nothing syncs until you Connect." }
         switch search {
         case .searching: return "Dialling every device on your account that's on this network."
         case .notFound:
@@ -736,7 +738,7 @@ private struct LinkHero: View {
         case .connected, .connecting: return "Finding your phone on this Wi-Fi…"
         case .differentNetwork: return "Put both devices on the same Wi-Fi network, then Connect."
         case .peerOffline: return "Open FuseOS on your phone, then Connect."
-        case .alone: return "Sign in on your phone with this account, then Connect."
+        case .alone: return "Sign in on your phone with the same account as this Mac, then Connect."
         }
     }
 
@@ -818,7 +820,7 @@ private struct HistoryPane: View {
                         Panel(title: day.title) {
                             VStack(spacing: 2) {
                                 ForEach(day.entries) { entry in
-                                    ClipRow(entry: entry, peerName: viewModel.peerName) {
+                                    ClipRow(entry: entry, peerName: viewModel.peerName, onSend: { viewModel.sendToPhone(entry) }) {
                                         viewModel.copyToClipboard(entry)
                                     }
                                 }
@@ -903,7 +905,6 @@ private struct AccountPane: View {
 
     @State private var draftName = ""
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
-    @State private var usageStatistics = Analytics.enabled
     @AppStorage(DockIcon.key) private var showInDock = true
     @AppStorage(DashboardViewModel.askBeforeSendKey) private var askBeforeSend = false
     @AppStorage(MacPointer.enabledKey) private var phoneControlsMac = false
@@ -967,16 +968,6 @@ private struct AccountPane: View {
                             title: "Ask before sending copies",
                             detail: "Each copy waits in the island for you to click Send.",
                             isOn: $askBeforeSend,
-                        )
-                        Divider().opacity(0.5)
-                        SettingSwitch(
-                            symbol: "chart.bar",
-                            title: "Usage statistics",
-                            detail: "Share which features you use, never what you copy or send. Helps decide what to fix first.",
-                            isOn: Binding(
-                                get: { usageStatistics },
-                                set: { Analytics.enabled = $0; usageStatistics = Analytics.enabled },
-                            ),
                         )
                     }
                 }
@@ -1045,16 +1036,22 @@ private struct AccountPane: View {
                         HStack {
                             let linked = !viewModel.connected.isEmpty
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(linked ? "Linked with \(viewModel.peerName ?? "your phone")" : "Not linked")
+                                Text(viewModel.paused ? "Disconnected" : linked ? "Linked with \(viewModel.peerName ?? "your phone")" : "Not linked")
                                     .font(.system(size: 13, weight: .medium))
-                                Text(linked
-                                    ? "Your devices are already connected."
+                                Text(viewModel.paused
+                                    ? "Nothing syncs with your phone until you connect again."
+                                    : linked
+                                    ? "Disconnect to stop syncing. It stays off until you Connect."
                                     : "Find your phone, or link it with a code, in Devices.")
                                     .font(.system(size: 11.5)).foregroundStyle(FuseColor.muted)
                             }
                             Spacer()
-                            if linked {
-                                StatusPill(linked: true, text: "Linked")
+                            if viewModel.paused {
+                                Button("Connect") { Task { await viewModel.connect() } }
+                                    .buttonStyle(CapsuleButtonStyle(prominent: true))
+                            } else if linked {
+                                Button("Disconnect") { viewModel.disconnect() }
+                                    .buttonStyle(CapsuleButtonStyle(prominent: false))
                             } else {
                                 Button("Open Devices", action: onOpenDevices)
                                     .buttonStyle(CapsuleButtonStyle(prominent: true))
@@ -1628,9 +1625,12 @@ struct ClipRow: View {
     /// Named rather than "your phone": the user chose that name, so this is where it earns
     /// its keep. Nil only before a second device joins the account.
     var peerName: String?
+    /// Sends it to the phone; false when nothing could go.
+    var onSend: (() -> Bool)?
     let onCopy: () -> Void
     @State private var hovering = false
     @State private var copied = false
+    @State private var sent: Bool?
 
     var body: some View {
         Button {
@@ -1668,10 +1668,32 @@ struct ClipRow: View {
                     Label("Copied", systemImage: "checkmark")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(FuseColor.accent)
+                } else if let sent {
+                    SendResultLabel(sent: sent, size: 11)
                 } else if hovering {
+                    // Click anywhere copies; the button sends — as in the menu bar.
                     Label("Copy", systemImage: "doc.on.doc")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(FuseColor.muted)
+                    if let onSend {
+                        Button {
+                            let ok = onSend()
+                            withAnimation(.easeOut(duration: 0.15)) { sent = ok }
+                            Task {
+                                try? await Task.sleep(nanoseconds: 1_600_000_000)
+                                withAnimation { sent = nil }
+                            }
+                        } label: {
+                            Label("Send", systemImage: "arrow.up.right")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 10)
+                                .frame(height: 24)
+                                .background(Capsule().fill(FuseColor.accent))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Send to \(peerName ?? "your phone")")
+                    }
                 } else {
                     Text(entry.at, style: .time)
                         .font(.system(size: 11))
@@ -1707,5 +1729,17 @@ struct ClipRow: View {
         }
         // A two-line preview reads as one thought; raw newlines made it a ragged fragment.
         return (entry.text ?? "").split(whereSeparator: \.isNewline).joined(separator: "  ")
+    }
+}
+
+/// A Send's outcome in a clip row: a tick when it went, "Not linked" when it could not.
+struct SendResultLabel: View {
+    let sent: Bool
+    let size: CGFloat
+
+    var body: some View {
+        Label(sent ? "Sent" : "Not linked", systemImage: sent ? "checkmark" : "exclamationmark.triangle.fill")
+            .font(.system(size: size, weight: .semibold))
+            .foregroundStyle(sent ? FuseColor.accent : FuseColor.error)
     }
 }

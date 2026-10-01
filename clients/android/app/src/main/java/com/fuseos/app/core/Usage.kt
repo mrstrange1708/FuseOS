@@ -51,14 +51,6 @@ object Usage {
         if (started) PostHog.reset()
     }
 
-    /** The "Usage statistics" switch. PostHog keeps the choice across launches. */
-    var enabled: Boolean
-        get() = started && !PostHog.isOptOut()
-        set(on) {
-            if (!started) return
-            if (on) PostHog.optIn() else PostHog.optOut()
-        }
-
     fun sent(envelope: Envelope) {
         if (!started) return
         val feature = featureOf(envelope) ?: return

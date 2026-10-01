@@ -49,6 +49,7 @@ class ConnectionManager(
         }
         // Bring the listener up before saying hello, so the very first hello can already
         // carry a lanAddress for peers to dial.
+        transport.setPaused(session.linkPaused())
         transport.start(id, signal.presence)
         clipboard.start(id)
         session.currentToken()?.let { token -> signal.start(token, id) }

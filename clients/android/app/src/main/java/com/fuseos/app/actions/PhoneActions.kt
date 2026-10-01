@@ -59,14 +59,17 @@ class PhoneActions(
     }
 
     /**
-     * "Open copied link" on the phone: the first web link on this phone's clipboard opens
-     * in the Mac's browser. `clipText` is read by the caller, which has focus (Android lets
-     * only the focused app read the clipboard). Every outcome is said in the island.
+     * "Open copied link" on the phone: the last link copied opens in the Mac's browser —
+     * the clipboard's, or, when something else was copied since, the newest link in the
+     * clipboard history (either device's). `clipText` is read by the caller, which has focus
+     * (Android lets only the focused app read the clipboard). Every outcome is said in the
+     * island.
      */
     fun openCopiedLinkOnMac(clipText: String?) {
         val island = com.fuseos.app.data.ServiceLocator.clipIsland
         val url = clipText?.let(::firstLink)
-            ?: return island.error("No link on your clipboard", "Copy a web link first, then tap Open on Mac.")
+            ?: lastLink(com.fuseos.app.data.ServiceLocator.clipboardSync.history.value.mapNotNull { it.text })
+            ?: return island.error("No link copied yet", "Copy a web link first, then tap Open on Mac.")
         if (transport.connectedPeers.value.isEmpty()) {
             return island.error("Mac isn't linked", "Open FuseOS on your Mac, on the same Wi-Fi.")
         }
@@ -180,6 +183,9 @@ class PhoneActions(
         /** The first http(s) link in some shared text, or null. */
         fun firstLink(text: String): String? =
             Regex("""https?://\S+""", RegexOption.IGNORE_CASE).find(text)?.value?.trimEnd('.', ',', ')', ']')
+
+        /** The newest web link among `texts`, newest first — as the clipboard history is kept. */
+        fun lastLink(texts: List<String>): String? = texts.firstNotNullOfOrNull(::firstLink)
     }
 }
 

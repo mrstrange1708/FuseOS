@@ -428,9 +428,8 @@ struct MenuBarContent: View {
                             entry: entry,
                             peerName: viewModel.peerName,
                             copied: copiedId == entry.id,
-                            // What was copied here can go (again) to the phone; what came from
-                            // the phone is already there.
-                            onSend: entry.fromSelf ? { viewModel.sendToPhone(entry) } : nil,
+                            // Anything can go (back) to the phone: its clipboard has moved on since.
+                            onSend: { viewModel.sendToPhone(entry) },
                         ) {
                             viewModel.copyToClipboard(entry)
                             withAnimation(.easeOut(duration: 0.15)) { copiedId = entry.id }
@@ -480,7 +479,7 @@ struct MenuBarContent: View {
     private var activeTransfers: [TransferProgress] { viewModel.transfers.filter { !$0.finished } }
 
     private func statusLine(linked: Bool, online: Bool, hasPeer: Bool) -> String {
-        if !hasPeer { return "Sign in on your phone to link it" }
+        if !hasPeer { return "Sign in on your phone with the same account" }
         if linked {
             if let latency = viewModel.syncLatency { return "Linked · direct · \(latency.lastMs) ms" }
             return "Linked · direct"
@@ -591,10 +590,11 @@ private struct ClipRowButton: View {
     let entry: ClipEntry
     let peerName: String?
     let copied: Bool
-    var onSend: (() -> Void)?
+    var onSend: (() -> Bool)?
     let action: () -> Void
     @State private var hovering = false
-    @State private var sent = false
+    /// What the last Send did — true sent, false not linked — shown for a moment.
+    @State private var sent: Bool?
 
     var body: some View {
         Button(action: action) {
@@ -628,18 +628,16 @@ private struct ClipRowButton: View {
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(FuseColor.accent)
                         .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                } else if sent {
-                    Label("Sent", systemImage: "checkmark")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(FuseColor.accent)
+                } else if let sent {
+                    SendResultLabel(sent: sent, size: 10)
                         .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 } else if hovering, let onSend {
                     Button {
-                        onSend()
-                        withAnimation(.easeOut(duration: 0.15)) { sent = true }
+                        let ok = onSend()
+                        withAnimation(.easeOut(duration: 0.15)) { sent = ok }
                         Task {
-                            try? await Task.sleep(nanoseconds: 1_300_000_000)
-                            withAnimation { sent = false }
+                            try? await Task.sleep(nanoseconds: 1_600_000_000)
+                            withAnimation { sent = nil }
                         }
                     } label: {
                         Label("Send", systemImage: "arrow.up.right")

@@ -45,6 +45,8 @@ class DashboardViewModel(
         val loading: Boolean = false,
         /** This device's advertised `ip:port`, or null until the LAN listener is bound. */
         val selfLanAddress: String? = null,
+        /** This phone's netmask in bits; null reads as a home network's /24. */
+        val selfPrefixLength: Int? = null,
     ) {
         /**
          * The devices worth showing. A reinstall mints a new key and so a new device
@@ -75,6 +77,7 @@ class DashboardViewModel(
                 peerIds = peers.map { it.id },
                 presence = presence,
                 connected = connected,
+                selfPrefixLength = selfPrefixLength ?: 24,
             )
     }
 
@@ -86,6 +89,9 @@ class DashboardViewModel(
 
     /** Tapping a history entry puts it back on this device's clipboard. */
     fun copyToClipboard(entry: ClipEntry) = clipboard.copyToClipboard(entry)
+
+    /** A history row's Send: that clip to the Mac again. */
+    fun sendToMac(entry: ClipEntry): SendOutcome = clipboard.resend(entry)
 
     /** The nav bar's centre action: push this device's clipboard to the peer now. */
     fun sendCurrentClipboard(): SendOutcome = clipboard.sendCurrent()
@@ -106,7 +112,7 @@ class DashboardViewModel(
         // listener binds, and it changes outright when the device switches network.
         viewModelScope.launch {
             signal.presence.collect { p ->
-                _state.update { it.copy(presence = p, selfLanAddress = transport.lanAddress()) }
+                _state.update { it.copy(presence = p, selfLanAddress = transport.lanAddress(), selfPrefixLength = transport.lanPrefixLength()) }
                 // A device that just signed in on this account arrives as presence before
                 // it exists in the REST roster — which holds the names the UI draws. This
                 // is how a second device shows up with no pairing step, so it has to
@@ -125,7 +131,7 @@ class DashboardViewModel(
         }
         viewModelScope.launch {
             transport.connectedPeers.collect { c ->
-                _state.update { it.copy(connected = c, selfLanAddress = transport.lanAddress()) }
+                _state.update { it.copy(connected = c, selfLanAddress = transport.lanAddress(), selfPrefixLength = transport.lanPrefixLength()) }
             }
         }
     }
@@ -149,7 +155,7 @@ class DashboardViewModel(
                     },
                     error = null,
                     loading = false,
-                    selfLanAddress = transport.lanAddress(),
+                    selfLanAddress = transport.lanAddress(), selfPrefixLength = transport.lanPrefixLength(),
                 )
             }
         } catch (e: Exception) {
@@ -194,6 +200,30 @@ class DashboardViewModel(
     fun markConnectDone() {
         viewModelScope.launch { session.markConnectDone() }
     }
+
+    /**
+     * Home's Connect: re-read the account's devices (a Mac that just signed in), then dial
+     * every unlinked one at once instead of after the retry backoff.
+     */
+    fun connectNow() {
+        viewModelScope.launch {
+            session.setLinkPaused(false)
+            transport.setPaused(false)
+            runCatching { refresh() }
+            transport.retryNow()
+        }
+    }
+
+    /** Settings' Disconnect: the link stays down, across launches, until Connect. */
+    fun disconnect() {
+        viewModelScope.launch {
+            session.setLinkPaused(true)
+            transport.setPaused(true)
+        }
+    }
+
+    /** Whether the user disconnected (see [disconnect]). */
+    val paused = transport.paused
 
     fun signOut() {
         // MainActivity stops the foreground service when the token clears.

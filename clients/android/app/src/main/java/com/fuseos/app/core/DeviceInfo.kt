@@ -15,6 +15,18 @@ class DeviceInfo(private val context: Context) {
         return name.ifEmpty { "Android" }
     }
 
+    /**
+     * This phone, as the same phone across keys and accounts: a hash of ANDROID_ID (stable
+     * per install signing key, so the raw id never leaves). Null if Android gives none.
+     */
+    fun installId(): String? {
+        val raw = android.provider.Settings.Secure.getString(
+            context.contentResolver, android.provider.Settings.Secure.ANDROID_ID,
+        ) ?: return null
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest("fuseos:$raw".toByteArray())
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
     fun batteryPercent(): Int? {
         val manager = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager ?: return null
         val level = manager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)

@@ -39,13 +39,4 @@ enum Analytics {
     static func reset() {
         if started { PostHogSDK.shared.reset() }
     }
-
-    /// The "Usage statistics" switch. PostHog keeps the choice across launches.
-    static var enabled: Bool {
-        get { started && !PostHogSDK.shared.isOptOut() }
-        set {
-            guard started else { return }
-            if newValue { PostHogSDK.shared.optIn() } else { PostHogSDK.shared.optOut() }
-        }
-    }
 }

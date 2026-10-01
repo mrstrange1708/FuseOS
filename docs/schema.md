@@ -40,6 +40,7 @@ erDiagram
         text name
         text platform
         text public_key UK
+        text install_id
         timestamptz last_seen
     }
 ```
@@ -68,6 +69,7 @@ One row per registered device. A user has 2–3 in v1.
 | `name` | text | NOT NULL, CHECK (`length(name) between 1 and 100`) |
 | `platform` | text | NOT NULL, CHECK (`platform in ('android','macos')`) |
 | `public_key` | text | NOT NULL, UNIQUE |
+| `install_id` | text | NULL; CHECK length 16–128; UNIQUE (`user_id`, `install_id`) — a SHA-256 of the hardware id (ANDROID_ID / IOPlatformUUID), so one physical device keeps one row per account when its key changes (migration 0005) |
 | `battery` | int | nullable, CHECK (`battery is null or battery between 0 and 100`) — presence metadata, never payload |
 | `last_seen` | timestamptz | nullable |
 | `created_at` | timestamptz | NOT NULL, default `now()` |

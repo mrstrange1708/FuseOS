@@ -11,6 +11,9 @@ final class DashboardViewModel: ObservableObject {
     @Published var presence: [String: PeerPresence] = [:]
     /// Peers reachable over a direct LAN channel, not merely online.
     @Published var connected: Set<String> = []
+    /// The user's Disconnect, kept across launches until they choose Connect.
+    @Published private(set) var paused = UserDefaults.standard.bool(forKey: DashboardViewModel.pausedKey)
+    static let pausedKey = "fuse.linkPaused"
     /// The last control-plane failure (server unreachable, session refused). Also said in
     /// the island — once per distinct message — because the window is usually closed.
     @Published var errorMessage: String? {
@@ -339,6 +342,7 @@ final class DashboardViewModel: ObservableObject {
             let deviceId = try await ControlPlane.registerThisDevice(battery: Battery.currentPercent())
             // Bring the listener up before saying hello, so the very first hello can
             // already carry a lanAddress for peers to dial.
+            transport.setPaused(paused)
             await transport.start(deviceId: deviceId)
             clipboard.start(selfDeviceId: deviceId)
             if let token = SessionStore.shared.token {
@@ -555,14 +559,25 @@ final class DashboardViewModel: ObservableObject {
             peerIds: peers.map(\.id),
             presence: presence,
             connected: connected,
+            selfPrefixLength: transport.lanPrefixLength() ?? 24,
         )
     }
 
     /// The popover's Connect: re-read which devices are on the account (a phone that just
     /// signed in), then dial everything unconnected at once rather than after its backoff.
     func connect() async {
+        setPaused(false)
         await refresh()
         transport.retryNow()
+    }
+
+    /// Settings' Disconnect: the link stays down, across launches, until Connect.
+    func disconnect() { setPaused(true) }
+
+    private func setPaused(_ on: Bool) {
+        paused = on
+        UserDefaults.standard.set(on, forKey: Self.pausedKey)
+        transport.setPaused(on)
     }
 
     /// Sends files one after another, in the order given. Dropped or picked, same path.
@@ -655,10 +670,16 @@ final class DashboardViewModel: ObservableObject {
         }
     }
 
-    /// Send an earlier copy from this Mac to the phone again (the popover's Send).
-    func sendToPhone(_ entry: ClipEntry) {
-        guard !connected.isEmpty else { return notLinked("Nothing was sent. Open FuseOS on your phone, on the same Wi-Fi.") }
+    /// Send an earlier copy to the phone (again) — a history row's Send. False when nothing
+    /// could go, so the row says "Not linked" instead of a tick that pretends.
+    @discardableResult
+    func sendToPhone(_ entry: ClipEntry) -> Bool {
+        guard !connected.isEmpty else {
+            notLinked("Nothing was sent. Open FuseOS on your phone, on the same Wi-Fi.")
+            return false
+        }
         clipboard.resend(entry)
+        return true
     }
 
     /// Clicking a history entry puts it back on this Mac's clipboard.

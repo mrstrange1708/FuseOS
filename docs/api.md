@@ -60,10 +60,12 @@ Android uses Credential Manager (`GetGoogleIdOption` with the web client as serv
 **`POST /devices`**
 ```jsonc
 // request  (battery optional, 0–100)
-{ "name": "Pixel 8", "platform": "android", "publicKey": "base64…", "battery": 47 }
+{ "name": "Pixel 8", "platform": "android", "publicKey": "base64…", "battery": 47, "installId": "sha256 hex…" }
 // response 201
 { "id": "uuid", "userId": "…", "name": "Pixel 8", "platform": "android", "createdAt": "…" }
 ```
+`installId` (optional, 16–128 chars) is a hash of the hardware's own id. A device that comes back to an account with a *new* key — it signed in elsewhere in between and had to mint one — keeps its row, id and name instead of appearing as a new device; a key held by another account is still refused (`409 public_key_taken`). Re-registering is also how a rename reaches the server: both apps do it the moment a name is saved, on the setup screen or in settings, and online peers get `peer-update`.
+
 `userId` is the account the device belongs to; the apps use it as their analytics id, the same one the server uses, so a person counts once across phone, Mac and web (`docs/observability.md`).
 Validation: `platform ∈ {android, macos}`, `name` length 1–100, `publicKey` non-empty and unique. Bound to the caller's user. **Idempotent by `publicKey`** — a client may call this on every launch and always gets back its stable device id.
 

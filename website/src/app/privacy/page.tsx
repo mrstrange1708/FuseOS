@@ -84,8 +84,7 @@ export default function PrivacyPage() {
           FuseOS and which features matter, so we know what to fix first.
         </p>
         <p>
-          Turn it off any time with <b>Usage statistics</b>: on the Mac under Account → Everyday, on
-          the phone under You → Account.
+          To have your usage statistics deleted, email <a href={`mailto:${CONTACT}`}>{CONTACT}</a>.
         </p>
 
         <h2>Emails we send</h2>

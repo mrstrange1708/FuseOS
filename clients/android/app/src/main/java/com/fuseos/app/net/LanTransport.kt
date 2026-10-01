@@ -1,5 +1,6 @@
 package com.fuseos.app.net
 
+import android.os.SystemClock
 import android.util.Log
 import com.fuseos.app.clipboard.RoundTrip
 import com.fuseos.app.core.DeviceKey
@@ -29,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.net.Inet4Address
 import java.net.InetSocketAddress
+import java.net.InterfaceAddress
 import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
@@ -76,6 +78,23 @@ class LanTransport(
     val connectedPeers: StateFlow<Set<String>> = _connectedPeers.asStateFlow()
 
     private val channels = ConcurrentHashMap<String, LanChannel>()
+
+    private val _paused = MutableStateFlow(false)
+
+    /**
+     * The user's Disconnect: no link until they choose Connect — channels closed, callers
+     * refused, nothing dialled. The listener stays bound, so Connect needs no restart.
+     */
+    val paused: StateFlow<Boolean> = _paused.asStateFlow()
+
+    fun setPaused(on: Boolean) {
+        _paused.value = on
+        if (on) channels.values.forEach { it.close() }
+    }
+
+    /** When each channel last delivered anything (elapsed ms) — how a dead link is noticed. */
+    private val lastHeard = ConcurrentHashMap<LanChannel, Long>()
+
     private val peers = MutableStateFlow<Map<String, PeerPresence>>(emptyMap())
     private val seq = AtomicLong(0)
 
@@ -90,6 +109,9 @@ class LanTransport(
 
     @Volatile private var selfDeviceId: String? = null
     private var job: Job? = null
+
+    /** This device's netmask in bits, which decides whether a peer is on the same Wi-Fi. */
+    fun lanPrefixLength(): Int? = localPrefixLength()
 
     /** `ip:port` to advertise over `/signal`, or null until the listener is bound. */
     fun lanAddress(): String? {
@@ -151,6 +173,27 @@ class LanTransport(
         }
     }
 
+    /**
+     * "Connect now": dial every unlinked peer at once instead of after its backoff (up to
+     * 15 s), and dial even a peer that normally dials us — its dialer may be stuck, and a
+     * second channel only replaces the first (see [register]); the supervisors skip a peer
+     * that has a channel, so they do not race this one. Silent on a peer offline.
+     */
+    fun retryNow() {
+        val selfId = selfDeviceId ?: return
+        if (_paused.value) return
+        scope.launch(Dispatchers.IO) {
+            for ((peerId, peer) in peers.value) {
+                if (channels.containsKey(peerId) || !peer.online || peer.publicKey == null) continue
+                val address = peer.lanAddress ?: continue
+                launch {
+                    runCatching { dial(peerId, address, selfId) }
+                        .onFailure { Log.w(TAG, "connect-now dial to $peerId failed: ${it.message}") }
+                }
+            }
+        }
+    }
+
     fun stop() {
         job?.cancel()
         job = null
@@ -172,6 +215,10 @@ class LanTransport(
                 listener.accept()
             } catch (e: Exception) {
                 break // listener closed, or we are shutting down
+            }
+            if (_paused.value) {
+                runCatching { socket.close() }
+                continue
             }
             launch(Dispatchers.IO) {
                 try {
@@ -205,7 +252,10 @@ class LanTransport(
         var backoffMs = 500L
         while (currentCoroutineContext().isActive) {
             val peer = peers.value[peerId]
-            if (peer != null && peer.online && peer.lanAddress != null && peer.publicKey != null) {
+            // A channel already up (an inbound one, or "Connect now"'s) needs no second dial.
+            if (peer != null && peer.online && peer.lanAddress != null && peer.publicKey != null &&
+                !channels.containsKey(peerId) && !_paused.value
+            ) {
                 val ok = try {
                     dial(peerId, peer.lanAddress, selfId)
                     true
@@ -243,9 +293,11 @@ class LanTransport(
     private suspend fun handshake(socket: Socket, selfId: String): LanChannel {
         socket.tcpNoDelay = true // latency is the product; never wait to coalesce a frame
         val keyPair = session.deviceKeyPair()
+        // A peer that accepts and then says nothing must not hold a dial loop forever.
+        socket.soTimeout = HANDSHAKE_TIMEOUT_MS
         return LanChannel.handshake(socket, selfId, keyPair.private) { id ->
             peers.value[id]?.publicKey?.let { runCatching { DeviceKey.decodePublic(it) }.getOrNull() }
-        }
+        }.also { socket.soTimeout = 0 }
     }
 
     /** Blocking receive loop for one channel; returns when the connection ends. */
@@ -256,6 +308,7 @@ class LanTransport(
         try {
             while (true) {
                 val envelope = channel.receive()
+                lastHeard[channel] = SystemClock.elapsedRealtime()
                 noteTraffic(envelope)
                 if (envelope.bodyCase == Envelope.BodyCase.HEARTBEAT) {
                     echo(envelope, channel)
@@ -269,6 +322,7 @@ class LanTransport(
             }
         } finally {
             unregister(channel.peerDeviceId, channel)
+            lastHeard.remove(channel)
             channel.close()
         }
     }
@@ -277,7 +331,20 @@ class LanTransport(
         while (currentCoroutineContext().isActive) {
             kotlinx.coroutines.delay(HEARTBEAT_MS)
             if (channels.isEmpty()) continue
-            channels.values.forEach(::ping)
+            val now = SystemClock.elapsedRealtime()
+            for (channel in channels.values) {
+                // Every ping is echoed at once, so a live link is never quiet this long. A
+                // peer that left the Wi-Fi without a FIN leaves the read blocked for good,
+                // and writes still "succeed" into the buffer — silence is the only sign.
+                // Closing ends its pump, and the dial loop reconnects.
+                val heard = lastHeard.getOrPut(channel) { now }
+                if (now - heard > SILENCE_LIMIT_MS) {
+                    Log.w(TAG, "no word from ${channel.peerDeviceId} in ${(now - heard) / 1000} s: reconnecting")
+                    channel.close()
+                } else {
+                    ping(channel)
+                }
+            }
         }
     }
 
@@ -335,6 +402,8 @@ class LanTransport(
 
         const val CONNECT_TIMEOUT_MS = 3_000
         const val HEARTBEAT_MS = 15_000L
+        const val SILENCE_LIMIT_MS = 45_000L // three unanswered heartbeats
+        const val HANDSHAKE_TIMEOUT_MS = 10_000
         const val MAX_BACKOFF_MS = 15_000L
 
         /** The lower device id dials; the higher one listens. */
@@ -347,15 +416,18 @@ class LanTransport(
             return value.substring(0, separator) to port
         }
 
-        fun localIpv4(): String? =
+        fun localIpv4(): String? = localInterfaceAddress()?.address?.hostAddress
+
+        /** The netmask of [localIpv4]'s network, in bits — what "same Wi-Fi" is judged by. */
+        fun localPrefixLength(): Int? = localInterfaceAddress()?.networkPrefixLength?.toInt()
+
+        private fun localInterfaceAddress(): InterfaceAddress? =
             runCatching {
                 NetworkInterface.getNetworkInterfaces()
                     .asSequence()
                     .filter { it.isUp && !it.isLoopback }
-                    .flatMap { it.inetAddresses.asSequence() }
-                    .filterIsInstance<Inet4Address>()
-                    .firstOrNull { it.isSiteLocalAddress }
-                    ?.hostAddress
+                    .flatMap { it.interfaceAddresses.asSequence() }
+                    .firstOrNull { (it.address as? Inet4Address)?.isSiteLocalAddress == true }
             }.getOrNull()
     }
 }

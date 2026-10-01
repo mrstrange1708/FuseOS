@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   index,
+  uniqueIndex,
   integer,
   pgTable,
   text,
@@ -95,6 +96,9 @@ export const devices = pgTable(
     name: text('name').notNull(),
     platform: text('platform').notNull(),
     publicKey: text('public_key').notNull().unique(),
+    // A hash of the hardware's own id (ANDROID_ID / IOPlatformUUID), so one physical device
+    // keeps one row per account even when its key changes. Null for devices from before it.
+    installId: text('install_id'),
     // Operational presence metadata (never a user payload): 0–100, null until reported.
     battery: integer('battery'),
     lastSeen: timestamp('last_seen', { withTimezone: true }),
@@ -108,6 +112,11 @@ export const devices = pgTable(
       sql`${table.battery} is null or ${table.battery} between 0 and 100`,
     ),
     index('devices_user_id_idx').on(table.userId),
+    check(
+      'devices_install_id_len',
+      sql`${table.installId} is null or length(${table.installId}) between 16 and 128`,
+    ),
+    uniqueIndex('devices_user_install_idx').on(table.userId, table.installId),
   ],
 );
 

@@ -57,6 +57,7 @@ fun FuseShell() {
     val state by viewModel.state.collectAsState()
     val history by viewModel.history.collectAsState()
     val email by ServiceLocator.session.emailFlow.collectAsState(initial = null)
+    val paused by viewModel.paused.collectAsState()
     val deviceName by ServiceLocator.session.deviceNameFlow.collectAsState(initial = null)
     val context = LocalContext.current
     val transfers by ServiceLocator.transfers.list.collectAsState()
@@ -121,6 +122,7 @@ fun FuseShell() {
                         selfBattery = viewModel.selfBattery(),
                         peerBattery = { id -> state.presence[id]?.battery },
                         onCopy = viewModel::copyToClipboard,
+                        onSend = viewModel::sendToMac,
                         onSeeAll = { tab = FuseTab.History },
                         peerName = peerName,
                         transfers = transfers,
@@ -128,6 +130,8 @@ fun FuseShell() {
                         onCancelTransfer = ServiceLocator.transfers::cancel,
                         latency = latency,
                         macStatus = macStatus,
+                        onConnectNow = viewModel::connectNow,
+                        paused = paused,
                         onOpenLinkOnMac = {
                             // Read here: FuseOS is in front, the one time Android lets it.
                             val clip = context.getSystemService(android.content.ClipboardManager::class.java)
@@ -165,6 +169,7 @@ fun FuseShell() {
                         entries = history,
                         peerName = peerName,
                         onCopy = viewModel::copyToClipboard,
+                        onSend = viewModel::sendToMac,
                     )
 
                     FuseTab.Profile -> ProfileScreen(
@@ -173,6 +178,9 @@ fun FuseShell() {
                         deviceName = deviceName,
                         selfBattery = viewModel.selfBattery(),
                         onRename = viewModel::renameThisDevice,
+                        paused = paused,
+                        onDisconnect = viewModel::disconnect,
+                        onConnect = viewModel::connectNow,
                         onLinkManually = { showPairing = true },
                         // Read on every recomposition rather than cached: the user grants
                         // this in Settings and comes back, so a snapshot taken on first
