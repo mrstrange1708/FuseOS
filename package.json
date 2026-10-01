@@ -27,7 +27,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:generate": "pnpm --filter server db:generate",
-    "db:migrate": "pnpm --filter server db:migrate"
+    "db:migrate": "pnpm --filter server db:migrate",
+    "deploy:server": "sh deploy/deploy.sh"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",
