@@ -8,6 +8,22 @@ file payloads never reach it (they go device to device), so one small box is eno
 - **Where:** AWS Lightsail or EC2 while the credits last (about $5–8 a month). When the credits end,
   Oracle Cloud Always Free or Google Cloud's free e2-micro run the same two commands.
 
+## Continuous deployment
+
+Every merge to `main` deploys itself once CI passes (`.github/workflows/deploy.yml`): it migrates
+the production database (`PROD_DATABASE_URL`), then SSHes to the box with a deploy key that can
+only run `deploy/deploy.sh` (installed as `/usr/local/bin/fuseos-deploy`, pinned with
+`command="..."` in `~/.ssh/authorized_keys`), which checks out that commit and rebuilds only if
+server code changed, and finally waits for `/health`. Run it by hand from **Actions → Deploy
+server → Run workflow**.
+
+- The security group's SSH rule must allow GitHub's runners (**Anywhere**): password logins are
+  off, and the only keys are yours and the forced-command deploy key.
+- After editing `deploy/deploy.sh`, reinstall it on the box:
+  `scp deploy/deploy.sh ubuntu@<ip>:/tmp/d && ssh ubuntu@<ip> 'sudo install -m 755 /tmp/d /usr/local/bin/fuseos-deploy'`.
+- Repo settings it needs: secrets `DEPLOY_SSH_KEY`, `PROD_DATABASE_URL`; variables `DEPLOY_HOST`,
+  `DEPLOY_KNOWN_HOSTS` (the box's host key, so another machine at that address is refused).
+
 ## 1. A box and a name
 
 1. Create an Ubuntu 24.04 instance (1 GB RAM is plenty). Open ports **80** and **443**.

@@ -1,0 +1,60 @@
+name: Deploy server
+
+# After CI passes on main: migrate the production database, then rebuild and restart the server
+# on the EC2 box (deploy/README.md). The deploy key can only run deploy/deploy.sh there.
+#
+# Needs (repo settings):
+#   secret   DEPLOY_SSH_KEY       private half of the deploy key (forced-command on the box)
+#   secret   PROD_DATABASE_URL    the production Neon URL (the same as deploy/server.env)
+#   variable DEPLOY_HOST          the box's Elastic IP
+#   variable DEPLOY_KNOWN_HOSTS   the box's SSH host key line, so a different machine is refused
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter server
+      # Additive migrations only (CLAUDE.md principle 4): the running server keeps working on
+      # the new schema while the new one builds.
+      - name: Migrate the production database
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: pnpm db:migrate
+      - name: Deploy
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          echo "${{ vars.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy -o StrictHostKeyChecking=yes "ubuntu@${{ vars.DEPLOY_HOST }}" "$SHA"
+      - name: Health
+        run: |
+          for i in $(seq 1 30); do
+            curl -fsS https://fuseos-api.theshaik.dev/health && exit 0
+            sleep 5
+          done
+          echo "::error::the server did not come back healthy"; exit 1
