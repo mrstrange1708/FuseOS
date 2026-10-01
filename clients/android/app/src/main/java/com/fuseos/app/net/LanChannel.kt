@@ -67,6 +67,11 @@ class LanChannel private constructor(
         return Envelope.parseFrom(LanCrypto.open(keys.receive, receiveCounter++, frame))
     }
 
+    /** Lifts the handshake's read deadline once the peer has proved itself (see LanTransport.pump). */
+    fun clearReadTimeout() {
+        runCatching { socket.soTimeout = 0 }
+    }
+
     override fun close() {
         runCatching { socket.close() }
     }

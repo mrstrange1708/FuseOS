@@ -162,6 +162,15 @@ public final class LanTransport {
         setConnected([])
     }
 
+    /// Which of the account's devices this one links with (`DeviceTrust`); nil links with
+    /// any. Asked with the key a peer presents, so a re-keyed device is asked about again.
+    public var isTrusted: ((_ deviceId: String, _ publicKey: String) -> Bool)?
+
+    private func trusts(_ peerId: String) -> Bool {
+        guard let key = peers[peerId]?.publicKey else { return false }
+        return isTrusted?(peerId, key) ?? true
+    }
+
     /// Fed from `SignalClient`; drives who we dial and which keys we accept.
     public func updatePeers(_ presence: [String: PeerPresence]) {
         peers = presence
@@ -186,7 +195,7 @@ public final class LanTransport {
         }
         updatePeers(peers)
         guard let selfId = selfDeviceId else { return }
-        for (peerId, peer) in peers where channels[peerId] == nil && peer.online && peer.publicKey != nil
+        for (peerId, peer) in peers where channels[peerId] == nil && peer.online && trusts(peerId)
             && !Self.dialsFirst(selfId: selfId, peerId: peerId)
         {
             guard let address = peer.lanAddress else { continue }
@@ -249,7 +258,7 @@ public final class LanTransport {
         var backoff: UInt64 = 500
         while !Task.isCancelled {
             // A channel already up (an inbound one, or Connect's) needs no second dial.
-            if let peer = peers[peerId], peer.online, channels[peerId] == nil, !paused,
+            if let peer = peers[peerId], peer.online, channels[peerId] == nil, !paused, trusts(peerId),
                let address = peer.lanAddress, peer.publicKey != nil
             {
                 let connected = await dial(peerId, address: address, selfId: selfId)
@@ -279,7 +288,8 @@ public final class LanTransport {
 
     private func handshake(_ connection: NWConnection, selfId: String) async throws -> LanChannel {
         let privateKey = try DeviceKey.privateKey()
-        let known = peers
+        // Only devices this one has approved: an unknown key closes the socket unread.
+        let known = peers.filter { trusts($0.key) }
         // A peer that accepts and then says nothing must not hold a dial loop forever:
         // cancelling the connection fails the handshake's pending read.
         let watchdog = Task {
@@ -300,13 +310,45 @@ public final class LanTransport {
 
     /// Receive loop for one channel; returns when the connection ends.
     private func pump(_ channel: LanChannel) async {
+        // The handshake proves nothing on its own: device ids cross the LAN in the clear, so
+        // anyone on the Wi-Fi can open a connection claiming to be the phone. Only the real
+        // one can seal a frame under the derived keys, so the channel takes the peer's place —
+        // and closes the live link — only once its first frame has decrypted, within the
+        // handshake's deadline. Pinging first is what makes that frame arrive (an echo), from
+        // builds before this one too.
+        var probe = newEnvelope()
+        pings[probe.seq] = DispatchTime.now().uptimeNanoseconds
+        probe.heartbeat = FuseHeartbeat()
+        let deadline = Task {
+            try await Task.sleep(nanoseconds: Self.handshakeTimeout)
+            channel.close()
+        }
+        var first: FuseEnvelope?
+        do {
+            try await channel.send(probe)
+            first = try await channel.receive()
+        } catch {
+            FuseLog.lan.warning("a peer claiming \(channel.peerDeviceId, privacy: .public) never proved itself: \(error.localizedDescription, privacy: .public)")
+        }
+        deadline.cancel()
+        guard let proof = first else {
+            channel.close()
+            return
+        }
         register(channel)
         defer {
             drop(channel.peerDeviceId, channel: channel)
         }
+        var pending: FuseEnvelope? = proof // the proof is handled like any other envelope
         while !Task.isCancelled {
             do {
-                let envelope = try await channel.receive()
+                let envelope: FuseEnvelope
+                if let proof = pending {
+                    envelope = proof
+                    pending = nil
+                } else {
+                    envelope = try await channel.receive()
+                }
                 if channels[channel.peerDeviceId] === channel {
                     lastHeard[channel.peerDeviceId] = DispatchTime.now().uptimeNanoseconds
                 }

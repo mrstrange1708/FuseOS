@@ -92,6 +92,17 @@ class LanTransport(
         if (on) channels.values.forEach { it.close() }
     }
 
+    /**
+     * Which of the account's devices this phone links with (`DeviceTrust`); null links with
+     * any. Asked with the key a peer presents, so a re-keyed device is asked about again.
+     */
+    @Volatile var isTrusted: ((deviceId: String, publicKey: String) -> Boolean)? = null
+
+    private fun trusts(peerId: String): Boolean {
+        val key = peers.value[peerId]?.publicKey ?: return false
+        return isTrusted?.invoke(peerId, key) ?: true
+    }
+
     /** When each channel last delivered anything (elapsed ms) — how a dead link is noticed. */
     private val lastHeard = ConcurrentHashMap<LanChannel, Long>()
 
@@ -184,7 +195,7 @@ class LanTransport(
         if (_paused.value) return
         scope.launch(Dispatchers.IO) {
             for ((peerId, peer) in peers.value) {
-                if (channels.containsKey(peerId) || !peer.online || peer.publicKey == null) continue
+                if (channels.containsKey(peerId) || !peer.online || !trusts(peerId)) continue
                 val address = peer.lanAddress ?: continue
                 launch {
                     runCatching { dial(peerId, address, selfId) }
@@ -254,7 +265,7 @@ class LanTransport(
             val peer = peers.value[peerId]
             // A channel already up (an inbound one, or "Connect now"'s) needs no second dial.
             if (peer != null && peer.online && peer.lanAddress != null && peer.publicKey != null &&
-                !channels.containsKey(peerId) && !_paused.value
+                !channels.containsKey(peerId) && !_paused.value && trusts(peerId)
             ) {
                 val ok = try {
                     dial(peerId, peer.lanAddress, selfId)
@@ -296,18 +307,30 @@ class LanTransport(
         // A peer that accepts and then says nothing must not hold a dial loop forever.
         socket.soTimeout = HANDSHAKE_TIMEOUT_MS
         return LanChannel.handshake(socket, selfId, keyPair.private) { id ->
-            peers.value[id]?.publicKey?.let { runCatching { DeviceKey.decodePublic(it) }.getOrNull() }
-        }.also { socket.soTimeout = 0 }
+            // Only devices this phone has approved: an unknown key closes the socket unread.
+            peers.value[id]?.publicKey?.takeIf { trusts(id) }?.let { runCatching { DeviceKey.decodePublic(it) }.getOrNull() }
+        } // the read deadline stays until the first frame proves the peer (pump)
     }
 
     /** Blocking receive loop for one channel; returns when the connection ends. */
     private suspend fun pump(channel: LanChannel) {
-        register(channel)
-        // Time the link straight away rather than 15 s from now.
+        // The handshake proves nothing on its own: device ids cross the LAN in the clear, so
+        // anyone on the Wi-Fi can open a socket claiming to be the Mac. Only the real one can
+        // seal a frame under the derived keys, so the channel takes the peer's place — and
+        // closes the live link — only once its first frame has decrypted. Pinging first is
+        // what makes that frame arrive (an echo), from builds before this one too.
         ping(channel)
+        val first = try {
+            channel.receive()
+        } catch (e: Exception) {
+            channel.close()
+            throw e
+        }
+        channel.clearReadTimeout()
+        register(channel)
         try {
+            var envelope = first
             while (true) {
-                val envelope = channel.receive()
                 lastHeard[channel] = SystemClock.elapsedRealtime()
                 noteTraffic(envelope)
                 if (envelope.bodyCase == Envelope.BodyCase.HEARTBEAT) {
@@ -319,6 +342,7 @@ class LanTransport(
                     // lost — so every file over ~4 MB failed its index check.
                     _incoming.emit(envelope)
                 }
+                envelope = channel.receive()
             }
         } finally {
             unregister(channel.peerDeviceId, channel)

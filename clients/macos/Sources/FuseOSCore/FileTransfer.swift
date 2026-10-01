@@ -79,7 +79,7 @@ public final class FileTransfer {
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
     }
 
-    private static let partialPrefix = ".fuseos-partial-"
+    nonisolated private static let partialPrefix = ".fuseos-partial-"
 
     /// Fires once per file, after the checksum has been verified. Nothing is published for
     /// a transfer that fails — a corrupt file is not an event worth showing anyone.
@@ -116,11 +116,24 @@ public final class FileTransfer {
         self.newEnvelope = newEnvelope
         self.emit = emit
         self.directory = directory
-        // A partial is only ever alive inside one process: one left on disk is from a run
-        // that was killed mid-transfer, and nothing will ever finish it.
-        let leftovers = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
-        for name in leftovers where name.hasPrefix(Self.partialPrefix) {
-            try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+        // Off the main thread: listing Downloads is slow in a big folder, and the first look
+        // is when macOS asks for access — a dialog the whole UI froze behind (Sentry
+        // APPLE-MACOS-4: FileTransfer.init in contentsOfDirectory).
+        let launched = Date()
+        Task.detached(priority: .utility) { Self.sweepPartials(in: directory, olderThan: launched) }
+    }
+
+    /// A partial is only ever alive inside one process: one left on disk is from a run that
+    /// was killed mid-transfer, and nothing will ever finish it. Only those older than this
+    /// launch go — a file that started arriving since is still being written.
+    nonisolated static func sweepPartials(in directory: URL, olderThan launched: Date) {
+        let fm = FileManager.default
+        let leftovers = (try? fm.contentsOfDirectory(atPath: directory.path)) ?? []
+        for name in leftovers where name.hasPrefix(partialPrefix) {
+            let url = directory.appendingPathComponent(name)
+            let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            if let modified, modified >= launched { continue }
+            try? fm.removeItem(at: url)
         }
     }
 

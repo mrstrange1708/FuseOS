@@ -62,6 +62,10 @@ object ServiceLocator {
     lateinit var deviceStatus: com.fuseos.app.core.DeviceStatusSync
         private set
     lateinit var proximity: com.fuseos.app.proximity.Proximity
+
+    /** Which devices this phone links with, and the prompts that ask about newcomers. */
+    lateinit var deviceTrust: com.fuseos.app.trust.DeviceTrust
+    lateinit var trustPrompts: com.fuseos.app.trust.TrustPrompts
         private set
 
     /** The linked Mac's name, as the dashboard last saw it — for the widget. */
@@ -150,6 +154,11 @@ object ServiceLocator {
             // changes across restarts — hence a provider rather than a fixed value.
             lanAddressProvider = { transport.lanAddress() },
         )
+        deviceTrust = com.fuseos.app.trust.DeviceTrust.fromPrefs(
+            appContext.getSharedPreferences("fuse_trust", Context.MODE_PRIVATE),
+        )
+        transport.isTrusted = { id, key -> deviceTrust.check(id, key) == com.fuseos.app.trust.DeviceTrust.Verdict.Trusted }
+        trustPrompts = com.fuseos.app.trust.TrustPrompts(appContext, deviceTrust, transport, signalClient.presence, appScope)
         val island = ClipIsland(appContext)
         clipIsland = island
         // A copy asks before it travels. With no overlay permission there is nowhere to

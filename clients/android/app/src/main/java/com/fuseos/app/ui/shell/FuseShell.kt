@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,6 +59,25 @@ fun FuseShell() {
     val history by viewModel.history.collectAsState()
     val email by ServiceLocator.session.emailFlow.collectAsState(initial = null)
     val paused by viewModel.paused.collectAsState()
+    // A device this phone hasn't approved: one question, before it gets anything.
+    val newDevices by ServiceLocator.trustPrompts.pending.collectAsState()
+    newDevices.firstOrNull()?.let { device ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Allow “${device.name}” to link with this phone?") },
+            text = { Text(com.fuseos.app.trust.TrustPrompts.BODY) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { ServiceLocator.trustPrompts.decide(device.deviceId, device.key, true) },
+                ) { Text("Allow") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { ServiceLocator.trustPrompts.decide(device.deviceId, device.key, false) },
+                ) { Text("Not mine") }
+            },
+        )
+    }
     val deviceName by ServiceLocator.session.deviceNameFlow.collectAsState(initial = null)
     val context = LocalContext.current
     val transfers by ServiceLocator.transfers.list.collectAsState()
