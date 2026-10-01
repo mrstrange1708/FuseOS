@@ -162,6 +162,15 @@ public final class LanTransport {
         setConnected([])
     }
 
+    /// Which of the account's devices this one links with (`DeviceTrust`); nil links with
+    /// any. Asked with the key a peer presents, so a re-keyed device is asked about again.
+    public var isTrusted: ((_ deviceId: String, _ publicKey: String) -> Bool)?
+
+    private func trusts(_ peerId: String) -> Bool {
+        guard let key = peers[peerId]?.publicKey else { return false }
+        return isTrusted?(peerId, key) ?? true
+    }
+
     /// Fed from `SignalClient`; drives who we dial and which keys we accept.
     public func updatePeers(_ presence: [String: PeerPresence]) {
         peers = presence
@@ -186,7 +195,7 @@ public final class LanTransport {
         }
         updatePeers(peers)
         guard let selfId = selfDeviceId else { return }
-        for (peerId, peer) in peers where channels[peerId] == nil && peer.online && peer.publicKey != nil
+        for (peerId, peer) in peers where channels[peerId] == nil && peer.online && trusts(peerId)
             && !Self.dialsFirst(selfId: selfId, peerId: peerId)
         {
             guard let address = peer.lanAddress else { continue }
@@ -249,7 +258,7 @@ public final class LanTransport {
         var backoff: UInt64 = 500
         while !Task.isCancelled {
             // A channel already up (an inbound one, or Connect's) needs no second dial.
-            if let peer = peers[peerId], peer.online, channels[peerId] == nil, !paused,
+            if let peer = peers[peerId], peer.online, channels[peerId] == nil, !paused, trusts(peerId),
                let address = peer.lanAddress, peer.publicKey != nil
             {
                 let connected = await dial(peerId, address: address, selfId: selfId)
@@ -279,7 +288,8 @@ public final class LanTransport {
 
     private func handshake(_ connection: NWConnection, selfId: String) async throws -> LanChannel {
         let privateKey = try DeviceKey.privateKey()
-        let known = peers
+        // Only devices this one has approved: an unknown key closes the socket unread.
+        let known = peers.filter { trusts($0.key) }
         // A peer that accepts and then says nothing must not hold a dial loop forever:
         // cancelling the connection fails the handshake's pending read.
         let watchdog = Task {

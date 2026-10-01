@@ -32,6 +32,10 @@ final class DashboardViewModel: ObservableObject {
 
     let signal = SignalClient()
     let transport = LanTransport()
+    /// Which devices this Mac links with; a newcomer waits for the user's Allow.
+    let trust = DeviceTrust()
+    /// "id|key" already asked about this launch, so a refresh doesn't ask twice.
+    private var askedAbout: Set<String> = []
     private lazy var clipboard = ClipboardSync(transport: transport)
     /// Verified files land in Downloads (`FileTransfer.defaultDirectory`).
     private lazy var files = FileTransfer(transport: transport)
@@ -129,11 +133,13 @@ final class DashboardViewModel: ObservableObject {
             return
         }
         signal.lanAddressProvider = { [weak self] in self?.transport.lanAddress() }
+        transport.isTrusted = { [weak self] id, key in self?.trust.check(deviceId: id, key: key) == .trusted }
         signal.onPresenceChanged = { [weak self] presence in
             guard let self else { return }
             self.presence = presence
             // The transport dials from the same roster the dashboard displays.
             self.transport.updatePeers(presence)
+            self.askAboutNewDevices()
             // A device that just signed in on this account arrives as presence before it
             // exists in the REST roster — which holds the names the UI draws. This is how
             // a second device shows up with no pairing step, so it has to self-heal.
@@ -316,6 +322,8 @@ final class DashboardViewModel: ObservableObject {
         files.stop()
         clipboard.forget()
         transport.stop()
+        trust.reset()
+        askedAbout = []
         Analytics.reset()
     }
 
@@ -370,6 +378,12 @@ final class DashboardViewModel: ObservableObject {
             let all = try await ControlPlane.listDevices(selfId: try await ensureStarted())
             selfDevice = all.first { $0.isSelf }
             allPeers = all.filter { !$0.isSelf }
+            if !trust.bootstrapped {
+                // The account's devices as this Mac first finds it are the user's own.
+                trust.bootstrapIfNeeded(deviceIds: allPeers.map(\.id))
+                transport.retryNow()
+            }
+            askAboutNewDevices()
             errorMessage = nil
         } catch {
             errorMessage = (error as? AuthError)?.message ?? error.localizedDescription
@@ -561,6 +575,42 @@ final class DashboardViewModel: ObservableObject {
             connected: connected,
             selfPrefixLength: transport.lanPrefixLength() ?? 24,
         )
+    }
+
+    /// A device on the account this Mac hasn't approved — new, or back with a different key —
+    /// gets one question: Allow, or Not mine. Nothing reaches it until Allow.
+    private func askAboutNewDevices() {
+        guard trust.bootstrapped else { return }
+        for (id, peer) in presence {
+            guard let key = peer.publicKey, trust.check(deviceId: id, key: key) == .pending,
+                  askedAbout.insert("\(id)|\(key)").inserted
+            else { continue }
+            let device = allPeers.first { $0.id == id }
+            // After this update, not inside it: a modal from a publisher's callback.
+            DispatchQueue.main.async { [weak self] in
+                self?.confirm(id: id, key: key, name: device?.name ?? "A new device", platform: device?.platform)
+            }
+        }
+    }
+
+    private func confirm(id: String, key: String, name: String, platform: String?) {
+        let kind = platform == "android" ? "Android phone" : platform == "macos" ? "Mac" : "device"
+        let alert = NSAlert()
+        alert.messageText = "Allow “\(name)” to link with this Mac?"
+        alert.informativeText = "This \(kind) just signed in to your FuseOS account. Allow it only if it's yours: it will get what you copy, your files, and your phone's notifications and codes."
+        alert.addButton(withTitle: "Allow")
+        alert.addButton(withTitle: "Not mine")
+        NSApp.activate(ignoringOtherApps: true)
+        if runModalUntracked({ alert.runModal() }) == .alertFirstButtonReturn {
+            trust.approve(deviceId: id, key: key)
+            transport.retryNow()
+        } else {
+            trust.block(deviceId: id, key: key)
+            let next = NSAlert()
+            next.messageText = "“\(name)” is blocked"
+            next.informativeText = "It can't link with this Mac. If you don't know it, change your FuseOS password: that signs every device out, and the stranger with it."
+            _ = runModalUntracked { next.runModal() }
+        }
     }
 
     /// The popover's Connect: re-read which devices are on the account (a phone that just

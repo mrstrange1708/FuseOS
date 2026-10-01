@@ -229,6 +229,7 @@ class DashboardViewModel(
         // MainActivity stops the foreground service when the token clears.
         viewModelScope.launch {
             connection.stop()
+            ServiceLocator.trustPrompts.forget()
             // Ends the session on the server too, so the token stops working at once.
             ServiceLocator.authRepository.signOut()
         }

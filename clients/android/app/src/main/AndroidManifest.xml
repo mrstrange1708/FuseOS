@@ -206,6 +206,11 @@
             android:name=".actions.StopRingReceiver"
             android:exported="false" />
 
+        <!-- Allow / Not mine on a "new device" notification (TrustPrompts). -->
+        <receiver
+            android:name=".trust.TrustActionReceiver"
+            android:exported="false" />
+
         <!-- Hosts Android's screen-capture consent dialog and finishes. -->
         <activity
             android:name=".screen.ScreenConsentActivity"

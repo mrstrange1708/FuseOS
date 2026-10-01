@@ -92,6 +92,17 @@ class LanTransport(
         if (on) channels.values.forEach { it.close() }
     }
 
+    /**
+     * Which of the account's devices this phone links with (`DeviceTrust`); null links with
+     * any. Asked with the key a peer presents, so a re-keyed device is asked about again.
+     */
+    @Volatile var isTrusted: ((deviceId: String, publicKey: String) -> Boolean)? = null
+
+    private fun trusts(peerId: String): Boolean {
+        val key = peers.value[peerId]?.publicKey ?: return false
+        return isTrusted?.invoke(peerId, key) ?: true
+    }
+
     /** When each channel last delivered anything (elapsed ms) — how a dead link is noticed. */
     private val lastHeard = ConcurrentHashMap<LanChannel, Long>()
 
@@ -184,7 +195,7 @@ class LanTransport(
         if (_paused.value) return
         scope.launch(Dispatchers.IO) {
             for ((peerId, peer) in peers.value) {
-                if (channels.containsKey(peerId) || !peer.online || peer.publicKey == null) continue
+                if (channels.containsKey(peerId) || !peer.online || !trusts(peerId)) continue
                 val address = peer.lanAddress ?: continue
                 launch {
                     runCatching { dial(peerId, address, selfId) }
@@ -254,7 +265,7 @@ class LanTransport(
             val peer = peers.value[peerId]
             // A channel already up (an inbound one, or "Connect now"'s) needs no second dial.
             if (peer != null && peer.online && peer.lanAddress != null && peer.publicKey != null &&
-                !channels.containsKey(peerId) && !_paused.value
+                !channels.containsKey(peerId) && !_paused.value && trusts(peerId)
             ) {
                 val ok = try {
                     dial(peerId, peer.lanAddress, selfId)
@@ -296,7 +307,8 @@ class LanTransport(
         // A peer that accepts and then says nothing must not hold a dial loop forever.
         socket.soTimeout = HANDSHAKE_TIMEOUT_MS
         return LanChannel.handshake(socket, selfId, keyPair.private) { id ->
-            peers.value[id]?.publicKey?.let { runCatching { DeviceKey.decodePublic(it) }.getOrNull() }
+            // Only devices this phone has approved: an unknown key closes the socket unread.
+            peers.value[id]?.publicKey?.takeIf { trusts(id) }?.let { runCatching { DeviceKey.decodePublic(it) }.getOrNull() }
         } // the read deadline stays until the first frame proves the peer (pump)
     }
 
