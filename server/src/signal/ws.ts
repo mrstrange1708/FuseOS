@@ -9,6 +9,7 @@ import { getDb } from '../db/client.js';
 import { devices, type Device } from '../db/schema.js';
 import { trustedPeerIds } from '../devices/trust.js';
 import { presence } from './presence.js';
+import { forgetRelayBudget, relayAllowed, relaySchema } from './relay.js';
 
 const AUTH_TIMEOUT_MS = 5_000;
 
@@ -52,10 +53,11 @@ function card(device: Device, lanAddress?: string, battery?: number) {
   };
 }
 
-/** Attaches the `/signal` WebSocket to the Fastify HTTP server. Presence + LAN
- *  signaling only — no clipboard/file payloads ever cross this socket. */
+/** Attaches the `/signal` WebSocket to the Fastify HTTP server: presence, LAN signaling, and
+ *  the relay — sealed channel bytes the server forwards but cannot read (relay.ts). */
 export function attachSignal(app: FastifyInstance): void {
-  const wss = new WebSocketServer({ noServer: true });
+  // A relay message is at most a 64 KB chunk as base64; nothing legitimate is bigger.
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 128 * 1024 });
 
   app.server.on('upgrade', (req: IncomingMessage, socket, head) => {
     const pathname = req.url ? new URL(req.url, 'http://localhost').pathname : '';
@@ -157,6 +159,20 @@ export function attachSignal(app: FastifyInstance): void {
         // Any frame proves the socket alive (the presence sweep closes silent ones).
         presence.heard(device.id, ws);
 
+        const relay = relaySchema.safeParse(payload);
+        if (relay.success) {
+          const { to, stream, data, close } = relay.data;
+          // Only from the device's live socket, only to its own account's online devices, and
+          // within its budget. The bytes are forwarded untouched — never parsed, never logged.
+          const target = presence.get(to);
+          const refuse = (code: string) => send(ws, { type: 'relay-error', to, stream, code });
+          if (presence.get(device.id)?.socket !== ws) return;
+          if (!target || target.userId !== device.userId) return refuse('peer_offline');
+          if (!relayAllowed(device.id, data?.length ?? 0)) return refuse('rate_limited');
+          presence.sendTo(to, { type: 'relay', from: device.id, stream, data, close });
+          return;
+        }
+
         const heartbeat = heartbeatSchema.safeParse(payload);
         if (heartbeat.success) {
           const { battery, lanAddress } = heartbeat.data;
@@ -200,6 +216,7 @@ export function attachSignal(app: FastifyInstance): void {
       // hello lands before the old socket's close event). The device is still
       // online in that case, so announcing it offline would strand its peers.
       if (!presence.remove(closed.id, ws)) return;
+      forgetRelayBudget(closed.id);
       void broadcastToPeers({ type: 'peer-offline', deviceId: closed.id });
     });
 
