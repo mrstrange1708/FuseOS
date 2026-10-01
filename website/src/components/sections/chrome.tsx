@@ -61,6 +61,7 @@ const FOOTER = [
     title: 'Product',
     links: [
       { href: '/download', label: 'Download' },
+      { href: '/releases', label: 'All versions' },
       { href: '/#film', label: 'Watch the film' },
       { href: '/#continuity', label: 'Features' },
     ],

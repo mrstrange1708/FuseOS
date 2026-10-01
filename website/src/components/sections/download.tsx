@@ -112,7 +112,11 @@ export function Download() {
 
         <p className="mt-10 rounded-2xl border border-dashed border-white/15 px-5 py-4 text-[15px] text-muted">
           <b className="text-ink">This is an early preview.</b> Both devices need to be on the same
-          Wi-Fi. Found something broken?{' '}
+          Wi-Fi. These buttons always get the latest version;{' '}
+          <a className="text-ember underline-offset-4 hover:underline" href="/releases">
+            every version
+          </a>{' '}
+          is listed too. Found something broken?{' '}
           <a className="text-ember underline-offset-4 hover:underline" href="/report">
             Report it
           </a>
