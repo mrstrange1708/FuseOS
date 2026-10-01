@@ -297,17 +297,28 @@ class LanTransport(
         socket.soTimeout = HANDSHAKE_TIMEOUT_MS
         return LanChannel.handshake(socket, selfId, keyPair.private) { id ->
             peers.value[id]?.publicKey?.let { runCatching { DeviceKey.decodePublic(it) }.getOrNull() }
-        }.also { socket.soTimeout = 0 }
+        } // the read deadline stays until the first frame proves the peer (pump)
     }
 
     /** Blocking receive loop for one channel; returns when the connection ends. */
     private suspend fun pump(channel: LanChannel) {
-        register(channel)
-        // Time the link straight away rather than 15 s from now.
+        // The handshake proves nothing on its own: device ids cross the LAN in the clear, so
+        // anyone on the Wi-Fi can open a socket claiming to be the Mac. Only the real one can
+        // seal a frame under the derived keys, so the channel takes the peer's place — and
+        // closes the live link — only once its first frame has decrypted. Pinging first is
+        // what makes that frame arrive (an echo), from builds before this one too.
         ping(channel)
+        val first = try {
+            channel.receive()
+        } catch (e: Exception) {
+            channel.close()
+            throw e
+        }
+        channel.clearReadTimeout()
+        register(channel)
         try {
+            var envelope = first
             while (true) {
-                val envelope = channel.receive()
                 lastHeard[channel] = SystemClock.elapsedRealtime()
                 noteTraffic(envelope)
                 if (envelope.bodyCase == Envelope.BodyCase.HEARTBEAT) {
@@ -319,6 +330,7 @@ class LanTransport(
                     // lost — so every file over ~4 MB failed its index check.
                     _incoming.emit(envelope)
                 }
+                envelope = channel.receive()
             }
         } finally {
             unregister(channel.peerDeviceId, channel)

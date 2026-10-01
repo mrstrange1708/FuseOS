@@ -300,13 +300,45 @@ public final class LanTransport {
 
     /// Receive loop for one channel; returns when the connection ends.
     private func pump(_ channel: LanChannel) async {
+        // The handshake proves nothing on its own: device ids cross the LAN in the clear, so
+        // anyone on the Wi-Fi can open a connection claiming to be the phone. Only the real
+        // one can seal a frame under the derived keys, so the channel takes the peer's place —
+        // and closes the live link — only once its first frame has decrypted, within the
+        // handshake's deadline. Pinging first is what makes that frame arrive (an echo), from
+        // builds before this one too.
+        var probe = newEnvelope()
+        pings[probe.seq] = DispatchTime.now().uptimeNanoseconds
+        probe.heartbeat = FuseHeartbeat()
+        let deadline = Task {
+            try await Task.sleep(nanoseconds: Self.handshakeTimeout)
+            channel.close()
+        }
+        var first: FuseEnvelope?
+        do {
+            try await channel.send(probe)
+            first = try await channel.receive()
+        } catch {
+            FuseLog.lan.warning("a peer claiming \(channel.peerDeviceId, privacy: .public) never proved itself: \(error.localizedDescription, privacy: .public)")
+        }
+        deadline.cancel()
+        guard let proof = first else {
+            channel.close()
+            return
+        }
         register(channel)
         defer {
             drop(channel.peerDeviceId, channel: channel)
         }
+        var pending: FuseEnvelope? = proof // the proof is handled like any other envelope
         while !Task.isCancelled {
             do {
-                let envelope = try await channel.receive()
+                let envelope: FuseEnvelope
+                if let proof = pending {
+                    envelope = proof
+                    pending = nil
+                } else {
+                    envelope = try await channel.receive()
+                }
                 if channels[channel.peerDeviceId] === channel {
                     lastHeard[channel.peerDeviceId] = DispatchTime.now().uptimeNanoseconds
                 }
