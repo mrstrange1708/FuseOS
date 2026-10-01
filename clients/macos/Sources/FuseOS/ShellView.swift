@@ -1452,7 +1452,7 @@ private struct FileDropZone: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
-        guard panel.runModal() == .OK else { return }
+        guard runModalUntracked({ panel.runModal() }) == .OK else { return }
         viewModel.sendFiles(panel.urls)
     }
 }

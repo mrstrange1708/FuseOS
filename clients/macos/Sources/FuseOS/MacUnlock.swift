@@ -128,18 +128,18 @@ enum MacUnlock {
         alert.addButton(withTitle: "Cancel")
         alert.window.initialFirstResponder = field
         NSApp.activate(ignoringOtherApps: true)
-        guard alert.runModal() == .alertFirstButtonReturn else { return false }
+        guard runModalUntracked({ alert.runModal() }) == .alertFirstButtonReturn else { return false }
         guard verify(field.stringValue) else {
             let wrong = NSAlert()
             wrong.messageText = "That's not this Mac's password"
-            wrong.runModal()
+            _ = runModalUntracked { wrong.runModal() }
             return false
         }
         guard store(field.stringValue) else {
             let failed = NSAlert()
             failed.messageText = "Couldn't save the password"
             failed.informativeText = "macOS's Keychain refused it, so unlocking can't work. Unlock your login keychain (Keychain Access) and try again."
-            failed.runModal()
+            _ = runModalUntracked { failed.runModal() }
             return false
         }
         return true
