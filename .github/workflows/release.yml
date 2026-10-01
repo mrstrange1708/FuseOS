@@ -89,7 +89,12 @@ jobs:
       - name: GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" FuseOS.apk FuseOS.dmg --repo "$GITHUB_REPOSITORY" --generate-notes
+        # A tag with a dash (v1.1.0-rc.1) is a pre-release: never "latest", so the website's
+        # Download buttons keep the last real version, and no email (below).
+        run: |
+          flags=""
+          case "$GITHUB_REF_NAME" in *-*) flags="--prerelease --latest=false" ;; esac
+          gh release create "$GITHUB_REF_NAME" FuseOS.apk FuseOS.dmg --repo "$GITHUB_REPOSITORY" --generate-notes $flags
       # Emails everyone on the release list (Inngest `releases-announce` → a Resend Broadcast).
       # The tag is the event id, so a re-run cannot email twice; pre-releases (v1.1.0-beta) stay quiet.
       - name: Release email

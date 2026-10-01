@@ -88,6 +88,12 @@ if [ ! -f "$SIGN_KC" ]; then
 	security unlock-keychain -p "$SIGN_PASS" "$SIGN_KC"
 	security import "$TMP/id.p12" -k "$SIGN_KC" -P "$P12_PASS" -T /usr/bin/codesign >/dev/null
 	security set-key-partition-list -S apple-tool:,apple: -s -k "$SIGN_PASS" "$SIGN_KC" >/dev/null
+	if [ -n "${FUSE_SIGN_P12:-}" ]; then
+		# CI only: macOS 15's codesign ignores --keychain unless the keychain is on the user's
+		# search list too ("The specified item could not be found in the keychain").
+		security list-keychains -d user -s "$SIGN_KC" $(security list-keychains -d user | tr -d '"')
+		security find-identity -p codesigning "$SIGN_KC"
+	fi
 	rm -rf "$TMP"
 	echo "made signing identity \"$SIGN_NAME\" in $SIGN_KC — grant permissions once more, then they stick"
 fi
