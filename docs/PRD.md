@@ -83,7 +83,7 @@ These are deferred deliberately to keep v1 focused, shippable, and honest about 
 
 ## 8. Architecture overview
 
-FuseOS separates a cloud **control plane** from a LAN **data plane**. The control plane does identity, the device registry, and signaling; the data plane carries the actual clipboard and file payloads **directly between devices over the local network**. Payloads never transit the server or the database.
+FuseOS separates a cloud **control plane** from a LAN **data plane**. The control plane does identity, the device registry, and signaling; the data plane carries the actual clipboard and file payloads **directly between devices over the local network**. Payloads never touch the database and the server never reads one; when the LAN can't link two devices, small things (copies, notifications, commands) fall back to an end-to-end encrypted relay the server forwards but cannot decrypt.
 
 ```mermaid
 flowchart TB

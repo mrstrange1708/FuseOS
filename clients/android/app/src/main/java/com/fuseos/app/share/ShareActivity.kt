@@ -93,14 +93,17 @@ class ShareActivity : ComponentActivity() {
         text?.let { ServiceLocator.clipboardSync.share(text = it, imageBytes = null, mime = null) }
         var started = 0
         var tooLarge = 0
+        var needsWifi = 0
         for (uri in uris) {
             when (sendAsFile(uri)) {
                 Transfers.SendResult.Started -> started++
                 Transfers.SendResult.TooLarge -> tooLarge++
+                Transfers.SendResult.NeedsWifi -> needsWifi++
                 else -> Unit
             }
         }
         return when {
+            started == 0 && needsWifi > 0 -> false to "Files need both devices on the same Wi-Fi."
             started == 0 && tooLarge > 0 -> false to "That's over the 1 GB limit."
             started == 0 -> false to READ_FAILED
             started == 1 -> true to "Sending to your Mac."

@@ -235,7 +235,7 @@ class WireFormatTest {
         val listener = ServerSocket()
         listener.bind(InetSocketAddress(InetAddress.getLoopbackAddress(), 0))
         val channelFuture = pool.submit<LanChannel> {
-            listener.use { LanChannel.handshake(it.accept(), selfId, self) { peerPublic } }
+            listener.use { LanChannel.handshake(SocketWire(it.accept()), selfId, self) { peerPublic } }
         }
         val socket = Socket()
         socket.connect(InetSocketAddress(InetAddress.getLoopbackAddress(), listener.localPort))

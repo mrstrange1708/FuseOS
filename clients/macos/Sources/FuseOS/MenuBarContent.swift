@@ -481,8 +481,9 @@ struct MenuBarContent: View {
     private func statusLine(linked: Bool, online: Bool, hasPeer: Bool) -> String {
         if !hasPeer { return "Sign in on your phone with the same account" }
         if linked {
-            if let latency = viewModel.syncLatency { return "Linked · direct · \(latency.lastMs) ms" }
-            return "Linked · direct"
+            let path = viewModel.relayOnly ? "relay" : "direct"
+            if let latency = viewModel.syncLatency { return "Linked · \(path) · \(latency.lastMs) ms" }
+            return "Linked · \(path)"
         }
         return online ? "Online · connecting…" : "Offline"
     }

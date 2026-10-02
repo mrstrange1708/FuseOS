@@ -62,6 +62,25 @@ public final class LanTransport {
 
     /// Peers with a live direct channel right now — what the UI's "connected" chip reads.
     public private(set) var connectedPeers: Set<String> = []
+
+    /// The relay through `/signal`, for when the LAN can't link two devices (§19).
+    public weak var relay: SignalClient?
+    private var relayWires: [String: RelayWire] = [:]
+    private var relayAttempts: [String: Task<Void, Never>] = [:]
+    /// No link this long → the relay, while the LAN keeps being tried.
+    static let relayAfter: TimeInterval = 6
+
+    /// Debug only: refuse every LAN link, so the relay can be tried on one Wi-Fi
+    /// (`FUSE_FORCE_RELAY=1 open .build/FuseOS.app`). Release builds ignore it.
+    #if DEBUG
+    private static let lanOff = ProcessInfo.processInfo.environment["FUSE_FORCE_RELAY"] == "1"
+    #else
+    private static let lanOff = false
+    #endif
+
+    /// Peers linked over the relay rather than directly: the UI says so, files wait for Wi-Fi.
+    public private(set) var relayedPeers: Set<String> = []
+    public var onRelayedPeersChanged: ((Set<String>) -> Void)?
     public var onConnectedPeersChanged: ((Set<String>) -> Void)?
 
     private var listener: NWListener?
@@ -156,10 +175,24 @@ public final class LanTransport {
         supervisors.removeAll()
         channels.values.forEach { $0.close() }
         channels.removeAll()
+        relayWires.values.forEach { $0.cancel() }
+        relayWires.removeAll()
+        relayAttempts.values.forEach { $0.cancel() }
+        relayAttempts.removeAll()
+        setRelayed([])
         listener?.cancel()
         listener = nil
         peers.removeAll()
         setConnected([])
+    }
+
+    /// Which of the account's devices this one links with (`DeviceTrust`); nil links with
+    /// any. Asked with the key a peer presents, so a re-keyed device is asked about again.
+    public var isTrusted: ((_ deviceId: String, _ publicKey: String) -> Bool)?
+
+    private func trusts(_ peerId: String) -> Bool {
+        guard let key = peers[peerId]?.publicKey else { return false }
+        return isTrusted?(peerId, key) ?? true
     }
 
     /// Fed from `SignalClient`; drives who we dial and which keys we accept.
@@ -186,7 +219,7 @@ public final class LanTransport {
         }
         updatePeers(peers)
         guard let selfId = selfDeviceId else { return }
-        for (peerId, peer) in peers where channels[peerId] == nil && peer.online && peer.publicKey != nil
+        for (peerId, peer) in peers where channels[peerId] == nil && peer.online && trusts(peerId)
             && !Self.dialsFirst(selfId: selfId, peerId: peerId)
         {
             guard let address = peer.lanAddress else { continue }
@@ -200,7 +233,7 @@ public final class LanTransport {
     /// keeps a file's chunks from queueing the entire file in memory ahead of the network.
     /// Fail soft: a dead channel is dropped, not thrown.
     func send(_ envelope: FuseEnvelope) async {
-        for (peerId, channel) in channels {
+        for (peerId, channel) in channels where !channel.viaRelay || Relay.carries(envelope) {
             do {
                 try await channel.send(envelope)
                 noteTraffic(envelope)
@@ -213,7 +246,7 @@ public final class LanTransport {
     /// Fail-soft broadcast to every connected peer (or only those in `only`); a dead
     /// channel is dropped, not thrown.
     func broadcast(_ envelope: FuseEnvelope, only: Set<String>? = nil) {
-        for (peerId, channel) in channels where only?.contains(peerId) ?? true {
+        for (peerId, channel) in channels where (only?.contains(peerId) ?? true) && (!channel.viaRelay || Relay.carries(envelope)) {
             Task { [weak self] in
                 do {
                     try await channel.send(envelope)
@@ -229,14 +262,14 @@ public final class LanTransport {
 
     private func accept(_ connection: NWConnection) {
         Task { [weak self] in
-            guard let self, let selfId = self.selfDeviceId, !self.paused else {
+            guard let self, let selfId = self.selfDeviceId, !self.paused, !Self.lanOff else {
                 connection.cancel()
                 return
             }
             do {
                 connection.start(queue: .global(qos: .userInitiated))
                 try await connection.waitUntilReady()
-                let channel = try await self.handshake(connection, selfId: selfId)
+                let channel = try await self.handshake(over: connection, selfId: selfId)
                 await self.pump(channel)
             } catch {
                 FuseLog.lan.warning("inbound handshake failed: \(error.localizedDescription, privacy: .public)")
@@ -247,9 +280,23 @@ public final class LanTransport {
 
     private func maintain(_ peerId: String, selfId: String) async {
         var backoff: UInt64 = 500
+        var unlinkedSince = Date()
         while !Task.isCancelled {
-            // A channel already up (an inbound one, or Connect's) needs no second dial.
-            if let peer = peers[peerId], peer.online, channels[peerId] == nil, !paused,
+            if channels[peerId] != nil { unlinkedSince = Date() }
+            // No link for a while — a Wi-Fi that isolates clients, different networks: carry the
+            // channel over the relay meanwhile. The LAN keeps being tried, and wins when it links.
+            if let peer = peers[peerId], peer.online, channels[peerId] == nil, !paused, trusts(peerId),
+               Date().timeIntervalSince(unlinkedSince) >= Self.relayAfter, relayAttempts[peerId] == nil
+            {
+                _ = peer
+                relayAttempts[peerId] = Task { [weak self] in
+                    await self?.openRelay(to: peerId, selfId: selfId)
+                    self?.relayAttempts[peerId] = nil
+                }
+            }
+            // A direct channel already up (an inbound one, or Connect's) needs no dial; a
+            // relayed one does — the LAN is better whenever it works.
+            if let peer = peers[peerId], peer.online, channels[peerId]?.viaRelay != false, !paused, trusts(peerId), !Self.lanOff,
                let address = peer.lanAddress, peer.publicKey != nil
             {
                 let connected = await dial(peerId, address: address, selfId: selfId)
@@ -267,7 +314,7 @@ public final class LanTransport {
         do {
             connection.start(queue: .global(qos: .userInitiated))
             try await connection.waitUntilReady()
-            let channel = try await handshake(connection, selfId: selfId)
+            let channel = try await handshake(over: connection, selfId: selfId)
             await pump(channel)
             return true
         } catch {
@@ -277,9 +324,10 @@ public final class LanTransport {
         }
     }
 
-    private func handshake(_ connection: NWConnection, selfId: String) async throws -> LanChannel {
+    private func handshake(over connection: any Wire, selfId: String) async throws -> LanChannel {
         let privateKey = try DeviceKey.privateKey()
-        let known = peers
+        // Only devices this one has approved: an unknown key closes the socket unread.
+        let known = peers.filter { trusts($0.key) }
         // A peer that accepts and then says nothing must not hold a dial loop forever:
         // cancelling the connection fails the handshake's pending read.
         let watchdog = Task {
@@ -300,13 +348,44 @@ public final class LanTransport {
 
     /// Receive loop for one channel; returns when the connection ends.
     private func pump(_ channel: LanChannel) async {
-        register(channel)
+        // The handshake proves nothing on its own: device ids cross the LAN in the clear, so
+        // anyone on the Wi-Fi can open a connection claiming to be the phone. Only the real
+        // one can seal a frame under the derived keys, so the channel takes the peer's place —
+        // and closes the live link — only once its first frame has decrypted, within the
+        // handshake's deadline. Pinging first is what makes that frame arrive (an echo), from
+        // builds before this one too.
+        var probe = newEnvelope()
+        pings[probe.seq] = DispatchTime.now().uptimeNanoseconds
+        probe.heartbeat = FuseHeartbeat()
+        let deadline = Task {
+            try await Task.sleep(nanoseconds: Self.handshakeTimeout)
+            channel.close()
+        }
+        var first: FuseEnvelope?
+        do {
+            try await channel.send(probe)
+            first = try await channel.receive()
+        } catch {
+            FuseLog.lan.warning("a peer claiming \(channel.peerDeviceId, privacy: .public) never proved itself: \(error.localizedDescription, privacy: .public)")
+        }
+        deadline.cancel()
+        guard let proof = first, register(channel) else {
+            channel.close() // unproven — or relayed, and a direct channel won the slot meanwhile
+            return
+        }
         defer {
             drop(channel.peerDeviceId, channel: channel)
         }
+        var pending: FuseEnvelope? = proof // the proof is handled like any other envelope
         while !Task.isCancelled {
             do {
-                let envelope = try await channel.receive()
+                let envelope: FuseEnvelope
+                if let proof = pending {
+                    envelope = proof
+                    pending = nil
+                } else {
+                    envelope = try await channel.receive()
+                }
                 if channels[channel.peerDeviceId] === channel {
                     lastHeard[channel.peerDeviceId] = DispatchTime.now().uptimeNanoseconds
                 }
@@ -406,17 +485,22 @@ public final class LanTransport {
         }
     }
 
-    private func register(_ channel: LanChannel) {
-        FuseLog.lan.info("channel up with \(channel.peerDeviceId, privacy: .public)")
+    /// False when `channel` is relayed and a direct one is already up: the LAN keeps the slot.
+    private func register(_ channel: LanChannel) -> Bool {
+        let peerId = channel.peerDeviceId
+        if channel.viaRelay, let current = channels[peerId], !current.viaRelay { return false }
+        FuseLog.lan.info("channel up with \(peerId, privacy: .public)\(channel.viaRelay ? " (relay)" : "", privacy: .public)")
         // A reconnect replaces the previous channel rather than racing it.
         channels[channel.peerDeviceId]?.close()
         channels[channel.peerDeviceId] = channel
         lastHeard[channel.peerDeviceId] = DispatchTime.now().uptimeNanoseconds
         setConnected(connectedPeers.union([channel.peerDeviceId]))
+        setRelayed(channel.viaRelay ? relayedPeers.union([peerId]) : relayedPeers.subtracting([peerId]))
         // Every channel, reconnects included: a merge drops what the peer already has.
         onPeersJoined?([channel.peerDeviceId])
         // Time the link straight away rather than 15 s from now.
         ping(only: [channel.peerDeviceId])
+        return true
     }
 
     private func drop(_ peerId: String, channel: LanChannel) {
@@ -424,6 +508,66 @@ public final class LanTransport {
         channels.removeValue(forKey: peerId)
         channel.close()
         setConnected(connectedPeers.subtracting([peerId]))
+        setRelayed(relayedPeers.subtracting([peerId]))
+    }
+
+    private func setRelayed(_ value: Set<String>) {
+        guard value != relayedPeers else { return }
+        relayedPeers = value
+        onRelayedPeersChanged?(value)
+    }
+
+    // MARK: - The relay (§19)
+
+    /// The dialer's side: one relayed channel to `peerId`, run until it ends.
+    private func openRelay(to peerId: String, selfId: String) async {
+        guard let signal = relay else { return }
+        let stream = UUID().uuidString
+        let wire = RelayWire(peerId: peerId, stream: stream) { data, close in
+            signal.sendRelay(to: peerId, stream: stream, data: data, close: close)
+        }
+        relayWires[stream] = wire
+        do {
+            await pump(try await handshake(over: wire, selfId: selfId))
+        } catch {
+            FuseLog.lan.warning("relay to \(peerId, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+        }
+        relayWires[stream] = nil
+        wire.cancel()
+    }
+
+    /// A piece of a relayed channel from the server (`SignalClient.onRelay`); the first of a
+    /// stream answers it.
+    public func receiveRelay(from: String, stream: String, data: Data?, close: Bool) {
+        if close {
+            relayWires.removeValue(forKey: stream)?.end()
+            return
+        }
+        guard let data else { return }
+        if let wire = relayWires[stream] {
+            wire.deliver(data)
+            return
+        }
+        guard let signal = relay, let selfId = selfDeviceId else { return }
+        guard !paused, trusts(from) else {
+            _ = signal.sendRelay(to: from, stream: stream, data: nil, close: true)
+            return
+        }
+        let wire = RelayWire(peerId: from, stream: stream) { data, close in
+            signal.sendRelay(to: from, stream: stream, data: data, close: close)
+        }
+        relayWires[stream] = wire
+        wire.deliver(data)
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                await self.pump(try await self.handshake(over: wire, selfId: selfId))
+            } catch {
+                FuseLog.lan.warning("relayed handshake from \(from, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+            }
+            self.relayWires[stream] = nil
+            wire.cancel()
+        }
     }
 
     private func setConnected(_ value: Set<String>) {
