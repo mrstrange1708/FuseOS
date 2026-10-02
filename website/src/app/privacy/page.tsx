@@ -132,7 +132,8 @@ export default function PrivacyPage() {
             <b>Sentry</b> (error reports) and <b>PostHog</b> (usage statistics, above): they receive
             technical details such as event names, app platform, sizes and timings — never anything
             you copy, send or receive. On this website, PostHog counts page views without cookies or
-            stored identifiers, and without the part of the address after “?”.
+            stored identifiers — a visitor is a hash that changes every day — and without the part
+            of the address after “?”.
           </li>
           <li>Our server host, which runs the FuseOS server.</li>
         </ul>

@@ -16,8 +16,8 @@ function bare(url: unknown): unknown {
 }
 
 /**
- * Page views for the website, and nothing else: no cookies or storage (memory only, so no
- * consent banner), no autocapture (it can record text on the page), no session recording,
+ * Page views for the website, and nothing else: no cookies or storage (so no consent banner),
+ * no autocapture (it can record text on the page), no session recording,
  * no surveys. Every address is sent without its query string or fragment.
  */
 export function Analytics() {
@@ -25,7 +25,10 @@ export function Analytics() {
     if (!POSTHOG_KEY || posthog.__loaded) return;
     posthog.init(POSTHOG_KEY, {
       api_host: 'https://us.i.posthog.com',
-      persistence: 'memory',
+      // A visitor is a daily-rotating hash PostHog makes on its server, not a stored id. With
+      // memory persistence every page load counted as a new visitor, so the numbers were noise.
+      // Needs "Cookieless server hash mode" on in the PostHog project, or events are dropped.
+      cookieless_mode: 'always',
       person_profiles: 'identified_only',
       autocapture: false,
       capture_pageview: true,
