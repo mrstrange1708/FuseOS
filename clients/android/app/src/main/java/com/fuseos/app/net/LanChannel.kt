@@ -26,13 +26,16 @@ import java.security.SecureRandom
  * decrypted before that check, so an unknown caller can never reach the envelope layer.
  */
 class LanChannel private constructor(
-    private val socket: Socket,
+    private val wire: Wire,
     private val keys: LanCrypto.SessionKeys,
     val peerDeviceId: String,
 ) : Closeable {
 
-    private val input = DataInputStream(socket.getInputStream().buffered())
-    private val output = DataOutputStream(socket.getOutputStream().buffered())
+    /** Over the relay rather than the LAN: slower, and only for small things (§19). */
+    val viaRelay: Boolean get() = wire.viaRelay
+
+    private val input = DataInputStream(wire.input.buffered())
+    private val output = DataOutputStream(wire.output.buffered())
 
     // Frame counters double as the GCM nonces, so they must move in lockstep with the
     // peer's. TCP guarantees the ordering that keeps them aligned.
@@ -67,8 +70,11 @@ class LanChannel private constructor(
         return Envelope.parseFrom(LanCrypto.open(keys.receive, receiveCounter++, frame))
     }
 
+    /** Lifts the handshake's read deadline once the peer has proved itself (see LanTransport.pump). */
+    fun clearReadTimeout() = wire.setReadTimeout(0)
+
     override fun close() {
-        runCatching { socket.close() }
+        wire.close()
     }
 
     companion object {
@@ -86,15 +92,15 @@ class LanChannel private constructor(
          * paired with this device — returning null is what rejects a stranger.
          */
         fun handshake(
-            socket: Socket,
+            wire: Wire,
             selfDeviceId: String,
             privateKey: PrivateKey,
             trustedKeyFor: (String) -> PublicKey?,
         ): LanChannel {
             // Deliberately unbuffered: these read exact byte counts and must not consume
             // any of the framed traffic that follows.
-            val input = DataInputStream(socket.getInputStream())
-            val output = DataOutputStream(socket.getOutputStream())
+            val input = DataInputStream(wire.input)
+            val output = DataOutputStream(wire.output)
 
             val selfNonce = ByteArray(LanCrypto.NONCE_LEN).also { SecureRandom().nextBytes(it) }
             val selfId = selfDeviceId.toByteArray(Charsets.UTF_8)
@@ -126,7 +132,7 @@ class LanChannel private constructor(
                 selfNonce = selfNonce,
                 peerNonce = peerNonce,
             )
-            return LanChannel(socket, keys, peerId)
+            return LanChannel(wire, keys, peerId)
         }
     }
 }

@@ -230,3 +230,12 @@ enum DockIcon {
         update()
     }
 }
+
+/// Runs a modal (an alert, an open panel). A modal waits on the user, and Sentry's hang
+/// detector counted that wait as a frozen app (APPLE-MACOS-4), so it is paused meanwhile.
+@MainActor
+func runModalUntracked<T>(_ modal: () -> T) -> T {
+    SentrySDK.pauseAppHangTracking()
+    defer { SentrySDK.resumeAppHangTracking() }
+    return modal()
+}

@@ -655,7 +655,7 @@ private struct LinkHero: View {
 
     private func info(peer: DeviceItem?, linked: Bool) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            StatusPill(linked: linked, text: linked ? "Linked · direct" : status)
+            StatusPill(linked: linked, text: linked ? (viewModel.relayOnly ? "Linked · relay" : "Linked · direct") : status)
             Text(title(peer: peer, linked: linked))
                 .font(.system(size: 26, weight: .bold))
                 .foregroundStyle(linked ? AnyShapeStyle(FuseColor.glow) : AnyShapeStyle(FuseColor.ink))
@@ -726,6 +726,9 @@ private struct LinkHero: View {
     }
 
     private func detail(linked: Bool) -> String {
+        if linked, viewModel.relayOnly {
+            return "This Wi-Fi won't link them directly, so copies and notifications go through FuseOS's relay — still encrypted end to end. Files wait for the same Wi-Fi."
+        }
         if linked { return "Clipboard, files and notifications move straight over your Wi-Fi." }
         if viewModel.paused { return "You disconnected. Nothing syncs until you Connect." }
         switch search {
@@ -1452,7 +1455,7 @@ private struct FileDropZone: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
-        guard panel.runModal() == .OK else { return }
+        guard runModalUntracked({ panel.runModal() }) == .OK else { return }
         viewModel.sendFiles(panel.urls)
     }
 }

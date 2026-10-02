@@ -53,6 +53,15 @@ class ConnectionManager(
         transport.start(id, signal.presence)
         clipboard.start(id)
         session.currentToken()?.let { token -> signal.start(token, id) }
+        // The account's devices as this phone first finds it (or first runs this version) are
+        // the user's own; anything that joins later waits for an Allow (DeviceTrust).
+        if (!ServiceLocator.deviceTrust.bootstrapped) {
+            runCatching { repo.listDevices(id) }.onSuccess { all ->
+                ServiceLocator.deviceTrust.bootstrapIfNeeded(all.filter { !it.isSelf }.map { it.id })
+                ServiceLocator.trustPrompts.refresh()
+                transport.retryNow()
+            }
+        }
         deviceId = id
         Log.i(TAG, "connection stack up as device $id, listening on ${transport.lanAddress()}")
         id

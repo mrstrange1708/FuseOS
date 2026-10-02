@@ -214,6 +214,24 @@ describe.skipIf(!process.env.DATABASE_URL)('/signal websocket', () => {
     expect(helloOk.peers).toEqual([]);
   });
 
+  it('relays sealed channel bytes between two devices of one account, untouched', async () => {
+    const a = await helloAs(mac);
+    const b = await helloAs(phone);
+    a.client.send({ type: 'relay', to: phone.id, stream: 's1', data: 'AAECAw==' });
+    const got = await b.client.waitFor('relay');
+    expect(got).toMatchObject({ from: mac.id, stream: 's1', data: 'AAECAw==' });
+    b.client.send({ type: 'relay', to: mac.id, stream: 's1', close: true });
+    expect(await a.client.waitFor('relay')).toMatchObject({ from: phone.id, close: true });
+  });
+
+  it('never relays to another account’s device — it reads as offline', async () => {
+    const a = await helloAs(mac);
+    const s = await helloAs(strangerDevice, { token: stranger.token });
+    a.client.send({ type: 'relay', to: strangerDevice.id, stream: 's2', data: 'AA==' });
+    expect(await a.client.waitFor('relay-error')).toMatchObject({ code: 'peer_offline' });
+    expect(s.client.all.some((m) => m.type === 'relay')).toBe(false);
+  });
+
   it('relays peer-online with the publicKey and lanAddress needed to dial the LAN', async () => {
     const a = await helloAs(mac, { lanAddress: '192.168.1.10:47100', battery: 88 });
     await helloAs(phone, { lanAddress: '192.168.1.20:47100', battery: 47 });

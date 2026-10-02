@@ -69,12 +69,12 @@ class LanChannelTest {
 
             // Both sides write before reading, so they must run at the same time.
             val accepted = pool.submit<LanChannel> {
-                LanChannel.handshake(listener.accept(), bId, bKeys.private, bTrusts)
+                LanChannel.handshake(SocketWire(listener.accept()), bId, bKeys.private, bTrusts)
             }
             val dialed = pool.submit<LanChannel> {
                 val socket = Socket()
                 socket.connect(InetSocketAddress(InetAddress.getLoopbackAddress(), listener.localPort))
-                LanChannel.handshake(socket, aId, aKeys.private, aTrusts)
+                LanChannel.handshake(SocketWire(socket), aId, aKeys.private, aTrusts)
             }
             return dialed.get(10, TimeUnit.SECONDS) to accepted.get(10, TimeUnit.SECONDS)
         }
@@ -196,7 +196,7 @@ class LanChannelTest {
         val listener = ServerSocket()
         listener.bind(InetSocketAddress(InetAddress.getLoopbackAddress(), 0))
         val accepted = pool.submit<LanChannel> {
-            listener.use { LanChannel.handshake(it.accept(), selfId, selfKeys.private, trusts) }
+            listener.use { LanChannel.handshake(SocketWire(it.accept()), selfId, selfKeys.private, trusts) }
         }
         val socket = Socket()
         socket.connect(InetSocketAddress(InetAddress.getLoopbackAddress(), listener.localPort))

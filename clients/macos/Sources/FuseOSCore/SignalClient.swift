@@ -25,6 +25,10 @@ public struct PeerPresence {
 /// A decoded `/signal` server frame (only the fields the dashboard needs).
 private struct SignalEvent: Decodable {
     let type: String
+    let from: String?
+    let stream: String?
+    let data: String?
+    let close: Bool?
     let deviceId: String?
     let battery: Int?
     let online: Bool?
@@ -53,6 +57,36 @@ public final class SignalClient {
 
     public var onPresenceChanged: (([String: PeerPresence]) -> Void)?
 
+    /// A piece of a relayed channel (docs/protocol.md §19): sealed bytes, or `close`.
+    public var onRelay: ((_ from: String, _ stream: String, _ data: Data?, _ close: Bool) -> Void)?
+
+    /// The live socket for relay sends, readable off the main thread: a channel's writes come
+    /// from its own actor, in order, and URLSessionWebSocketTask keeps the order of `send`
+    /// calls — hopping to the main actor first would not.
+    private let relayLock = NSLock()
+    private nonisolated(unsafe) var relayTask: URLSessionWebSocketTask?
+
+    /// Sends a piece of a relayed channel; false when there is no live socket.
+    public nonisolated func sendRelay(to: String, stream: String, data: Data?, close: Bool = false) -> Bool {
+        relayLock.lock()
+        let task = relayTask
+        relayLock.unlock()
+        guard let task else { return false }
+        var payload: [String: Any] = ["type": "relay", "to": to, "stream": stream]
+        if let data { payload["data"] = data.base64EncodedString() }
+        if close { payload["close"] = true }
+        guard let json = try? JSONSerialization.data(withJSONObject: payload),
+              let text = String(data: json, encoding: .utf8) else { return false }
+        task.send(.string(text)) { _ in } // fail soft: a lost piece ends the channel's next read
+        return true
+    }
+
+    private func setRelayTask(_ task: URLSessionWebSocketTask?) {
+        relayLock.lock()
+        relayTask = task
+        relayLock.unlock()
+    }
+
     /// Supplies this device's `ip:port` for peers to dial. The LAN listener binds an
     /// ephemeral port, so this is nil until it is up and changes across restarts — hence
     /// a closure rather than a stored value.
@@ -79,12 +113,14 @@ public final class SignalClient {
         heartbeat = nil
         task?.cancel(with: .goingAway, reason: nil)
         task = nil
+        setRelayTask(nil)
     }
 
     private func connect() {
         guard active, let token, let deviceId else { return }
         let socket = URLSession.shared.webSocketTask(with: Config.signalURL)
         task = socket
+        setRelayTask(socket)
         socket.resume()
 
         var hello: [String: Any] = ["type": "hello", "token": token, "deviceId": deviceId]
@@ -135,6 +171,7 @@ public final class SignalClient {
     private func scheduleReconnect() {
         guard active else { return }
         task = nil
+        setRelayTask(nil)
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             guard self.active else { return }
@@ -151,6 +188,9 @@ public final class SignalClient {
         else { return }
 
         switch event.type {
+        case "relay":
+            guard let from = event.from, let stream = event.stream else { return }
+            onRelay?(from, stream, event.data.flatMap { Data(base64Encoded: $0) }, event.close == true)
         case "hello-ok":
             for peer in event.peers ?? [] {
                 setPresence(

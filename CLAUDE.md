@@ -13,16 +13,16 @@ Read `docs/` before writing code. `docs/PRD.md` (what & why), `docs/HLD.md` (arc
 FuseOS is **hybrid**: a cloud **control plane** and a LAN **data plane**, and they must stay separate.
 
 - **Control plane** = the Node/TypeScript `server/` + PostgreSQL. It handles auth, the device registry, and WebSocket **signaling** (presence + exchanging LAN addresses). This is the only thing that talks to the database.
-- **Data plane** = **direct device-to-device over the LAN** (same WiFi). Clipboard content and files travel here, encrypted, peer-to-peer. **This data never passes through `server/` and never touches the database.**
+- **Data plane** = **direct device-to-device over the LAN** (same WiFi). Clipboard content and files travel here, encrypted, peer-to-peer. **This data never touches the database, and the server never sees it in the clear.**
 
-The single most important invariant: **clipboard/file payloads never transit the server or the DB.** If a change would route payload data through the control plane, it is wrong — reconsider it.
+The single most important invariant: **the server never reads a payload, and nothing stores one.** Since 2026-10-01 (the user's call, after college Wi-Fi isolated the devices) there is one exception to "never transits the server": the **relay** (`docs/protocol.md` §19). When the LAN can't link two devices, their *sealed* channel — end-to-end encrypted with keys only the two devices hold — runs over `/signal`, and the server forwards bytes it cannot decrypt, never parsing, storing or logging them. It is a fallback only (the LAN always wins), carries small things only (never files, mirroring or Sidecar), and is rate-limited. Anything else that would route payload data through the control plane — or let the server read one — is wrong; reconsider it.
 
 ## Engineering principles (non-negotiable)
 
 These are the house rules. Hold the line on them in every change and every review.
 
 1. **Latency is the top priority.** Event-driven only — never poll. No unnecessary network hops. The server stays off the clipboard/file hot path (that's LAN-direct). When you touch a sync path, think about the round trip; treat a latency regression as a bug, not a tradeoff.
-2. **The database (PostgreSQL) is the source of truth** — but only for identity and the device registry (trust is derived from it: same account = trusted; the manual link code is an in-memory fallback, never a table). It is **never** a store for clipboard or file payloads (those are ephemeral and LAN-only).
+2. **The database (PostgreSQL) is the source of truth** — but only for identity and the device registry. Trust starts from it — only the account's devices can link — but **each device also keeps its own allow-list** (`DeviceTrust`, `docs/protocol.md` §3): a device that joins later links only after the user taps Allow on an existing one, so a stolen password (or a compromised server) cannot quietly add a device. The manual link code is an in-memory fallback, never a table. It is **never** a store for clipboard or file payloads (those are ephemeral and LAN-only).
 3. **Never let bad data into the DB.** Integrity is enforced in three layers, all required: (a) the schema itself — NOT NULL, FK, UNIQUE, CHECK, via Drizzle; (b) Zod validation at every external boundary before anything reaches a query; (c) transactions around any multi-row write. Don't rely on application logic alone for an invariant a constraint can guarantee.
 4. **Minimize schema migrations.** Design the schema deliberately up front. Prefer additive, backward-compatible changes. Avoid destructive migrations; a rename/drop needs a real reason.
 5. **Durable async work goes through Inngest.** Anything that must not be silently lost (presence-timeout sweeps, email verification) is an Inngest function, not fire-and-forget.
@@ -102,7 +102,7 @@ v1 is being finished against a plan agreed on 2026-08-20 (days 1–2) and replan
 into ten days that end with v1 released and hosted. On 2026-09-26/27 the user widened v1 into a
 continuity suite (below) and set **free distribution only**; hosting, release and the soak slip —
 replan them with the user. Work lands **one feature branch per feature**, merged by PR when done.
-Still not built: cross-network relay, a full Messages pane (reading SMS threads and starting new
+The encrypted relay (`docs/protocol.md` §19) is built (2026-10-01/02). Still not built: a full Messages pane (reading SMS threads and starting new
 ones — replies to SMS already work through notifications). The Mac cannot unlock the phone —
 Android allows no app past its lock; unlocking the Mac only wakes the phone's screen.
 

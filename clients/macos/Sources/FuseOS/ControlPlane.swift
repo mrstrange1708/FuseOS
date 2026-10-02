@@ -95,10 +95,13 @@ struct ControlPlane {
 
     @MainActor
     private static func register(battery: Int?) async throws -> String {
+        // The Keychain read, off the main thread: macOS can stop it on a permission prompt,
+        // and the window froze behind it (Sentry APPLE-MACOS-1: register in SecItemCopyMatching).
+        let publicKey = try await Task.detached(priority: .userInitiated) { try DeviceKey.publicKeyBase64() }.value
         let body = DeviceRegisterRequest(
             name: SessionStore.shared.deviceName ?? SessionStore.detectedDeviceName(),
             platform: "macos",
-            publicKey: try SessionStore.shared.deviceKey,
+            publicKey: publicKey,
             battery: battery,
             installId: Self.installId,
         )

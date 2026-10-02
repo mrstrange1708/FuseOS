@@ -17,7 +17,7 @@ FuseOS establishes a secure, low-latency bridge between **Android** and **macOS*
 FuseOS is **hybrid**. Two planes, kept strictly separate:
 
 - **Control plane (cloud).** The `server/` (Node 22 + TypeScript + Fastify) plus PostgreSQL. Responsible for identity, the device registry, trust, presence, and **signaling** (helping two devices discover each other's LAN address). This is the **only** component that touches the database.
-- **Data plane (LAN).** A **direct, encrypted, device-to-device connection over the local network**. All clipboard content and file bytes travel here. **Payloads never pass through the server and are never stored in the database.**
+- **Data plane (LAN).** A **direct, encrypted, device-to-device connection over the local network**. All clipboard content and file bytes travel here. **Payloads are never stored in the database, and the server never reads one.** When the LAN can't link two devices, their sealed channel falls back to the relay over `/signal` — bytes the server forwards but cannot decrypt, and never files ([protocol.md §19](protocol.md)).
 
 The server's job on the data path is limited to *introductions*: it tells device A how to reach device B on the LAN, then gets out of the way.
 
@@ -88,7 +88,7 @@ appearing as a peer, and the data-plane connection is torn down.
 - **Discovery:** mDNS/Bonjour on the LAN (`_fuseos._tcp`), assisted by control-plane signaling that supplies the peer's current LAN address and presence.
 - **Connection:** persistent, bidirectional, **end-to-end encrypted** (TLS/DTLS) directly between the two devices.
 - **Lifecycle:** discover → authenticate peer (device keys) → establish secure channel → maintain with heartbeats → auto-reconnect on network change.
-- **Off-LAN:** out of scope for v1; a future encrypted relay fallback is noted in the roadmap, not built.
+- **Off-LAN:** the encrypted relay ([protocol.md §19](protocol.md), since 2026-10-01): the same sealed channel over `/signal`, for copies, notifications and commands; files and mirroring wait for a shared Wi-Fi.
 
 ## 7. Clipboard synchronization (core feature)
 

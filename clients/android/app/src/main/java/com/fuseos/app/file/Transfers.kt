@@ -43,7 +43,11 @@ class Transfers(
     /** Where a received file was saved, by transfer id: what tapping its row opens. */
     private val saved = mutableMapOf<String, Pair<Uri, String>>()
 
-    enum class SendResult { Started, NoPeer, Unreadable, TooLarge }
+    enum class SendResult { Started, NoPeer, NeedsWifi, Unreadable, TooLarge }
+
+    /** Linked, but only over the relay, which carries no files (§19). */
+    private fun relayOnly(): Boolean =
+        (transport.connectedPeers.value - transport.relayedPeers.value).isEmpty()
 
     /** Every transfer that reaches an end state, once — what the island announces. */
     var onFinished: ((TransferProgress) -> Unit)? = null
@@ -67,6 +71,7 @@ class Transfers(
      */
     fun send(uri: Uri): SendResult {
         if (transport.connectedPeers.value.isEmpty()) return SendResult.NoPeer
+        if (relayOnly()) return SendResult.NeedsWifi
         val resolver = context.contentResolver
         val (name, size) = describe(uri) ?: return SendResult.Unreadable
         if (size > FileTransfer.MAX_FILE_BYTES) return SendResult.TooLarge
@@ -107,6 +112,7 @@ class Transfers(
         val size = copy.length()
         val refusal = when {
             transport.connectedPeers.value.isEmpty() -> SendResult.NoPeer
+            relayOnly() -> SendResult.NeedsWifi
             size <= 0 -> SendResult.Unreadable
             size > FileTransfer.MAX_FILE_BYTES -> SendResult.TooLarge
             else -> null

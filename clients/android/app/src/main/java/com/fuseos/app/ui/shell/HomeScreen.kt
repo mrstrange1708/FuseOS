@@ -121,6 +121,7 @@ fun HomeScreen(
             streamToMac = transfers.firstOrNull { it.state == TransferProgress.State.Active }?.outgoing,
             onConnectNow = onConnectNow,
             paused = paused,
+            relayed = connect.peerId != null && connect.peerId in state.relayed,
         )
 
         Panel(title = "Files") {
@@ -234,20 +235,23 @@ private fun LinkHero(
     streamToMac: Boolean?,
     onConnectNow: () -> Unit,
     paused: Boolean,
+    relayed: Boolean = false,
 ) {
     val linked = stage == ConnectStage.Connected
     // Which end last caught something, so it can take the hit.
     var caught by remember { mutableStateOf<Pair<Boolean, Any>?>(null) }
     val ember = MaterialTheme.colorScheme.primary
     val pill = if (paused) "Disconnected" else when (stage) {
-        ConnectStage.Connected -> "Linked · direct"
+        ConnectStage.Connected -> if (relayed) "Linked · relay" else "Linked · direct"
         ConnectStage.Connecting -> "Connecting"
         ConnectStage.DifferentNetwork -> "Different networks"
         ConnectStage.PeerOffline -> "Mac offline"
         ConnectStage.Alone -> "Waiting for a Mac"
     }
     val detail = if (paused) "You disconnected. Nothing syncs until you connect again." else when (stage) {
-        ConnectStage.Connected -> "Clipboard, files and notifications move straight over your Wi-Fi."
+        ConnectStage.Connected ->
+            if (relayed) "This Wi-Fi won't link them directly, so copies and notifications go through FuseOS's relay — still encrypted end to end. Files wait for the same Wi-Fi."
+            else "Clipboard, files and notifications move straight over your Wi-Fi."
         ConnectStage.Connecting -> "Finding ${peerName ?: "your Mac"} on this Wi-Fi…"
         ConnectStage.DifferentNetwork -> "Put both devices on the same Wi-Fi."
         ConnectStage.PeerOffline -> "Open FuseOS on ${peerName ?: "your Mac"} to link it."

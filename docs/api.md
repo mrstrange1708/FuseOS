@@ -140,12 +140,13 @@ exists elsewhere is not the caller's business.
 
 ## WebSocket — `/signal`
 
-Authenticated by a **first `hello` frame carrying the session token**, checked against Better Auth's `session` table once per connection. Carries **presence and LAN-address signaling only — never payloads.** A socket that doesn't authenticate within 5s is closed.
+Authenticated by a **first `hello` frame carrying the session token**, checked against Better Auth's `session` table once per connection. Carries presence and LAN-address signaling, and — when the LAN can't link two devices — **the relay**: the sealed channel bytes of [protocol.md §19](protocol.md), which the server forwards but cannot read. A socket that doesn't authenticate within 5s is closed; no message may exceed 128 KB.
 
 Client → server:
 ```jsonc
 { "type": "hello", "token": "…", "deviceId": "uuid", "lanAddress": "192.168.1.20:47100", "battery": 90 }
 { "type": "heartbeat", "battery": 88, "lanAddress": "192.168.1.20:47100" }
+{ "type": "relay", "to": "uuid", "stream": "…", "data": "base64 ≤ 64 KB" }   // or "close": true
 ```
 Server → client:
 ```jsonc
@@ -154,6 +155,8 @@ Server → client:
 { "type": "peer-update",  "deviceId": "uuid", "battery": 42, "lanAddress": "192.168.1.20:47100" }
 { "type": "peer-update",  "deviceId": "uuid", "name": "nano" }             // a rename
 { "type": "peer-offline", "deviceId": "uuid" }
+{ "type": "relay",        "from": "uuid", "stream": "…", "data": "base64…" }  // or "close": true
+{ "type": "relay-error",  "to": "uuid", "stream": "…", "code": "peer_offline" | "rate_limited" }
 ```
 
 Semantics:
@@ -161,7 +164,7 @@ Semantics:
 - `battery` is operational presence metadata (never a user payload); `peer-update` propagates changes to trusted peers for the dashboard.
 - A peer card carries `publicKey` and `lanAddress` together because both are needed to open the LAN channel: the address says where to dial, the key says who must answer. `peer-update` fires when either `battery` or `lanAddress` changes — an address change matters because a peer that moved is unreachable until its peers hear about it. It also fires with just `name` when an online device re-registers (`POST /devices`), because both apps draw names from their `GET /devices` roster and refetch it when a peer's announced name differs; without it a rename showed on the other device only after a restart. Fields a `peer-update` omits keep their last value.
 - Heartbeats keep the socket alive; a missed threshold marks the device offline. An Inngest presence-timeout sweep self-heals stale state if a socket dies uncleanly.
-- The server does not proxy any clipboard/file data — after the introduction, devices talk directly (see [protocol.md](protocol.md)).
+- After the introduction, devices talk directly (see [protocol.md](protocol.md)). When they can't, `relay` forwards their channel — sealed bytes the server never parses, stores or logs — only between a device's live socket and an online device of the same account, at most 256 KB/s per device (2 MB burst). Files, mirroring and Sidecar never take the relay.
 
 ## Inngest functions (durable)
 
