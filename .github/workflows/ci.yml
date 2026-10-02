@@ -64,6 +64,8 @@ jobs:
   macos:
     name: macOS · build + unit tests
     runs-on: macos-15
+    # The suite runs in seconds; a hung test used to hold the job for GitHub's 6-hour limit.
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: clients/macos
@@ -82,6 +84,9 @@ jobs:
       - name: Build
         run: swift build
       - name: Unit tests
+        # Unbuffered, so a test that hangs shows its name instead of nothing at all.
+        env:
+          NSUnbufferedIO: 'YES'
         run: swift test
 
   server-image:
