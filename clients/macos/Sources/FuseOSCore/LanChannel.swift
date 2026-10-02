@@ -28,8 +28,11 @@ actor LanChannel {
 
     nonisolated let peerDeviceId: String
 
-    private let connection: NWConnection
+    private let connection: any Wire
     private let keys: LanCrypto.SessionKeys
+
+    /// Over the relay rather than the LAN: slower, and only for small things (§19).
+    nonisolated var viaRelay: Bool { connection.viaRelay }
 
     // Frame counters double as the GCM nonces, so they must move in lockstep with the
     // peer's. TCP guarantees the ordering that keeps them aligned.
@@ -39,7 +42,7 @@ actor LanChannel {
     /// The most recent write, so the next one can queue behind it. See `send`.
     private var lastWrite: Task<Void, Error>?
 
-    private init(connection: NWConnection, keys: LanCrypto.SessionKeys, peerDeviceId: String) {
+    private init(connection: any Wire, keys: LanCrypto.SessionKeys, peerDeviceId: String) {
         self.connection = connection
         self.keys = keys
         self.peerDeviceId = peerDeviceId
@@ -94,7 +97,7 @@ actor LanChannel {
     /// `trustedKeyFor` returns a peer's public key only if that peer is genuinely paired
     /// with this device — returning nil is what rejects a stranger.
     static func handshake(
-        connection: NWConnection,
+        connection: any Wire,
         selfDeviceId: String,
         privateKey: P256.KeyAgreement.PrivateKey,
         trustedKeyFor: @Sendable (String) -> P256.KeyAgreement.PublicKey?,

@@ -92,8 +92,8 @@ export function Privacy() {
             aria-labelledby="dg"
           >
             <title id="dg">
-              Both devices talk to the FuseOS server only to sign in and find each other. Clipboard
-              and file data goes directly between them, never up to the server.
+              Both devices talk to the FuseOS server to sign in and find each other. Clipboard and
+              file data goes directly between them, sealed with keys the server never has.
             </title>
             <defs>
               <linearGradient id="dataGrad" x1="0" x2="1">

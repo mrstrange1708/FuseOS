@@ -41,7 +41,7 @@ class DashboardViewModel(
         val presence: Map<String, PeerPresence> = emptyMap(),
         /** Peers reachable over a direct LAN channel, not merely online. */
         val connected: Set<String> = emptySet(),
-        /** Of [connected], those linked over the relay rather than directly (§18). */
+        /** Of [connected], those linked over the relay rather than directly (§19). */
         val relayed: Set<String> = emptySet(),
         val error: String? = null,
         val loading: Boolean = false,

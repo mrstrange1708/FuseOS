@@ -64,7 +64,7 @@ private data class RelayOut(
     val close: Boolean? = null,
 )
 
-/** A piece of a relayed channel from [from] (docs/protocol.md §18): sealed bytes, or the end. */
+/** A piece of a relayed channel from [from] (docs/protocol.md §19): sealed bytes, or the end. */
 class RelayIn(val from: String, val stream: String, val data: ByteArray?, val close: Boolean)
 
 @Serializable

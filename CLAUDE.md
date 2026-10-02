@@ -13,9 +13,9 @@ Read `docs/` before writing code. `docs/PRD.md` (what & why), `docs/HLD.md` (arc
 FuseOS is **hybrid**: a cloud **control plane** and a LAN **data plane**, and they must stay separate.
 
 - **Control plane** = the Node/TypeScript `server/` + PostgreSQL. It handles auth, the device registry, and WebSocket **signaling** (presence + exchanging LAN addresses). This is the only thing that talks to the database.
-- **Data plane** = **direct device-to-device over the LAN** (same WiFi). Clipboard content and files travel here, encrypted, peer-to-peer. **This data never passes through `server/` and never touches the database.**
+- **Data plane** = **direct device-to-device over the LAN** (same WiFi). Clipboard content and files travel here, encrypted, peer-to-peer. **This data never touches the database, and the server never sees it in the clear.**
 
-The single most important invariant: **clipboard/file payloads never transit the server or the DB.** If a change would route payload data through the control plane, it is wrong — reconsider it.
+The single most important invariant: **the server never reads a payload, and nothing stores one.** Since 2026-10-01 (the user's call, after college Wi-Fi isolated the devices) there is one exception to "never transits the server": the **relay** (`docs/protocol.md` §19). When the LAN can't link two devices, their *sealed* channel — end-to-end encrypted with keys only the two devices hold — runs over `/signal`, and the server forwards bytes it cannot decrypt, never parsing, storing or logging them. It is a fallback only (the LAN always wins), carries small things only (never files, mirroring or Sidecar), and is rate-limited. Anything else that would route payload data through the control plane — or let the server read one — is wrong; reconsider it.
 
 ## Engineering principles (non-negotiable)
 
@@ -102,7 +102,7 @@ v1 is being finished against a plan agreed on 2026-08-20 (days 1–2) and replan
 into ten days that end with v1 released and hosted. On 2026-09-26/27 the user widened v1 into a
 continuity suite (below) and set **free distribution only**; hosting, release and the soak slip —
 replan them with the user. Work lands **one feature branch per feature**, merged by PR when done.
-Still not built: cross-network relay, a full Messages pane (reading SMS threads and starting new
+The encrypted relay (`docs/protocol.md` §19) is built (2026-10-01/02). Still not built: a full Messages pane (reading SMS threads and starting new
 ones — replies to SMS already work through notifications). The Mac cannot unlock the phone —
 Android allows no app past its lock; unlocking the Mac only wakes the phone's screen.
 

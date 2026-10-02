@@ -36,8 +36,8 @@ export default function TermsPage() {
 
         <h2>Your content</h2>
         <p>
-          What you copy and send stays yours. It travels between your own devices and never reaches
-          our servers (see the <a href="/privacy">privacy policy</a>).
+          What you copy and send stays yours. It travels between your own devices, sealed with keys
+          only they hold, and we can never read it (see the <a href="/privacy">privacy policy</a>).
         </p>
 
         <h2>Acceptable use</h2>

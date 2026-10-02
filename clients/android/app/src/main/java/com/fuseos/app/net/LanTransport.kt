@@ -118,7 +118,7 @@ class LanTransport(
 
     @Volatile private var server: ServerSocket? = null
 
-    /** The relay through `/signal`, for when the LAN can't link two devices (§18). */
+    /** The relay through `/signal`, for when the LAN can't link two devices (§19). */
     @Volatile var relay: com.fuseos.app.data.SignalClient? = null
     private val relayWires = ConcurrentHashMap<String, RelayWire>()
     private val relayAttempts = ConcurrentHashMap<String, Job>()
@@ -458,7 +458,7 @@ class LanTransport(
         }
     }
 
-    // MARK: - The relay (§18)
+    // MARK: - The relay (§19)
 
     /** The dialer's side: one relayed channel to [peerId], run until it ends. */
     private suspend fun openRelay(peerId: String, selfId: String) {

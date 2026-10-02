@@ -11,6 +11,10 @@ final class DashboardViewModel: ObservableObject {
     @Published var presence: [String: PeerPresence] = [:]
     /// Peers reachable over a direct LAN channel, not merely online.
     @Published var connected: Set<String> = []
+    /// Of `connected`, those linked over the relay rather than directly (§19).
+    @Published var relayed: Set<String> = []
+    /// Linked, but only over the relay — which carries copies and notifications, not files.
+    var relayOnly: Bool { !connected.isEmpty && connected.isSubset(of: relayed) }
     /// The user's Disconnect, kept across launches until they choose Connect.
     @Published private(set) var paused = UserDefaults.standard.bool(forKey: DashboardViewModel.pausedKey)
     static let pausedKey = "fuse.linkPaused"
@@ -134,6 +138,12 @@ final class DashboardViewModel: ObservableObject {
         }
         signal.lanAddressProvider = { [weak self] in self?.transport.lanAddress() }
         transport.isTrusted = { [weak self] id, key in self?.trust.check(deviceId: id, key: key) == .trusted }
+        // When the Wi-Fi won't link the two, the channel runs over /signal (§19).
+        transport.relay = signal
+        signal.onRelay = { [weak self] from, stream, data, close in
+            self?.transport.receiveRelay(from: from, stream: stream, data: data, close: close)
+        }
+        transport.onRelayedPeersChanged = { [weak self] peers in self?.relayed = peers }
         signal.onPresenceChanged = { [weak self] presence in
             guard let self else { return }
             self.presence = presence
@@ -642,6 +652,11 @@ final class DashboardViewModel: ObservableObject {
         guard !connected.isEmpty else {
             fileNotice = "No device connected. Open FuseOS on your phone."
             notLinked("Nothing was sent. Open FuseOS on your phone, on the same Wi-Fi.")
+            return
+        }
+        guard !relayOnly else {
+            fileNotice = "Files need both devices on the same Wi-Fi."
+            notLinked("Linked over the relay, which carries copies and notifications, not files. Put both on the same Wi-Fi.")
             return
         }
         fileNotice = nil

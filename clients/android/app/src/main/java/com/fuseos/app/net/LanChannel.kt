@@ -31,7 +31,7 @@ class LanChannel private constructor(
     val peerDeviceId: String,
 ) : Closeable {
 
-    /** Over the relay rather than the LAN: slower, and only for small things (§18). */
+    /** Over the relay rather than the LAN: slower, and only for small things (§19). */
     val viaRelay: Boolean get() = wire.viaRelay
 
     private val input = DataInputStream(wire.input.buffered())

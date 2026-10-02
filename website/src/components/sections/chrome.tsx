@@ -4,7 +4,7 @@ import { CONTACT, GITHUB } from '@/lib/site';
 const FAQ = [
   {
     q: 'Does my clipboard go to the cloud?',
-    a: "No. Clips and files go straight from one device to the other over your Wi-Fi, encrypted with AES-256-GCM using keys that only your two devices hold. The server never receives them, so there's nothing of yours for it to store.",
+    a: "No. Clips and files go straight from one device to the other over your Wi-Fi, encrypted with AES-256-GCM using keys that only your two devices hold. If your Wi-Fi blocks devices from reaching each other, copies and notifications pass through our server still sealed with those keys — it can't open them and stores nothing. Files never do.",
   },
   {
     q: 'Why is sending from Android a tap and not automatic?',

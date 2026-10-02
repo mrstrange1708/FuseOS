@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit
 /**
  * What a [LanChannel] runs over: the bytes of the handshake and the sealed frames. A LAN
  * socket, or the relay through `/signal` — the channel, its keys and its checks are the same
- * either way, so the relay is exactly as private as the LAN (docs/protocol.md §18).
+ * either way, so the relay is exactly as private as the LAN (docs/protocol.md §19).
  */
 interface Wire {
     val input: InputStream

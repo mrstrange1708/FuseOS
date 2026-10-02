@@ -3,7 +3,7 @@ package com.fuseos.app.net
 import com.fuseos.proto.Envelope
 
 /**
- * What a relayed channel carries (docs/protocol.md §18): copies, notifications, commands and the
+ * What a relayed channel carries (docs/protocol.md §19): copies, notifications, commands and the
  * channel's own heartbeats. Not files, mirroring, Sidecar or the history catch-up — the relay
  * is a fallback through a small server, rate-limited at 256 KB/s, and those want the LAN.
  */

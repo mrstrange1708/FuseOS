@@ -45,7 +45,7 @@ class Transfers(
 
     enum class SendResult { Started, NoPeer, NeedsWifi, Unreadable, TooLarge }
 
-    /** Linked, but only over the relay, which carries no files (§18). */
+    /** Linked, but only over the relay, which carries no files (§19). */
     private fun relayOnly(): Boolean =
         (transport.connectedPeers.value - transport.relayedPeers.value).isEmpty()
 

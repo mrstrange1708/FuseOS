@@ -5,7 +5,7 @@ import { CONTACT } from '@/lib/site';
 export const metadata: Metadata = {
   title: 'Privacy policy · FuseOS',
   description:
-    'What FuseOS keeps, what it never sees, and who helps run it. Your clipboard, files and notifications never reach our servers.',
+    'What FuseOS keeps, what it never sees, and who helps run it. We can never read your clipboard, files or notifications.',
 };
 
 export default function PrivacyPage() {
@@ -13,7 +13,7 @@ export default function PrivacyPage() {
     <PageShell
       eyebrow="Privacy policy"
       title="What we keep. What we never see."
-      intro="Last updated 30 September 2026."
+      intro="Last updated 2 October 2026."
     >
       <Prose>
         <p>
@@ -26,11 +26,13 @@ export default function PrivacyPage() {
         <ul>
           <li>
             <b>
-              What you copy, the files you send, your notifications, your screen and your calls
-              never reach our servers.
+              We can never read what you copy, the files you send, your notifications, your screen
+              or your calls.
             </b>{' '}
             They travel directly between your own devices over your Wi-Fi, encrypted (AES-256-GCM)
-            with keys only your devices hold.
+            with keys only your devices hold. When your Wi-Fi won&apos;t let your devices reach each
+            other, copies and notifications pass through our server still sealed with those keys —
+            it can&apos;t open them. Files and your screen never do.
           </li>
           <li>
             Our server knows who you are (your account) and which devices are yours, so they can
@@ -65,13 +67,23 @@ export default function PrivacyPage() {
           </li>
         </ul>
 
-        <h2>What never leaves your devices</h2>
+        <h2>What we can never read</h2>
         <p>
           Your clipboard (text and images), files, notifications and their replies, your
           phone&apos;s screen, calls, media controls and anything you type through FuseOS. These go
           straight from one of your devices to another over your Wi-Fi. We have no copy, and we
           couldn&apos;t read one: the keys stay on your devices. Clipboard history is kept on your
           devices only.
+        </p>
+        <h3>The relay</h3>
+        <p>
+          Some networks — college and office Wi-Fi especially — stop devices from reaching each
+          other. Then your copies, notifications, replies, calls and media controls go through our
+          server instead, still sealed with your devices&apos; keys. The server passes the sealed
+          bytes on and forgets them: it can&apos;t open them, never stores them, and never logs
+          them. It can see only that two of your devices are exchanging something, how much, and
+          when. Files, your phone&apos;s screen and your clipboard history never use the relay; they
+          wait until both devices share a Wi-Fi.
         </p>
 
         <h2>Usage statistics</h2>

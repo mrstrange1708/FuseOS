@@ -6,7 +6,7 @@ import { z } from 'zod';
  * What crosses is the same channel the LAN carries — the clear handshake, then AES-GCM frames
  * under keys only the two devices hold — cut into messages. The server forwards opaque bytes it
  * cannot read, never parses or logs them, and only between devices of one account
- * (docs/protocol.md §18).
+ * (docs/protocol.md §19).
  */
 
 /** One message's bytes before base64: a sealed frame, or a piece of one. */
