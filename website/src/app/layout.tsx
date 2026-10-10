@@ -20,10 +20,29 @@ const mono = JetBrains_Mono({
   subsets: ['latin'],
 });
 
+const description =
+  'Copy on your Android phone, paste on your Mac. Files, notifications, calls and your screen, over your Wi-Fi — end-to-end encrypted, so not even our server can read them.';
+
 export const metadata: Metadata = {
+  metadataBase: new URL('https://fuseos.theshaik.dev'),
   title: 'FuseOS — your Android phone and your Mac, as one',
-  description:
-    'Copy on your Android phone, paste on your Mac. Files and the share sheet, both ways, straight over your Wi-Fi. Nothing you copy touches a server.',
+  description,
+  // The preview a link shows in WhatsApp, X, LinkedIn and Slack.
+  openGraph: {
+    type: 'website',
+    siteName: 'FuseOS',
+    title: 'FuseOS — your Android phone and your Mac, as one',
+    description,
+    images: [
+      {
+        url: '/fuseos-film.jpg',
+        width: 1600,
+        height: 900,
+        alt: 'FuseOS on a Mac and an Android phone',
+      },
+    ],
+  },
+  twitter: { card: 'summary_large_image' },
 };
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {

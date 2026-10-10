@@ -114,7 +114,7 @@ export function Footer() {
           </nav>
         ))}
       </div>
-      <p className="mx-auto max-w-6xl px-4 pb-6 text-xs text-muted/70 sm:px-6">
+      <p className="mx-auto max-w-6xl px-4 pb-6 text-xs text-muted sm:px-6">
         © 2026 Shaik Junaid Sami. All rights reserved.
       </p>
       <p

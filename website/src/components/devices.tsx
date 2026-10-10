@@ -112,7 +112,7 @@ export function MacAppScreen() {
             Linked · direct
           </span>
           <p className="hero-grad mt-0.5 font-display text-[12px] font-bold">Pixel 8</p>
-          <p className="font-mono text-[6px] text-white/45">82% · 38 ms · p95 64 ms</p>
+          <p className="font-mono text-[6px] text-white/60">82% · 38 ms · p95 64 ms</p>
         </div>
       </div>
 
@@ -128,7 +128,7 @@ export function MacAppScreen() {
               <i className="h-3.5 w-3.5 shrink-0 rounded bg-ember/15" />
               <div className="min-w-0">
                 <p className="truncate text-[7px]">{clip}</p>
-                <p className="font-mono text-[5.5px] text-white/45">
+                <p className="font-mono text-[5.5px] text-white/60">
                   {i === 1 ? 'Copied here' : 'From Pixel 8'}
                 </p>
               </div>
@@ -140,7 +140,7 @@ export function MacAppScreen() {
             <Photo className="h-5 w-5 shrink-0 rounded" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-[7px] font-semibold">Midnight City</p>
-              <p className="font-mono text-[5.5px] text-white/45">M83</p>
+              <p className="font-mono text-[5.5px] text-white/60">M83</p>
             </div>
             <i className="h-3.5 w-3.5 rounded-full bg-ember" />
           </div>

@@ -71,7 +71,7 @@ export function ReleaseList() {
     return (
       <p className="text-muted">
         Couldn&apos;t load the list just now. Every version is also on{' '}
-        <a className="text-ember underline-offset-4 hover:underline" href={`${GITHUB}/releases`}>
+        <a className="text-ember underline underline-offset-4" href={`${GITHUB}/releases`}>
           GitHub
         </a>
         .
@@ -100,7 +100,7 @@ export function ReleaseList() {
           <Files release={latest} big />
         </div>
         <a
-          className="mt-5 inline-block text-sm text-ember underline-offset-4 hover:underline"
+          className="mt-5 inline-block text-sm text-ember underline underline-offset-4"
           href={latest.html_url}
         >
           What&apos;s new in {latest.tag_name}
