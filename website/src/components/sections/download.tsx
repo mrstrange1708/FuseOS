@@ -45,7 +45,7 @@ const PLATFORMS = [
         Says <b>App blocked to protect your device</b>? That&apos;s Play Protect. Turn off{' '}
         <b>Scan apps with Play Protect</b> (Play Store → profile → Play Protect → ⚙), install, then
         turn it back on.{' '}
-        <a className="text-ember underline-offset-4 hover:underline" href="/help#play-protect">
+        <a className="text-ember underline underline-offset-4" href="/help#play-protect">
           Why
         </a>
       </>,
@@ -121,11 +121,11 @@ export function Download() {
         <p className="mt-10 rounded-2xl border border-dashed border-white/15 px-5 py-4 text-[15px] text-muted">
           <b className="text-ink">This is an early preview.</b> Both devices need to be on the same
           Wi-Fi. These buttons always get the latest version;{' '}
-          <a className="text-ember underline-offset-4 hover:underline" href="/releases">
+          <a className="text-ember underline underline-offset-4" href="/releases">
             every version
           </a>{' '}
           is listed too. Found something broken?{' '}
-          <a className="text-ember underline-offset-4 hover:underline" href="/report">
+          <a className="text-ember underline underline-offset-4" href="/report">
             Report it
           </a>
           .

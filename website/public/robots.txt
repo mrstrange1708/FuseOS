@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /reset
+Disallow: /verified
+
+Sitemap: https://fuseos.theshaik.dev/sitemap.xml
