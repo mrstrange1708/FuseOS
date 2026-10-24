@@ -62,10 +62,12 @@ struct MenuBarContent: View {
                 deviceCard
                 actionsRow
             }
+            // Home's order, so the glance and the window read as one app: what's playing,
+            // what was copied, what the phone is doing, what is moving.
             if let track = viewModel.nowPlaying { nowPlayingCard(track) }
+            clipsCard
             if !viewModel.liveActivities.isEmpty { liveCard }
             if !activeTransfers.isEmpty { transfersCard }
-            clipsCard
             footer
         }
         .padding(12)
@@ -195,22 +197,8 @@ struct MenuBarContent: View {
     }
 
     private func quickAction(_ title: String, _ symbol: String, run: @escaping () -> Void) -> some View {
-        Button(action: run) {
-            VStack(spacing: 5) {
-                Image(systemName: symbol)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(FuseColor.accent)
-                Text(title)
-                    .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(FuseColor.ink)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 9)
-            .background(FuseColor.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(FuseColor.outline.opacity(0.5), lineWidth: 1))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.pressable)
+        Button(action: run) { ActionTile(title: title, symbol: symbol, size: 14) }
+            .buttonStyle(.pressable)
     }
 
     private func nowPlayingCard(_ track: NowPlaying) -> some View {

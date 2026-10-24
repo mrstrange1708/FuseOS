@@ -199,106 +199,50 @@ private struct ShellBackground: View {
 
 // MARK: - Panes
 
-/// Home: the link, then two columns — what was copied, and what is moving.
+/// Home: the link card, then three columns that never move — what was copied, what the phone
+/// said, what you can do with it. Linking changes what is in the boxes, never which boxes
+/// exist or where they sit.
 private struct HomePane: View {
     @ObservedObject var viewModel: DashboardViewModel
     let onSeeAll: () -> Void
     let onMirror: () -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 18) {
-                LinkHero(viewModel: viewModel, onMirror: onMirror)
-                // Three columns when the window is wide, two when it is not, one when it is
-                // narrow — the window's width goes to content instead of margins.
-                ViewThatFits(in: .horizontal) {
+        GeometryReader { geo in
+            // Wide: the columns fill the window to one bottom edge and scroll inside. Narrow:
+            // the same three, in the same order, stacked in one scroll.
+            if geo.size.width >= 880 {
+                VStack(spacing: 18) {
+                    LinkHero(viewModel: viewModel, onMirror: onMirror)
                     HStack(alignment: .top, spacing: 18) {
-                        // An ideal width, not the text's: ViewThatFits measures ideal sizes,
-                        // and one long copied line (a code snippet) otherwise "doesn't fit"
-                        // and drops the whole Home to a single column.
-                        clipboard(rows: 12).frame(minWidth: 360, idealWidth: 460, maxWidth: .infinity)
-                        VStack(spacing: 18) {
-                            nowPlaying
-                            notificationsPanel
-                        }
-                        .frame(width: 380)
-                        files.frame(width: 340)
-                    }
-                    HStack(alignment: .top, spacing: 18) {
-                        VStack(spacing: 18) {
-                            nowPlaying
-                            clipboard(rows: 6)
-                            notificationsPanel
-                        }
-                        .frame(minWidth: 420, idealWidth: 480, maxWidth: .infinity)
-                        files.frame(width: 340)
-                    }
-                    VStack(spacing: 18) {
-                        nowPlaying
-                        clipboard(rows: 6)
-                        notificationsPanel
-                        files
+                        clipboard(fill: true)
+                        fromPhone(fill: true)
+                        phoneAndFiles(fill: true)
                     }
                 }
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 8)
-            .padding(.bottom, 28)
-            .frame(maxWidth: 1600)
-            .frame(maxWidth: .infinity)
-        }
-    }
-
-    /// The phone's latest notifications — the island's history, for the ones missed.
-    @ViewBuilder private var notificationsPanel: some View {
-        Panel(title: "From your phone") {
-            if viewModel.recentNotifications.isEmpty {
-                // Nothing since this Mac started listening — sync may well be on already, so
-                // say both things rather than implying it is off.
-                EmptyNote(symbol: "bell.badge", text: viewModel.connected.isEmpty
-                    ? "Your phone's notifications land here while it's linked."
-                    : "Nothing new yet. If sync is on in FuseOS on \(viewModel.peerName ?? "your phone") (You → Notification sync), the next one lands here.")
+                .padding(.horizontal, 24)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
+                .frame(maxWidth: 1600)
+                .frame(maxWidth: .infinity)
             } else {
-                VStack(spacing: 8) {
-                    ForEach(viewModel.recentNotifications) { n in
-                        Button { viewModel.openNotificationOnPhone(n.id) } label: {
-                        HStack(alignment: .top, spacing: 10) {
-                            if let data = n.iconPNG, let icon = NSImage(data: data) {
-                                Image(nsImage: icon).resizable().frame(width: 30, height: 30)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            } else {
-                                IconTile(symbol: "app.badge")
-                            }
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(n.title.isEmpty ? n.appName : n.title)
-                                    .font(.system(size: 13, weight: .medium)).foregroundStyle(FuseColor.ink).lineLimit(1)
-                                Text(n.text).font(.system(size: 12)).foregroundStyle(FuseColor.muted).lineLimit(2)
-                            }
-                            Spacer(minLength: 6)
-                            Text(n.postedAt, style: .time).font(.system(size: 11)).foregroundStyle(FuseColor.muted)
-                        }
-                        .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.pressable)
-                        .help("Open on \(viewModel.peerName ?? "your phone")")
+                ScrollView {
+                    VStack(spacing: 18) {
+                        LinkHero(viewModel: viewModel, onMirror: onMirror)
+                        clipboard(fill: false)
+                        fromPhone(fill: false)
+                        phoneAndFiles(fill: false)
                     }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
+                    .padding(.bottom, 24)
                 }
             }
         }
     }
 
-    @ViewBuilder private var nowPlaying: some View {
-        if let track = viewModel.nowPlaying {
-            NowPlayingPanel(track: track, remote: viewModel.media)
-        }
-        if !viewModel.liveActivities.isEmpty {
-            LiveActivitiesPanel(activities: viewModel.liveActivities.values.sorted { $0.postedAt > $1.postedAt })
-        }
-    }
-
-    /// Wide windows get a long list — the column is there to fill, not to leave empty.
-    private func clipboard(rows: Int) -> some View {
-        Panel(title: "Clipboard", accessory: {
+    private func clipboard(fill: Bool) -> some View {
+        Panel(title: "Clipboard", fill: fill, accessory: {
             Button("See all", action: onSeeAll)
                 .buttonStyle(.pressable)
                 .font(.system(size: 12, weight: .medium))
@@ -307,8 +251,8 @@ private struct HomePane: View {
             if viewModel.history.isEmpty {
                 EmptyNote(symbol: "doc.on.clipboard", text: "Copy something on either device and it shows up here.")
             } else {
-                VStack(spacing: 2) {
-                    ForEach(viewModel.history.prefix(rows)) { entry in
+                LazyVStack(spacing: 2) {
+                    ForEach(viewModel.history.prefix(fill ? 50 : 6)) { entry in
                         ClipRow(entry: entry, peerName: viewModel.peerName, onSend: { viewModel.sendToPhone(entry) }) {
                             viewModel.copyToClipboard(entry)
                         }
@@ -318,18 +262,58 @@ private struct HomePane: View {
         }
     }
 
-    private var files: some View {
-        VStack(spacing: 18) {
-            PhoneActionsPanel(viewModel: viewModel, onMirror: onMirror)
-            filesPanel
+    /// What the phone is doing and saying: live activities first (they change), then the
+    /// notifications the island showed, for the ones missed.
+    private func fromPhone(fill: Bool) -> some View {
+        let activities = viewModel.liveActivities.values.sorted { $0.postedAt > $1.postedAt }
+        return Panel(title: "From your phone", fill: fill) {
+            if activities.isEmpty && viewModel.recentNotifications.isEmpty {
+                // Nothing since this Mac started listening — sync may well be on already, so
+                // say both things rather than implying it is off.
+                EmptyNote(symbol: "bell.badge", text: viewModel.connected.isEmpty
+                    ? "Your phone's notifications land here while it's linked."
+                    : "Nothing new yet. If sync is on in FuseOS on \(viewModel.peerName ?? "your phone") (You → Notification sync), the next one lands here.")
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(activities) { LiveActivityRow(activity: $0) }
+                    if !activities.isEmpty && !viewModel.recentNotifications.isEmpty {
+                        Divider().opacity(0.5)
+                    }
+                    ForEach(viewModel.recentNotifications) { n in
+                        Button { viewModel.openNotificationOnPhone(n.id) } label: {
+                            HStack(alignment: .top, spacing: 10) {
+                                if let data = n.iconPNG, let icon = NSImage(data: data) {
+                                    Image(nsImage: icon).resizable().frame(width: 30, height: 30)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                } else {
+                                    IconTile(symbol: "app.badge")
+                                }
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(n.title.isEmpty ? n.appName : n.title)
+                                        .font(.system(size: 13, weight: .medium)).foregroundStyle(FuseColor.ink).lineLimit(1)
+                                    Text(n.text).font(.system(size: 12)).foregroundStyle(FuseColor.muted).lineLimit(2)
+                                }
+                                Spacer(minLength: 6)
+                                Text(n.postedAt, style: .time).font(.system(size: 11)).foregroundStyle(FuseColor.muted)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.pressable(scale: 0.99))
+                        .help("Open on \(viewModel.peerName ?? "your phone")")
+                    }
+                }
+            }
         }
     }
 
-    private var filesPanel: some View {
-        Panel(title: "Files") {
-            VStack(spacing: 10) {
+    /// The things to do with the phone, then files. The actions stay in place unlinked —
+    /// greyed, not gone — so nothing shifts when the phone arrives.
+    private func phoneAndFiles(fill: Bool) -> some View {
+        Panel(title: "Phone & files", fill: fill) {
+            VStack(spacing: 12) {
+                PhoneActions(viewModel: viewModel, onMirror: onMirror)
                 FileDropZone(viewModel: viewModel)
-                ForEach(viewModel.transfers.prefix(4)) { transfer in
+                ForEach(viewModel.transfers.prefix(6)) { transfer in
                     TransferRow(transfer: transfer, peerName: viewModel.peerName, viewModel: viewModel)
                 }
             }
@@ -337,184 +321,141 @@ private struct HomePane: View {
     }
 }
 
-/// What the phone is playing: artwork, track, a bar that advances by itself, and the
-/// three controls anyone reaches for.
-private struct NowPlayingPanel: View {
+/// What the phone is playing, small enough to live at the end of the link card: artwork,
+/// track, play/pause and next. The link card keeps its height either way.
+private struct NowPlayingCompact: View {
     let track: NowPlaying
     let remote: MediaRemote
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 10) {
             Group {
                 if let data = track.artwork, let image = NSImage(data: data) {
                     Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
                 } else {
                     Image(systemName: "music.note")
-                        .font(.system(size: 24, weight: .light))
+                        .font(.system(size: 16, weight: .light))
                         .foregroundStyle(FuseColor.accent)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(FuseColor.accent.opacity(0.12))
                 }
             }
-            .frame(width: 64, height: 64)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 4) {
+            .frame(width: 42, height: 42)
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
                 Text(track.title)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(FuseColor.ink)
                     .lineLimit(1)
                 Text([track.artist, track.appName].filter { !$0.isEmpty }.joined(separator: " · "))
-                    .font(.system(size: 12))
+                    .font(.system(size: 11))
                     .foregroundStyle(FuseColor.muted)
                     .lineLimit(1)
-                if track.durationMs > 0 {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        let position = track.position(at: context.date)
-                        HStack(spacing: 8) {
-                            Text(Self.clock(position)).monospacedDigit()
-                            ProgressBar(fraction: Double(position) / Double(track.durationMs))
-                            Text(Self.clock(track.durationMs)).monospacedDigit()
-                        }
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(FuseColor.muted)
-                    }
-                    .padding(.top, 2)
-                }
             }
-            Spacer(minLength: 8)
-            HStack(spacing: 6) {
-                control("backward.fill", action: remote.previous)
-                control(track.playing ? "pause.fill" : "play.fill", large: true, action: remote.playPause)
-                control("forward.fill", action: remote.next)
-            }
+            .frame(maxWidth: 150, alignment: .leading)
+            control(track.playing ? "pause.fill" : "play.fill", large: true, action: remote.playPause)
+            control("forward.fill", action: remote.next)
         }
-        .padding(16)
-        .panelSurface(radius: 18)
+        .padding(8)
+        .padding(.trailing, 2)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(FuseColor.surfaceAlt))
     }
 
     private func control(_ symbol: String, large: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: large ? 15 : 12, weight: .semibold))
+                .font(.system(size: large ? 13 : 11, weight: .semibold))
                 .foregroundStyle(large ? Color.white : FuseColor.ink)
-                .frame(width: large ? 40 : 32, height: large ? 40 : 32)
-                .background(Circle().fill(large ? FuseColor.accent : FuseColor.surfaceAlt))
+                .frame(width: large ? 32 : 26, height: large ? 32 : 26)
+                .background(Circle().fill(large ? FuseColor.accent : Color.clear))
         }
         .buttonStyle(.pressable)
     }
-
-    private static func clock(_ ms: Int64) -> String {
-        let seconds = Int(ms / 1000)
-        return String(format: "%d:%02d", seconds / 60, seconds % 60)
-    }
 }
 
-/// The phone's live activities — a timer, a route, a delivery, a download — each updating
-/// in place, with its progress when it has one.
-private struct LiveActivitiesPanel: View {
-    let activities: [PhoneNotification]
+/// One live activity — a timer, a route, a delivery — updating in place, with its progress
+/// when it has one.
+private struct LiveActivityRow: View {
+    let activity: PhoneNotification
 
     var body: some View {
-        Panel(title: "Live on your phone") {
-            VStack(spacing: 10) {
-                ForEach(activities) { activity in
-                    HStack(spacing: 12) {
-                        if let data = activity.iconPNG, let icon = NSImage(data: data) {
-                            Image(nsImage: icon).resizable().frame(width: 30, height: 30)
-                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        } else {
-                            IconTile(symbol: "dot.radiowaves.left.and.right")
-                        }
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(activity.title.isEmpty ? activity.appName : activity.title)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(FuseColor.ink)
-                                .lineLimit(1)
-                            if !activity.text.isEmpty {
-                                Text(activity.text)
-                                    .font(.system(size: 11.5))
-                                    .foregroundStyle(FuseColor.muted)
-                                    .lineLimit(1)
-                            }
-                            if let progress = activity.progress {
-                                ProgressBar(fraction: progress)
-                            } else if activity.indeterminate {
-                                ProgressView().progressViewStyle(.linear).tint(FuseColor.accent)
-                            }
-                        }
-                        Spacer(minLength: 0)
-                        Text(activity.appName)
-                            .font(.system(size: 11))
-                            .foregroundStyle(FuseColor.muted)
-                            .lineLimit(1)
-                    }
+        HStack(spacing: 12) {
+            if let data = activity.iconPNG, let icon = NSImage(data: data) {
+                Image(nsImage: icon).resizable().frame(width: 30, height: 30)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            } else {
+                IconTile(symbol: "dot.radiowaves.left.and.right")
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(activity.title.isEmpty ? activity.appName : activity.title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(FuseColor.ink)
+                    .lineLimit(1)
+                if !activity.text.isEmpty {
+                    Text(activity.text)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(FuseColor.muted)
+                        .lineLimit(1)
+                }
+                if let progress = activity.progress {
+                    ProgressBar(fraction: progress)
+                } else if activity.indeterminate {
+                    ProgressView().progressViewStyle(.linear).tint(FuseColor.accent)
                 }
             }
+            Spacer(minLength: 0)
+            Text(activity.appName)
+                .font(.system(size: 11))
+                .foregroundStyle(FuseColor.muted)
+                .lineLimit(1)
         }
     }
 }
 
-/// One-click things to do with the phone: find it, hand it a link, see
-/// its screen. Each is a message on the LAN channel; none waits on the server.
-private struct PhoneActionsPanel: View {
+/// One-click things to do with the phone: find it, hand it a link, see its screen. Each is
+/// a message on the LAN channel; none waits on the server.
+private struct PhoneActions: View {
     @ObservedObject var viewModel: DashboardViewModel
     let onMirror: () -> Void
     @State private var ringing = false
 
     var body: some View {
         let linked = !viewModel.connected.isEmpty
-        Panel(title: "Your phone") {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-                action(ringing ? "Stop ringing" : "Ring", symbol: ringing ? "speaker.slash.fill" : "bell.and.waves.left.and.right.fill") {
-                    if ringing {
-                        viewModel.phone.stopRinging()
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+            Button {
+                if ringing {
+                    viewModel.phone.stopRinging()
+                    ringing = false
+                } else {
+                    viewModel.phone.ring()
+                    ringing = true
+                    // The phone stops by itself after 30 s; so does this button.
+                    Task {
+                        try? await Task.sleep(nanoseconds: 30_000_000_000)
                         ringing = false
-                    } else {
-                        viewModel.phone.ring()
-                        ringing = true
-                        // The phone stops by itself after 30 s; so does this button.
-                        Task {
-                            try? await Task.sleep(nanoseconds: 30_000_000_000)
-                            ringing = false
-                        }
                     }
                 }
-                action("Open link", symbol: "safari.fill") {
-                    if let url = viewModel.clipboardLink { viewModel.openOnPhone(url) }
-                }
-                .disabled(viewModel.clipboardLink == nil)
-                .help("Opens the link on this Mac's clipboard in your phone's browser")
-                action("Mirror", symbol: "rectangle.on.rectangle", run: onMirror)
+            } label: {
+                ActionTile(title: ringing ? "Stop ringing" : "Ring",
+                           symbol: ringing ? "speaker.slash.fill" : "bell.and.waves.left.and.right.fill")
             }
-            .disabled(!linked)
-        }
-    }
-
-    private func action(_ title: String, symbol: String, run: @escaping () -> Void) -> some View {
-        Button(action: run) {
-            VStack(spacing: 6) {
-                Image(systemName: symbol)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(FuseColor.accent)
-                Text(title)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(FuseColor.ink)
-                    .lineLimit(1)
+            Button {
+                if let url = viewModel.clipboardLink { viewModel.openOnPhone(url) }
+            } label: {
+                ActionTile(title: "Open link", symbol: "safari.fill")
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(FuseColor.surfaceAlt))
-            .contentShape(Rectangle())
+            .disabled(viewModel.clipboardLink == nil)
+            .help("Opens the link on this Mac's clipboard in your phone's browser")
+            Button(action: onMirror) { ActionTile(title: "Mirror", symbol: "rectangle.on.rectangle") }
         }
         .buttonStyle(.pressable)
+        .disabled(!linked)
     }
 }
 
 /// The top of Home, and the one showy thing in the app: it answers the question people open
-/// it to ask. With no phone linked it is this Mac alone, breathing, with Connect; searching,
-/// rings ripple out from it; linked, the phone arrives under its real name — battery,
-/// charging — joined by a live wave that carries a packet each time something crosses.
+/// it to ask. One fixed shape in every state — the Mac and the phone joined by the link, the
+/// words, and the one thing to do — so nothing below it moves when the phone arrives.
 private struct LinkHero: View {
     @ObservedObject var viewModel: DashboardViewModel
     let onMirror: () -> Void
@@ -525,18 +466,13 @@ private struct LinkHero: View {
     var body: some View {
         let peer = viewModel.peers.first { viewModel.isConnected($0) } ?? viewModel.peers.first
         let linked = peer.map(viewModel.isConnected) ?? false
-        return ViewThatFits(in: .horizontal) {
-            HStack(spacing: 34) {
-                stage(peer: peer, linked: linked).frame(width: 440)
-                info(peer: peer, linked: linked).frame(maxWidth: .infinity, alignment: .leading)
-            }
-            VStack(spacing: 18) {
-                stage(peer: peer, linked: linked).frame(maxWidth: 440)
-                info(peer: peer, linked: linked).frame(maxWidth: .infinity, alignment: .leading)
-            }
+        HStack(spacing: 26) {
+            stage(linked: linked).frame(width: 220)
+            info(peer: peer, linked: linked).frame(maxWidth: .infinity, alignment: .leading)
+            if linked { playing }
         }
-        .padding(.vertical, 22)
-        .padding(.horizontal, 28)
+        .padding(.horizontal, 26)
+        .frame(height: 148)
         .background(heroBackground(linked: linked))
         .animation(FuseMotion.arrive, value: linked)
         .animation(FuseMotion.standard, value: search)
@@ -552,162 +488,131 @@ private struct LinkHero: View {
 
     // MARK: The stage
 
-    private func stage(peer: DeviceItem?, linked: Bool) -> some View {
-        // Aligned on the circles' centres, not the stack's: the names under the circles
-        // would otherwise pull the wave off the line between the two devices.
-        HStack(alignment: .deviceCentre, spacing: 0) {
-            // On the circle's centre too, not the circle-and-name stack's, so the rings
-            // ripple out of the Mac itself.
-            ZStack(alignment: Alignment(horizontal: .center, vertical: .deviceCentre)) {
-                if !linked {
-                    if search == .searching {
-                        Ripples().frame(width: 200, height: 200).transition(.opacity)
-                    } else {
-                        Breathing().frame(width: 120, height: 120).transition(.opacity)
-                    }
-                }
-                endpoint(symbol: "laptopcomputer", name: viewModel.selfDevice?.name ?? "This Mac", lit: true)
-            }
-            .frame(width: 120)
-            if linked {
-                LiveFilament(linked: true, pulse: viewModel.linkPulse, stream: viewModel.streamToPhone)
-                    .frame(height: 44)
-                    .padding(.horizontal, 4)
-                    .alignmentGuide(.deviceCentre) { $0[VerticalAlignment.center] }
-                    .transition(.opacity.combined(with: .scale(scale: 0.2, anchor: .leading)))
-                phoneEndpoint(name: peer?.name ?? "Your phone")
-                    .frame(width: 120)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity).combined(with: .scale(scale: 0.6)),
-                        removal: .opacity.combined(with: .scale(scale: 0.8)),
-                    ))
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: 150)
-    }
-
-    private func endpoint(symbol: String, name: String, lit: Bool) -> some View {
-        VStack(spacing: 10) {
+    /// The Mac, the link and the phone — all three in every state. Unlinked the phone is dim
+    /// and the link is a dashed gap; searching, rings ripple out from where the phone should be.
+    private func stage(linked: Bool) -> some View {
+        HStack(spacing: 0) {
+            device(symbol: "laptopcomputer", lit: true)
+                .help(viewModel.selfDevice?.name ?? "This Mac")
+            LiveFilament(linked: linked, pulse: viewModel.linkPulse, stream: linked ? viewModel.streamToPhone : nil)
+                .frame(height: 44)
+                .padding(.horizontal, 4)
             ZStack {
-                Circle()
-                    .fill(RadialGradient(colors: [FuseColor.accent.opacity(lit ? 0.28 : 0.08), FuseColor.accent.opacity(0.04)],
-                                         center: .center, startRadius: 2, endRadius: 40))
-                    .frame(width: 72, height: 72)
-                Circle()
-                    .stroke(FuseColor.accent.opacity(lit ? 0.45 : 0.12), lineWidth: 1)
-                    .frame(width: 72, height: 72)
-                Image(systemName: symbol)
-                    .font(.system(size: 27, weight: .light))
-                    .foregroundStyle(lit ? FuseColor.accent : FuseColor.muted)
+                if search == .searching && !linked {
+                    Ripples().frame(width: 120, height: 120).transition(.opacity)
+                }
+                phone(linked: linked)
             }
-            .frame(width: 86, height: 86)
-            .alignmentGuide(.deviceCentre) { $0[VerticalAlignment.center] }
-            Text(name)
-                .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(FuseColor.ink.opacity(0.85))
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: 118)
+            .frame(width: 66, height: 66)
         }
     }
 
-    /// The phone: its battery as a ring round it, a bolt badge while it charges.
-    private func phoneEndpoint(name: String) -> some View {
+    private func device(symbol: String, lit: Bool) -> some View {
+        ZStack {
+            Circle()
+                .fill(RadialGradient(colors: [FuseColor.accent.opacity(lit ? 0.26 : 0.06), FuseColor.accent.opacity(lit ? 0.04 : 0.02)],
+                                     center: .center, startRadius: 2, endRadius: 34))
+            Circle().stroke(FuseColor.accent.opacity(lit ? 0.4 : 0.1), lineWidth: 1)
+            Image(systemName: symbol)
+                .font(.system(size: 22, weight: .light))
+                .foregroundStyle(lit ? FuseColor.accent : FuseColor.muted)
+        }
+        .frame(width: 60, height: 60)
+    }
+
+    /// The phone: lit and wearing its battery as a ring while linked, a bolt badge while it
+    /// charges; dim while it is away.
+    private func phone(linked: Bool) -> some View {
         let live = viewModel.phoneStatus
-        let percent = live?.battery ?? viewModel.peers.first.flatMap { viewModel.onlineState(for: $0).battery }
-        let charging = live?.charging == true
-        return VStack(spacing: 10) {
-            ZStack {
-                if let percent {
-                    Circle()
-                        .trim(from: 0, to: CGFloat(max(0, min(100, percent))) / 100)
-                        .stroke(percent <= 20 && !charging ? FuseColor.error : FuseColor.amber,
-                                style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .frame(width: 82, height: 82)
-                        .animation(FuseMotion.standard, value: percent)
-                }
+        let percent = linked ? (live?.battery ?? viewModel.peers.first.flatMap { viewModel.onlineState(for: $0).battery }) : nil
+        let charging = linked && live?.charging == true
+        return ZStack {
+            if let percent {
                 Circle()
-                    .fill(RadialGradient(colors: [FuseColor.accent.opacity(0.28), FuseColor.accent.opacity(0.04)],
-                                         center: .center, startRadius: 2, endRadius: 40))
-                    .frame(width: 72, height: 72)
-                Image(systemName: "iphone")
-                    .font(.system(size: 27, weight: .light))
-                    .foregroundStyle(FuseColor.accent)
-                if charging {
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 22, height: 22)
-                        .background(Circle().fill(FuseColor.accent))
-                        .overlay(Circle().stroke(FuseColor.surface, lineWidth: 2))
-                        .offset(x: 28, y: 28)
-                        .transition(.scale.combined(with: .opacity))
-                }
+                    .trim(from: 0, to: CGFloat(max(0, min(100, percent))) / 100)
+                    .stroke(percent <= 20 && !charging ? FuseColor.error : FuseColor.amber,
+                            style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: 66, height: 66)
+                    .animation(FuseMotion.standard, value: percent)
             }
-            .frame(width: 86, height: 86)
-            .alignmentGuide(.deviceCentre) { $0[VerticalAlignment.center] }
-            .animation(FuseMotion.arrive, value: charging)
-            Text(name)
-                .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(FuseColor.ink.opacity(0.85))
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: 118)
+            device(symbol: "iphone", lit: linked)
+            if charging {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 20, height: 20)
+                    .background(Circle().fill(FuseColor.accent))
+                    .overlay(Circle().stroke(FuseColor.surface, lineWidth: 2))
+                    .offset(x: 22, y: 22)
+                    .transition(.scale.combined(with: .opacity))
+            }
         }
+        .animation(FuseMotion.arrive, value: charging)
     }
 
     // MARK: The words
 
     private func info(peer: DeviceItem?, linked: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 6) {
             StatusPill(linked: linked, text: linked ? (viewModel.relayOnly ? "Linked · relay" : "Linked · direct") : status)
             Text(title(peer: peer, linked: linked))
-                .font(.system(size: 26, weight: .bold))
+                .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(linked ? AnyShapeStyle(FuseColor.glow) : AnyShapeStyle(FuseColor.ink))
                 .lineLimit(1)
                 .contentTransition(.opacity)
             Text(detail(linked: linked))
                 .font(.system(size: 12.5))
                 .foregroundStyle(search == .notFound && !linked ? FuseColor.error : FuseColor.muted)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 10) {
-                if linked, let battery = viewModel.phoneStatus?.battery ?? peer.flatMap({ viewModel.onlineState(for: $0).battery }) {
-                    let charging = viewModel.phoneStatus?.charging == true
-                    Label(charging ? "\(battery)% · charging" : "\(battery)%",
-                          systemImage: charging ? "battery.100.bolt" : "battery.75")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(charging ? FuseColor.accent : FuseColor.muted)
-                        .monospacedDigit()
-                }
-                if linked, let latency = viewModel.syncLatency {
-                    // The PRD's own yardstick: p95 under 300 ms, shown where people look.
-                    Label("\(latency.lastMs) ms · p95 \(latency.p95Ms) ms", systemImage: "bolt.horizontal.fill")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(latency.p95Ms < 300 ? FuseColor.muted : FuseColor.error)
-                        .monospacedDigit()
-                        .help("Round trip of the last clip, and the 95th percentile of the last \(latency.samples)")
-                }
-                Spacer(minLength: 0)
-                if linked {
-                    Button(action: onMirror) {
-                        Label("Mirror screen", systemImage: "rectangle.on.rectangle")
+                .lineLimit(2)
+                .help(detail(linked: linked))
+            if linked {
+                HStack(spacing: 12) {
+                    if let battery = viewModel.phoneStatus?.battery ?? peer.flatMap({ viewModel.onlineState(for: $0).battery }) {
+                        let charging = viewModel.phoneStatus?.charging == true
+                        Label(charging ? "\(battery)% · charging" : "\(battery)%",
+                              systemImage: charging ? "battery.100.bolt" : "battery.75")
+                            .foregroundStyle(charging ? FuseColor.accent : FuseColor.muted)
                     }
-                    .buttonStyle(CapsuleButtonStyle(prominent: false))
-                } else {
-                    Button {
-                        search = .searching
-                        Task { await viewModel.connect() }
-                    } label: {
-                        Label(search == .searching ? "Looking…" : search == .notFound ? "Try again" : "Connect",
-                              systemImage: search == .notFound ? "arrow.clockwise" : "dot.radiowaves.left.and.right")
+                    if let latency = viewModel.syncLatency {
+                        // The PRD's own yardstick: p95 under 300 ms, shown where people look.
+                        Label("\(latency.lastMs) ms · p95 \(latency.p95Ms) ms", systemImage: "bolt.horizontal.fill")
+                            .foregroundStyle(latency.p95Ms < 300 ? FuseColor.muted : FuseColor.error)
+                            .help("Round trip of the last clip, and the 95th percentile of the last \(latency.samples)")
                     }
-                    .buttonStyle(CapsuleButtonStyle(prominent: true))
-                    .disabled(search == .searching)
                 }
+                .font(.system(size: 11.5, weight: .medium))
+                .monospacedDigit()
+            } else {
+                connect.padding(.top, 4)
             }
-            .padding(.top, 6)
         }
+    }
+
+    /// Linked, the end of the card holds what the phone is playing, or Mirror when it is quiet.
+    @ViewBuilder private var playing: some View {
+        if let track = viewModel.nowPlaying {
+            NowPlayingCompact(track: track, remote: viewModel.media)
+                .transition(.opacity)
+        } else {
+            Button(action: onMirror) {
+                Label("Mirror screen", systemImage: "rectangle.on.rectangle")
+            }
+            .buttonStyle(CapsuleButtonStyle(prominent: false))
+        }
+    }
+
+    /// Apart, Connect sits right under the words that explain it.
+    private var connect: some View {
+        Button {
+            search = .searching
+            Task { await viewModel.connect() }
+        } label: {
+            Label(search == .searching ? "Looking…" : search == .notFound ? "Try again" : "Connect",
+                  systemImage: search == .notFound ? "arrow.clockwise" : "dot.radiowaves.left.and.right")
+        }
+        .buttonStyle(CapsuleButtonStyle(prominent: true))
+        .disabled(search == .searching)
     }
 
     private func title(peer: DeviceItem?, linked: Bool) -> String {
@@ -715,7 +620,8 @@ private struct LinkHero: View {
         switch search {
         case .searching: return "Looking for your phone…"
         case .notFound: return "Couldn't reach your phone"
-        case .idle: return viewModel.peers.isEmpty ? "Just this Mac" : "Not linked"
+        // The next step, not the problem: the pill already says what is wrong.
+        case .idle: return viewModel.peers.isEmpty ? "Set up your phone" : "Connect your phone"
         }
     }
 
@@ -769,40 +675,19 @@ private struct LinkHero: View {
     }
 }
 
-extension VerticalAlignment {
-    /// The centre line of the device circles on the link card, which the wave follows.
-    private enum DeviceCentre: AlignmentID {
-        static func defaultValue(in d: ViewDimensions) -> CGFloat { d[VerticalAlignment.center] }
-    }
-    static let deviceCentre = VerticalAlignment(DeviceCentre.self)
-}
-
-/// A slow glow round a device that is waiting: present, not broken.
-private struct Breathing: View {
-    @State private var up = false
-
-    var body: some View {
-        Circle()
-            .fill(RadialGradient(colors: [FuseColor.accent.opacity(0.22), .clear], center: .center, startRadius: 10, endRadius: 60))
-            .scaleEffect(up ? 1.08 : 0.86)
-            .opacity(up ? 1 : 0.55)
-            .onAppear {
-                // A slow loop is the motion vestibular-sensitive people ask to be spared.
-                guard !FuseMotion.reduced else { return }
-                withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) { up = true }
-            }
-            .accessibilityHidden(true)
-    }
-}
-
-/// Everything ever copied, grouped by day, in one panel.
+/// Everything ever copied: the list on the left, grouped by day; the one you picked, whole,
+/// on the right. Clicking a row still copies it — one click stays the fast path — and
+/// selects it, so the preview always shows what just went on the clipboard.
 private struct HistoryPane: View {
     @ObservedObject var viewModel: DashboardViewModel
     @State private var window: HistoryWindow = .day
+    @State private var selected: ClipEntry.ID?
 
     var body: some View {
         let shown = window.filter(viewModel.history)
-        ScrollView {
+        let current = shown.first { $0.id == selected } ?? shown.first
+        let days = Self.days(shown)
+        GeometryReader { geo in
             VStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .lastTextBaseline) {
                     PaneTitle("Clipboard history", subtitle: "Click an item to put it back on this Mac's clipboard.")
@@ -814,36 +699,47 @@ private struct HistoryPane: View {
                     .labelsHidden()
                     .frame(width: 300)
                 }
-
-                if shown.isEmpty {
-                    Panel {
-                        // "Nothing in 24 hours" and "nothing ever" need different answers: one
-                        // is a filter to widen, the other is a feature to try.
-                        EmptyNote(
-                            symbol: "clock.arrow.circlepath",
-                            text: viewModel.history.isEmpty
-                                ? "Nothing yet. Copy something on either device and it lands here."
-                                : "Nothing copied in the last \(window.label.lowercased()). Try a wider range.",
-                        )
-                    }
-                } else {
-                    ForEach(Self.days(shown), id: \.title) { day in
-                        Panel(title: day.title) {
-                            VStack(spacing: 2) {
-                                ForEach(day.entries) { entry in
-                                    ClipRow(entry: entry, peerName: viewModel.peerName, onSend: { viewModel.sendToPhone(entry) }) {
-                                        viewModel.copyToClipboard(entry)
+                HStack(alignment: .top, spacing: 18) {
+                    Panel(fill: true) {
+                        if shown.isEmpty {
+                            // "Nothing in 24 hours" and "nothing ever" need different answers: one
+                            // is a filter to widen, the other is a feature to try.
+                            EmptyNote(
+                                symbol: "clock.arrow.circlepath",
+                                text: viewModel.history.isEmpty
+                                    ? "Nothing yet. Copy something on either device and it lands here."
+                                    : "Nothing copied in the last \(window.label.lowercased()). Try a wider range.",
+                            )
+                        } else {
+                            LazyVStack(alignment: .leading, spacing: 2) {
+                                ForEach(days, id: \.title) { day in
+                                    Text(day.title)
+                                        .font(.system(size: 11.5, weight: .semibold))
+                                        .foregroundStyle(FuseColor.muted)
+                                        .padding(.leading, 8)
+                                        .padding(.top, day.title == days.first?.title ? 0 : 12)
+                                        .padding(.bottom, 4)
+                                    ForEach(day.entries) { entry in
+                                        ClipRow(entry: entry, peerName: viewModel.peerName, onSend: { viewModel.sendToPhone(entry) },
+                                                selected: entry.id == current?.id) {
+                                            viewModel.copyToClipboard(entry)
+                                            selected = entry.id
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                    .frame(maxWidth: geo.size.width >= 760 ? 460 : .infinity)
+                    if geo.size.width >= 760 {
+                        ClipPreview(entry: current, viewModel: viewModel)
+                    }
                 }
             }
-            .padding(.horizontal, 28)
+            .padding(.horizontal, 24)
             .padding(.top, 8)
-            .padding(.bottom, 28)
-            .frame(maxWidth: 820)
+            .padding(.bottom, 24)
+            .frame(maxWidth: 1400)
             .frame(maxWidth: .infinity)
         }
     }
@@ -871,39 +767,131 @@ private struct HistoryPane: View {
     }
 }
 
+/// The picked clip, whole: all of the text (selectable), or the image at size, and the two
+/// things to do with it.
+private struct ClipPreview: View {
+    let entry: ClipEntry?
+    @ObservedObject var viewModel: DashboardViewModel
+    @State private var copied = false
+    @State private var sent: Bool?
+
+    var body: some View {
+        Panel(title: "Preview", fill: true) {
+            if let entry {
+                VStack(alignment: .leading, spacing: 14) {
+                    if let data = entry.imageData, let image = NSImage(data: data) {
+                        Image(nsImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: .infinity, maxHeight: 360)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    } else {
+                        Text(entry.text ?? "")
+                            .font(.system(size: 13.5))
+                            .foregroundStyle(FuseColor.ink)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    Text("\(entry.fromSelf ? "Copied here" : "From \(viewModel.peerName ?? "your phone")") · \(entry.at.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(FuseColor.muted)
+                    HStack(spacing: 10) {
+                        Button(copied ? "Copied" : "Copy") {
+                            viewModel.copyToClipboard(entry)
+                            withAnimation(FuseMotion.quick) { copied = true }
+                            Task {
+                                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                                withAnimation(FuseMotion.standard) { copied = false }
+                            }
+                        }
+                        .buttonStyle(CapsuleButtonStyle(prominent: true))
+                        Button("Send to \(viewModel.peerName ?? "phone")") {
+                            let ok = viewModel.sendToPhone(entry)
+                            withAnimation(FuseMotion.quick) { sent = ok }
+                            Task {
+                                try? await Task.sleep(nanoseconds: 1_600_000_000)
+                                withAnimation(FuseMotion.standard) { sent = nil }
+                            }
+                        }
+                        .buttonStyle(CapsuleButtonStyle(prominent: false))
+                        if let sent { SendResultLabel(sent: sent, size: 11.5) }
+                    }
+                }
+                .id(entry.id)
+            } else {
+                EmptyNote(symbol: "doc.on.clipboard", text: "Pick a clip to see all of it.")
+            }
+        }
+    }
+}
+
+/// The account's devices on the left; how a new one joins, on the right. There are usually
+/// two devices, so the right side teaches linking rather than repeating a device's details.
 private struct DevicesPane: View {
     @ObservedObject var viewModel: DashboardViewModel
     let onLinkManually: () -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                PaneTitle("Devices", subtitle: "Everything signed in to this account links itself.")
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 14)], spacing: 14) {
-                    SelfDeviceRow(name: viewModel.selfDevice?.name)
-                    // Every record, stale ones included, so an old one can be removed here.
-                    ForEach(viewModel.devicesByStanding) { peer in
-                        DeviceRow(
-                            device: peer,
-                            presence: viewModel.onlineState(for: peer),
-                            isConnected: viewModel.isConnected(peer),
-                            onRemove: { Task { await viewModel.removeDevice(peer) } },
-                        )
+        GeometryReader { geo in
+            let wide = geo.size.width >= 820
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    PaneTitle("Devices", subtitle: "Everything signed in to this account links itself.")
+                    (wide ? AnyLayout(HStackLayout(alignment: .top, spacing: 18)) : AnyLayout(VStackLayout(spacing: 18))) {
+                        VStack(spacing: 12) {
+                            SelfDeviceRow(name: viewModel.selfDevice?.name)
+                            // Every record, stale ones included, so an old one can be removed here.
+                            ForEach(viewModel.devicesByStanding) { peer in
+                                DeviceRow(
+                                    device: peer,
+                                    presence: viewModel.onlineState(for: peer),
+                                    isConnected: viewModel.isConnected(peer),
+                                    onRemove: { Task { await viewModel.removeDevice(peer) } },
+                                )
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        addDevice.frame(width: wide ? 340 : nil)
                     }
                 }
+                .padding(.horizontal, 24)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
+                .frame(maxWidth: 1100)
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private var addDevice: some View {
+        Panel(title: "Add a device") {
+            VStack(alignment: .leading, spacing: 12) {
+                step(1, "Install FuseOS on your phone from fuseos.theshaik.dev.")
+                step(2, "Sign in with the same account as this Mac.")
+                step(3, "On the same Wi-Fi it links by itself — tap Allow on a device you already have.")
+                Divider().opacity(0.5)
                 HStack(spacing: 10) {
                     Button("Link with a code", action: onLinkManually)
                         .buttonStyle(CapsuleButtonStyle(prominent: false))
-                    Text("Only needed if a device on this account didn't show up.")
-                        .font(.system(size: 12))
+                    Text("If it didn't show up.")
+                        .font(.system(size: 11.5))
                         .foregroundStyle(FuseColor.muted)
                 }
             }
-            .padding(.horizontal, 28)
-            .padding(.top, 8)
-            .padding(.bottom, 28)
-            .frame(maxWidth: 820)
-            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private func step(_ n: Int, _ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text("\(n)")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(FuseColor.accent)
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(FuseColor.accent.opacity(0.12)))
+            Text(text)
+                .font(.system(size: 12.5))
+                .foregroundStyle(FuseColor.ink)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -924,190 +912,198 @@ private struct AccountPane: View {
     @AppStorage(MacUnlock.enabledKey) private var unlockWithPhone = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                AccountHeader(email: session.email, viewModel: viewModel)
+        GeometryReader { geo in
+            let wide = geo.size.width >= 900
+            ScrollView {
+                // Two columns, the way System Settings reads: who and what on the left, how
+                // FuseOS behaves on the right. One column when the window is narrow.
+                (wide ? AnyLayout(HStackLayout(alignment: .top, spacing: 18)) : AnyLayout(VStackLayout(spacing: 18))) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        AccountHeader(email: session.email, viewModel: viewModel)
 
-                Panel(title: "This Mac") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 10) {
-                            FuseTextField(title: "Device name", text: $draftName)
-                            Button("Save") {
-                                let trimmed = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
-                                guard !trimmed.isEmpty else { return }
-                                session.setDeviceName(trimmed)
-                                // Push it now rather than at the next launch, so the phone's
-                                // list updates while the user is still looking at the change.
-                                Task { await viewModel.refresh(reregister: true) }
-                            }
-                            .buttonStyle(CapsuleButtonStyle(prominent: true))
-                            .disabled(draftName.trimmingCharacters(in: .whitespaces) == (session.deviceName ?? ""))
-                        }
-                        Text("Your phone shows this name.")
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(FuseColor.muted)
-                    }
-                }
-                .onAppear { draftName = session.deviceName ?? SessionStore.detectedDeviceName() }
-
-                Panel(title: "Everyday") {
-                    VStack(spacing: 0) {
-                        HStack(spacing: 12) {
-                            IconTile(symbol: "circle.lefthalf.filled")
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Appearance").font(.system(size: 13, weight: .medium)).foregroundStyle(FuseColor.ink)
-                                Text("System follows macOS.").font(.system(size: 11.5)).foregroundStyle(FuseColor.muted)
-                            }
-                            Spacer(minLength: 12)
-                            Picker("Appearance", selection: $appearance) {
-                                ForEach(AppearanceMode.allCases) { Text($0.rawValue).tag($0) }
-                            }
-                            .pickerStyle(.segmented)
-                            .labelsHidden()
-                            .fixedSize()
-                        }
-                        .padding(.vertical, 9)
-                        .onChange(of: appearance) { $0.apply() }
-                        Divider().opacity(0.5)
-                        SettingSwitch(
-                            symbol: "power",
-                            title: "Start at login",
-                            detail: "Sync is ready before you reach for it.",
-                            isOn: Binding(
-                                get: { launchAtLogin },
-                                set: { launchAtLogin = LaunchAtLogin.setEnabled($0) ? $0 : LaunchAtLogin.isEnabled },
-                            ),
-                        )
-                        Divider().opacity(0.5)
-                        SettingSwitch(
-                            symbol: "dock.rectangle",
-                            title: "Keep in Dock when closed",
-                            detail: "Off: the Dock icon shows only while this window is open; FuseOS keeps running in the menu bar.",
-                            isOn: $showInDock,
-                        )
-                        .onChange(of: showInDock) { _ in
-                            DockIcon.update()
-                            // Leaving the Dock deactivates the app; keep this window in front
-                            // of the user who is still looking at it.
-                            DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
-                        }
-                        Divider().opacity(0.5)
-                        SettingSwitch(
-                            symbol: "hand.raised",
-                            title: "Ask before sending copies",
-                            detail: "Each copy waits in the island for you to click Send.",
-                            isOn: $askBeforeSend,
-                        )
-                    }
-                }
-
-                Panel(title: "Your phone and this Mac") {
-                    VStack(spacing: 0) {
-                        SettingSwitch(
-                            symbol: "lock",
-                            title: "Lock this Mac when your phone leaves",
-                            detail: "When your phone walks away, the Mac locks — once Bluetooth hears it go and Wi-Fi confirms it. A weak Bluetooth moment or a dropped Wi-Fi link alone never locks it.",
-                            isOn: $lockWhenPhoneLeaves,
-                        )
-                        .onChange(of: lockWhenPhoneLeaves) { _ in viewModel.proximitySettingsChanged() }
-                        Divider().opacity(0.5)
-                        SettingSwitch(
-                            symbol: "lock.open",
-                            title: "Unlock this Mac with your phone",
-                            detail: "Experimental. Unlock your phone next to the Mac and the Mac unlocks too.",
-                            isOn: $unlockWithPhone,
-                        )
-                        .onChange(of: unlockWithPhone) { on in
-                            guard on else {
-                                MacUnlock.forget()
-                                viewModel.proximitySettingsChanged()
-                                return
-                            }
-                            // After this view update, not inside it: a modal password prompt
-                            // run from the switch's own change handler reset the switch, so
-                            // it would not stay on.
-                            DispatchQueue.main.async {
-                                if MacUnlock.setUp() {
-                                    MacPointer.accessibilityGranted(prompt: true)
-                                } else {
-                                    unlockWithPhone = false
+                        Panel(title: "This Mac") {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 10) {
+                                    FuseTextField(title: "Device name", text: $draftName)
+                                    Button("Save") {
+                                        let trimmed = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+                                        guard !trimmed.isEmpty else { return }
+                                        session.setDeviceName(trimmed)
+                                        // Push it now rather than at the next launch, so the phone's
+                                        // list updates while the user is still looking at the change.
+                                        Task { await viewModel.refresh(reregister: true) }
+                                    }
+                                    .buttonStyle(CapsuleButtonStyle(prominent: true))
+                                    .disabled(draftName.trimmingCharacters(in: .whitespaces) == (session.deviceName ?? ""))
                                 }
-                                viewModel.proximitySettingsChanged()
+                                Text("Your phone shows this name.")
+                                    .font(.system(size: 11.5))
+                                    .foregroundStyle(FuseColor.muted)
                             }
                         }
-                        if lockWhenPhoneLeaves || unlockWithPhone {
-                            // Both switches rest on hearing the phone; say plainly whether
-                            // this Mac can, and what to fix when it can't.
-                            ProximityStatus(problem: viewModel.proximityProblem, near: viewModel.phoneIsNear,
-                                            needsAccessibility: unlockWithPhone && !MacPointer.accessibilityGranted(prompt: false))
-                        }
-                        Divider().opacity(0.5)
-                        SettingSwitch(
-                            symbol: "hand.point.up.left",
-                            title: "Let your phone control this Mac",
-                            detail: MacPointer.accessibilityGranted(prompt: false) || !phoneControlsMac
-                                ? "Use your phone as this Mac's trackpad and keyboard."
-                                : "Allow FuseOS in System Settings → Privacy & Security → Accessibility.",
-                            isOn: $phoneControlsMac,
-                        )
-                        .onChange(of: phoneControlsMac) { on in
-                            // macOS decides; this only asks it to show its own prompt.
-                            if on { MacPointer.accessibilityGranted(prompt: true) }
-                            viewModel.pointerSettingsChanged()
-                        }
-                    }
-                }
+                        .onAppear { draftName = session.deviceName ?? SessionStore.detectedDeviceName() }
 
-                Panel(title: "Account") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        // Linked already: say so, rather than offer a code nobody needs. Not
-                        // linked: Devices is where the phone is found, or linked with a code.
-                        HStack {
-                            let linked = !viewModel.connected.isEmpty
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(viewModel.paused ? "Disconnected" : linked ? "Linked with \(viewModel.peerName ?? "your phone")" : "Not linked")
-                                    .font(.system(size: 13, weight: .medium))
-                                Text(viewModel.paused
-                                    ? "Nothing syncs with your phone until you connect again."
-                                    : linked
-                                    ? "Disconnect to stop syncing. It stays off until you Connect."
-                                    : "Find your phone, or link it with a code, in Devices.")
-                                    .font(.system(size: 11.5)).foregroundStyle(FuseColor.muted)
-                            }
-                            Spacer()
-                            if viewModel.paused {
-                                Button("Connect") { Task { await viewModel.connect() } }
-                                    .buttonStyle(CapsuleButtonStyle(prominent: true))
-                            } else if linked {
-                                Button("Disconnect") { viewModel.disconnect() }
-                                    .buttonStyle(CapsuleButtonStyle(prominent: false))
-                            } else {
-                                Button("Open Devices", action: onOpenDevices)
-                                    .buttonStyle(CapsuleButtonStyle(prominent: true))
+                        Panel(title: "Account") {
+                            VStack(alignment: .leading, spacing: 12) {
+                                // Linked already: say so, rather than offer a code nobody needs. Not
+                                // linked: Devices is where the phone is found, or linked with a code.
+                                HStack {
+                                    let linked = !viewModel.connected.isEmpty
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(viewModel.paused ? "Disconnected" : linked ? "Linked with \(viewModel.peerName ?? "your phone")" : "Not linked")
+                                            .font(.system(size: 13, weight: .medium))
+                                        Text(viewModel.paused
+                                            ? "Nothing syncs with your phone until you connect again."
+                                            : linked
+                                            ? "Disconnect to stop syncing. It stays off until you Connect."
+                                            : "Find your phone, or link it with a code, in Devices.")
+                                            .font(.system(size: 11.5)).foregroundStyle(FuseColor.muted)
+                                    }
+                                    Spacer()
+                                    if viewModel.paused {
+                                        Button("Connect") { Task { await viewModel.connect() } }
+                                            .buttonStyle(CapsuleButtonStyle(prominent: true))
+                                    } else if linked {
+                                        Button("Disconnect") { viewModel.disconnect() }
+                                            .buttonStyle(CapsuleButtonStyle(prominent: false))
+                                    } else {
+                                        Button("Open Devices", action: onOpenDevices)
+                                            .buttonStyle(CapsuleButtonStyle(prominent: true))
+                                    }
+                                }
+                                Divider().opacity(0.5)
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Sign out").font(.system(size: 13, weight: .medium))
+                                        Text("Clears this Mac's session and its clipboard history.")
+                                            .font(.system(size: 11.5)).foregroundStyle(FuseColor.muted)
+                                    }
+                                    Spacer()
+                                    Button("Sign out") {
+                                        viewModel.signOut()
+                                        session.clear()
+                                    }
+                                    .buttonStyle(CapsuleButtonStyle(prominent: false, destructive: true))
+                                }
                             }
                         }
-                        Divider().opacity(0.5)
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Sign out").font(.system(size: 13, weight: .medium))
-                                Text("Clears this Mac's session and its clipboard history.")
-                                    .font(.system(size: 11.5)).foregroundStyle(FuseColor.muted)
+                    }
+                    VStack(alignment: .leading, spacing: 18) {
+                        Panel(title: "Everyday") {
+                            VStack(spacing: 0) {
+                                HStack(spacing: 12) {
+                                    IconTile(symbol: "circle.lefthalf.filled")
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Appearance").font(.system(size: 13, weight: .medium)).foregroundStyle(FuseColor.ink)
+                                        Text("System follows macOS.").font(.system(size: 11.5)).foregroundStyle(FuseColor.muted)
+                                    }
+                                    Spacer(minLength: 12)
+                                    Picker("Appearance", selection: $appearance) {
+                                        ForEach(AppearanceMode.allCases) { Text($0.rawValue).tag($0) }
+                                    }
+                                    .pickerStyle(.segmented)
+                                    .labelsHidden()
+                                    .fixedSize()
+                                }
+                                .padding(.vertical, 9)
+                                .onChange(of: appearance) { $0.apply() }
+                                Divider().opacity(0.5)
+                                SettingSwitch(
+                                    symbol: "power",
+                                    title: "Start at login",
+                                    detail: "Sync is ready before you reach for it.",
+                                    isOn: Binding(
+                                        get: { launchAtLogin },
+                                        set: { launchAtLogin = LaunchAtLogin.setEnabled($0) ? $0 : LaunchAtLogin.isEnabled },
+                                    ),
+                                )
+                                Divider().opacity(0.5)
+                                SettingSwitch(
+                                    symbol: "dock.rectangle",
+                                    title: "Keep in Dock when closed",
+                                    detail: "Off: the Dock icon shows only while this window is open; FuseOS keeps running in the menu bar.",
+                                    isOn: $showInDock,
+                                )
+                                .onChange(of: showInDock) { _ in
+                                    DockIcon.update()
+                                    // Leaving the Dock deactivates the app; keep this window in front
+                                    // of the user who is still looking at it.
+                                    DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
+                                }
+                                Divider().opacity(0.5)
+                                SettingSwitch(
+                                    symbol: "hand.raised",
+                                    title: "Ask before sending copies",
+                                    detail: "Each copy waits in the island for you to click Send.",
+                                    isOn: $askBeforeSend,
+                                )
                             }
-                            Spacer()
-                            Button("Sign out") {
-                                viewModel.signOut()
-                                session.clear()
+                        }
+
+                        Panel(title: "Your phone and this Mac") {
+                            VStack(spacing: 0) {
+                                SettingSwitch(
+                                    symbol: "lock",
+                                    title: "Lock this Mac when your phone leaves",
+                                    detail: "When your phone walks away, the Mac locks — once Bluetooth hears it go and Wi-Fi confirms it. A weak Bluetooth moment or a dropped Wi-Fi link alone never locks it.",
+                                    isOn: $lockWhenPhoneLeaves,
+                                )
+                                .onChange(of: lockWhenPhoneLeaves) { _ in viewModel.proximitySettingsChanged() }
+                                Divider().opacity(0.5)
+                                SettingSwitch(
+                                    symbol: "lock.open",
+                                    title: "Unlock this Mac with your phone",
+                                    detail: "Experimental. Unlock your phone next to the Mac and the Mac unlocks too.",
+                                    isOn: $unlockWithPhone,
+                                )
+                                .onChange(of: unlockWithPhone) { on in
+                                    guard on else {
+                                        MacUnlock.forget()
+                                        viewModel.proximitySettingsChanged()
+                                        return
+                                    }
+                                    // After this view update, not inside it: a modal password prompt
+                                    // run from the switch's own change handler reset the switch, so
+                                    // it would not stay on.
+                                    DispatchQueue.main.async {
+                                        if MacUnlock.setUp() {
+                                            MacPointer.accessibilityGranted(prompt: true)
+                                        } else {
+                                            unlockWithPhone = false
+                                        }
+                                        viewModel.proximitySettingsChanged()
+                                    }
+                                }
+                                if lockWhenPhoneLeaves || unlockWithPhone {
+                                    // Both switches rest on hearing the phone; say plainly whether
+                                    // this Mac can, and what to fix when it can't.
+                                    ProximityStatus(problem: viewModel.proximityProblem, near: viewModel.phoneIsNear,
+                                                    needsAccessibility: unlockWithPhone && !MacPointer.accessibilityGranted(prompt: false))
+                                }
+                                Divider().opacity(0.5)
+                                SettingSwitch(
+                                    symbol: "hand.point.up.left",
+                                    title: "Let your phone control this Mac",
+                                    detail: MacPointer.accessibilityGranted(prompt: false) || !phoneControlsMac
+                                        ? "Use your phone as this Mac's trackpad and keyboard."
+                                        : "Allow FuseOS in System Settings → Privacy & Security → Accessibility.",
+                                    isOn: $phoneControlsMac,
+                                )
+                                .onChange(of: phoneControlsMac) { on in
+                                    // macOS decides; this only asks it to show its own prompt.
+                                    if on { MacPointer.accessibilityGranted(prompt: true) }
+                                    viewModel.pointerSettingsChanged()
+                                }
                             }
-                            .buttonStyle(CapsuleButtonStyle(prominent: false, destructive: true))
                         }
                     }
                 }
+                .padding(.horizontal, 24)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
+                .frame(maxWidth: 1100)
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, 28)
-            .padding(.top, 8)
-            .padding(.bottom, 28)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
         }
     }
 }
@@ -1251,107 +1247,119 @@ private struct SettingSwitch: View {
     }
 }
 
-/// The phone's screen, live. View only: controlling the phone would need an
-/// AccessibilityService, which is off the table (see CLAUDE.md).
+/// The phone's screen, live: the phone large on the left, what you can do with it in a
+/// column on the right — the same place in every state, so starting and stopping moves
+/// nothing.
 private struct ScreenPane: View {
     @ObservedObject var viewModel: DashboardViewModel
 
     var body: some View {
-        let linked = !viewModel.connected.isEmpty
-        VStack(spacing: 18) {
-            switch viewModel.screenState {
-            case .streaming(let width, let height):
-                PhoneScreen(layer: viewModel.screen.layer, onInput: viewModel.screen.send)
-                    .aspectRatio(CGFloat(width) / CGFloat(max(height, 1)), contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .stroke(Color.white.opacity(0.12), lineWidth: 6))
-                    .shadow(color: .black.opacity(0.35), radius: 24, y: 12)
-                    .frame(maxHeight: .infinity)
-                if viewModel.canControlPhone {
-                    HStack(spacing: 8) {
-                        Button { viewModel.screen.send(.back) } label: { Image(systemName: "chevron.backward") }
-                            .help("Back  (Esc)")
-                        Button { viewModel.screen.send(.home) } label: { Image(systemName: "circle") }
-                            .help("Home")
-                        Button { viewModel.screen.send(.recents) } label: { Image(systemName: "square.on.square") }
-                            .help("Recent apps")
-                        Divider().frame(height: 16)
-                        Button("Stop mirroring") { viewModel.screen.stop() }
-                    }
-                    .buttonStyle(CapsuleButtonStyle(prominent: false))
-                    Text("Click to tap · drag to swipe · hold to long-press · type to enter text")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(FuseColor.muted)
+        HStack(alignment: .top, spacing: 18) {
+            Group {
+                if case .streaming(let width, let height) = viewModel.screenState {
+                    PhoneScreen(layer: viewModel.screen.layer, onInput: viewModel.screen.send)
+                        .aspectRatio(CGFloat(width) / CGFloat(max(height, 1)), contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 6))
+                        .shadow(color: .black.opacity(0.35), radius: 24, y: 12)
                 } else {
-                    Button("Stop mirroring") { viewModel.screen.stop() }
-                        .buttonStyle(CapsuleButtonStyle(prominent: false))
-                        .keyboardShortcut(.escape, modifiers: [])
-                    Text("View only. Turn on Remote control in FuseOS on your phone to use it from here.")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(FuseColor.muted)
+                    phoneOutline(busy: viewModel.screenState == .requesting)
                 }
-            case .requesting:
-                placeholder(
-                    title: "Check your phone",
-                    detail: "Tap Start now on \(viewModel.peerName ?? "your phone") to share its screen.",
-                    busy: true,
-                )
-                Button("Cancel") { viewModel.screen.stop() }
-                    .buttonStyle(CapsuleButtonStyle(prominent: false))
-            case .idle, .ended:
-                placeholder(
-                    title: viewModel.screenState == .ended ? "Mirroring ended" : "Your phone, on this Mac",
-                    detail: linked
-                        ? "See your phone's screen live, straight over your Wi-Fi."
-                        : "Link your phone first — mirroring runs over the same direct connection.",
-                    busy: false,
-                )
-                Button(viewModel.screenState == .ended ? "Mirror again" : "Mirror \(viewModel.peerName ?? "phone")") {
-                    viewModel.screen.start()
-                }
-                .buttonStyle(CapsuleButtonStyle(prominent: true))
-                .disabled(!linked)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            controls.frame(width: 300)
         }
-        .padding(28)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 24)
+        .padding(.top, 8)
+        .padding(.bottom, 24)
     }
 
-    private func placeholder(title: String, detail: String, busy: Bool) -> some View {
-        VStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(FuseColor.surface)
-                    .frame(width: 132, height: 240)
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .stroke(FuseColor.outline, lineWidth: 1)
-                    .frame(width: 132, height: 240)
-                Capsule().fill(FuseColor.outline).frame(width: 38, height: 5).offset(y: -106)
-                if busy {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: "rectangle.on.rectangle")
-                        .font(.system(size: 26, weight: .light))
-                        .foregroundStyle(FuseColor.accent)
+    private var controls: some View {
+        let linked = !viewModel.connected.isEmpty
+        let phone = viewModel.peerName ?? "your phone"
+        return Panel {
+            VStack(alignment: .leading, spacing: 12) {
+                switch viewModel.screenState {
+                case .streaming:
+                    words("Mirroring \(phone)", viewModel.canControlPhone
+                        ? "Click to tap · drag to swipe · hold to long-press · type to enter text."
+                        : "View only. Turn on Remote control in FuseOS on your phone to use it from here.")
+                    if viewModel.canControlPhone {
+                        HStack(spacing: 8) {
+                            Button { viewModel.screen.send(.back) } label: { Image(systemName: "chevron.backward") }
+                                .help("Back  (Esc)")
+                            Button { viewModel.screen.send(.home) } label: { Image(systemName: "circle") }
+                                .help("Home")
+                            Button { viewModel.screen.send(.recents) } label: { Image(systemName: "square.on.square") }
+                                .help("Recent apps")
+                        }
+                        .buttonStyle(CapsuleButtonStyle(prominent: false))
+                    }
+                    // Esc is the phone's Back while it can be controlled; only view-only does it stop.
+                    if viewModel.canControlPhone {
+                        Button("Stop mirroring") { viewModel.screen.stop() }
+                            .buttonStyle(CapsuleButtonStyle(prominent: false))
+                    } else {
+                        Button("Stop mirroring") { viewModel.screen.stop() }
+                            .buttonStyle(CapsuleButtonStyle(prominent: false))
+                            .keyboardShortcut(.escape, modifiers: [])
+                    }
+                case .requesting:
+                    words("Check your phone", "Tap Start now on \(phone) to share its screen.")
+                    Button("Cancel") { viewModel.screen.stop() }
+                        .buttonStyle(CapsuleButtonStyle(prominent: false))
+                case .idle, .ended:
+                    words(viewModel.screenState == .ended ? "Mirroring ended" : "Your phone, on this Mac",
+                          linked
+                              ? "See your phone's screen live, straight over your Wi-Fi."
+                              : "Link your phone first — mirroring runs over the same direct connection.")
+                    Button(viewModel.screenState == .ended ? "Mirror again" : "Mirror \(viewModel.peerName ?? "phone")") {
+                        viewModel.screen.start()
+                    }
+                    .buttonStyle(CapsuleButtonStyle(prominent: true))
+                    .disabled(!linked)
                 }
             }
+        }
+    }
+
+    private func words(_ title: String, _ detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.system(size: 19, weight: .semibold))
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(FuseColor.ink)
             Text(detail)
-                .font(.system(size: 13))
+                .font(.system(size: 12.5))
                 .foregroundStyle(FuseColor.muted)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 340)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.bottom, 6)
+    }
+
+    /// Where the phone's screen will appear, drawn as the phone it belongs to.
+    private func phoneOutline(busy: Bool) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 34, style: .continuous)
+                .fill(FuseColor.surface)
+            RoundedRectangle(cornerRadius: 34, style: .continuous)
+                .stroke(FuseColor.outline, lineWidth: 1)
+            VStack {
+                Capsule().fill(FuseColor.outline).frame(width: 46, height: 6).padding(.top, 14)
+                Spacer()
+            }
+            if busy {
+                ProgressView().controlSize(.small)
+            } else {
+                Image(systemName: "rectangle.on.rectangle")
+                    .font(.system(size: 30, weight: .light))
+                    .foregroundStyle(FuseColor.muted)
+            }
+        }
+        .aspectRatio(9.0 / 19.5, contentMode: .fit)
+        .frame(maxHeight: 520)
     }
 }
 
-/// Hosts the receiver's display layer, and turns what the user does on it into input for
-/// the phone: a click is a tap, a hold a long-press, a drag a swipe, the scroll wheel a
-/// swipe, and typing goes to the phone's focused field (Esc is Back).
 private struct PhoneScreen: NSViewRepresentable {
     let layer: CALayer
     let onInput: (ScreenReceiver.Input) -> Void
@@ -1561,15 +1569,20 @@ private struct TransferRow: View {
 /// Glass is kept for the floating bar, where there is content underneath to show through.
 private struct Panel<Accessory: View, Content: View>: View {
     var title: String?
+    /// Takes the height it is offered and scrolls its content inside, so panels side by side
+    /// end on one bottom edge instead of stopping wherever their content does.
+    var fill: Bool
     @ViewBuilder var accessory: () -> Accessory
     @ViewBuilder var content: () -> Content
 
     init(
         title: String? = nil,
+        fill: Bool = false,
         @ViewBuilder accessory: @escaping () -> Accessory = { EmptyView() },
         @ViewBuilder content: @escaping () -> Content,
     ) {
         self.title = title
+        self.fill = fill
         self.accessory = accessory
         self.content = content
     }
@@ -1585,10 +1598,16 @@ private struct Panel<Accessory: View, Content: View>: View {
                     accessory()
                 }
             }
-            content()
+            if fill {
+                ScrollView {
+                    content().frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else {
+                content()
+            }
         }
         .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
         .panelSurface(radius: 18)
     }
 }
@@ -1657,6 +1676,8 @@ struct ClipRow: View {
     var peerName: String?
     /// Sends it to the phone; false when nothing could go.
     var onSend: (() -> Bool)?
+    /// The one the preview beside it is showing (History).
+    var selected = false
     let onCopy: () -> Void
     @State private var hovering = false
     @State private var copied = false
@@ -1736,7 +1757,7 @@ struct ClipRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(hovering ? FuseColor.surfaceAlt : Color.clear),
+                    .fill(selected ? FuseColor.accent.opacity(0.12) : hovering ? FuseColor.surfaceAlt : Color.clear),
             )
             .contentShape(Rectangle())
         }

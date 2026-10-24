@@ -59,7 +59,7 @@ struct PressableStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? scale : 1)
-            .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.45)
+            .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.6)
             .animation(FuseMotion.quick, value: configuration.isPressed)
     }
 }

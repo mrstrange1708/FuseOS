@@ -189,6 +189,31 @@ struct IconTile: View {
     }
 }
 
+/// One of the phone's quick actions: a symbol over a word, on a quiet tile. Disabled, the
+/// symbol greys rather than fading its orange to brown.
+struct ActionTile: View {
+    let title: String
+    let symbol: String
+    var size: CGFloat = 16
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: size, weight: .medium))
+                .foregroundStyle(isEnabled ? FuseColor.accent : FuseColor.muted.opacity(0.7))
+            Text(title)
+                .font(.system(size: size * 0.7, weight: .medium))
+                .foregroundStyle(isEnabled ? FuseColor.ink : FuseColor.muted)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, size * 0.75)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(FuseColor.surfaceAlt))
+        .contentShape(Rectangle())
+    }
+}
+
 /// The app's button: a capsule, ember-filled when it is the thing to press.
 struct CapsuleButtonStyle: ButtonStyle {
     var prominent = false
@@ -197,16 +222,18 @@ struct CapsuleButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         let tint = destructive ? FuseColor.error : FuseColor.accent
+        // Disabled goes grey, not a faded fill: dimmed ember on slate reads as brown.
+        let filled = prominent && isEnabled
         return configuration.label
             .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(prominent ? Color.white : (destructive ? FuseColor.error : FuseColor.ink))
+            .foregroundStyle(filled ? Color.white : !isEnabled ? FuseColor.muted : destructive ? FuseColor.error : FuseColor.ink)
             .padding(.horizontal, 14)
             .frame(height: 28)
             .background(
-                Capsule().fill(prominent ? tint : FuseColor.surfaceAlt),
+                Capsule().fill(filled ? tint : FuseColor.surfaceAlt),
             )
-            .overlay(Capsule().stroke(prominent ? Color.clear : FuseColor.outline.opacity(0.7), lineWidth: 1))
-            .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.45)
+            .overlay(Capsule().stroke(filled ? Color.clear : FuseColor.outline.opacity(0.7), lineWidth: 1))
+            .opacity(configuration.isPressed ? 0.8 : 1)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .animation(FuseMotion.quick, value: configuration.isPressed)
     }
