@@ -1,5 +1,9 @@
 package com.fuseos.app.ui.shell
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.platform.LocalContext
+import com.fuseos.app.ui.theme.ThemePreference
+import com.fuseos.app.ui.theme.ThemeMode
 import com.fuseos.app.ui.components.glassCard
 import androidx.compose.foundation.background
 import androidx.compose.material3.Button
@@ -129,6 +133,22 @@ fun ProfileScreen(
                     shape = CircleShape,
                 ) { Text("Save") }
             }
+        }
+
+        val context = LocalContext.current
+        val theme by ThemePreference.flow(context).collectAsState()
+        Panel(title = "Appearance") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
+                ThemeMode.entries.forEach { mode ->
+                    FuseChip(mode.name, mode == theme) { ThemePreference.set(context, mode) }
+                }
+            }
+            Text(
+                "System follows your phone's dark mode.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, top = 8.dp),
+            )
         }
 
         Panel(title = "Your devices") {

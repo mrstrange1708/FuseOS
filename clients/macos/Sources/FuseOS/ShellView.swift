@@ -39,7 +39,13 @@ struct ShellView: View {
         ZStack {
             pane
                 .id(section)
-                .transition(.opacity.combined(with: .offset(y: 10)))
+                // The old pane leaves at once, so the two never sit on top of each other
+                // half-faded (a timed fade-out could also be left stranded behind the new
+                // pane); the new one rises in on the spring.
+                .transition(.asymmetric(
+                    insertion: FuseMotion.reduced ? .opacity : .opacity.combined(with: .offset(y: 10)),
+                    removal: .identity,
+                ))
         }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             // Scrolling panes slide under the bar; the glass is what makes that readable.
@@ -89,7 +95,7 @@ struct ShellView: View {
     }
 
     private func go(_ target: FuseSection) {
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { section = target }
+        withAnimation(FuseMotion.standard) { section = target }
     }
 }
 
@@ -116,7 +122,7 @@ private struct GlassNav: View {
     private func tab(_ item: FuseSection, shortcut: Character) -> some View {
         let selected = item == section
         return Button {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { section = item }
+            withAnimation(FuseMotion.standard) { section = item }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: item.symbol)
@@ -141,7 +147,7 @@ private struct GlassNav: View {
             }
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
         .keyboardShortcut(KeyEquivalent(shortcut), modifiers: .command)
         .help("\(item.rawValue)  ⌘\(shortcut)")
     }
@@ -273,7 +279,7 @@ private struct HomePane: View {
                         }
                         .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.pressable)
                         .help("Open on \(viewModel.peerName ?? "your phone")")
                     }
                 }
@@ -294,7 +300,7 @@ private struct HomePane: View {
     private func clipboard(rows: Int) -> some View {
         Panel(title: "Clipboard", accessory: {
             Button("See all", action: onSeeAll)
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(FuseColor.accent)
         }) {
@@ -395,7 +401,7 @@ private struct NowPlayingPanel: View {
                 .frame(width: large ? 40 : 32, height: large ? 40 : 32)
                 .background(Circle().fill(large ? FuseColor.accent : FuseColor.surfaceAlt))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
     }
 
     private static func clock(_ ms: Int64) -> String {
@@ -501,7 +507,7 @@ private struct PhoneActionsPanel: View {
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(FuseColor.surfaceAlt))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
     }
 }
 
@@ -532,8 +538,8 @@ private struct LinkHero: View {
         .padding(.vertical, 22)
         .padding(.horizontal, 28)
         .background(heroBackground(linked: linked))
-        .animation(.spring(response: 0.62, dampingFraction: 0.78), value: linked)
-        .animation(.easeInOut(duration: 0.35), value: search)
+        .animation(FuseMotion.arrive, value: linked)
+        .animation(FuseMotion.standard, value: search)
         .onChange(of: linked) { if $0 { search = .idle } }
         // Same 12 s as the popover: long enough for a LAN dial and handshake.
         .task(id: search) {
@@ -619,7 +625,7 @@ private struct LinkHero: View {
                                 style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                         .frame(width: 82, height: 82)
-                        .animation(.easeOut(duration: 0.6), value: percent)
+                        .animation(FuseMotion.standard, value: percent)
                 }
                 Circle()
                     .fill(RadialGradient(colors: [FuseColor.accent.opacity(0.28), FuseColor.accent.opacity(0.04)],
@@ -641,7 +647,7 @@ private struct LinkHero: View {
             }
             .frame(width: 86, height: 86)
             .alignmentGuide(.deviceCentre) { $0[VerticalAlignment.center] }
-            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: charging)
+            .animation(FuseMotion.arrive, value: charging)
             Text(name)
                 .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(FuseColor.ink.opacity(0.85))
@@ -781,6 +787,8 @@ private struct Breathing: View {
             .scaleEffect(up ? 1.08 : 0.86)
             .opacity(up ? 1 : 0.55)
             .onAppear {
+                // A slow loop is the motion vestibular-sensitive people ask to be spared.
+                guard !FuseMotion.reduced else { return }
                 withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) { up = true }
             }
             .accessibilityHidden(true)
@@ -909,6 +917,7 @@ private struct AccountPane: View {
     @State private var draftName = ""
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @AppStorage(DockIcon.key) private var showInDock = true
+    @AppStorage(AppearanceMode.key) private var appearance = AppearanceMode.system
     @AppStorage(DashboardViewModel.askBeforeSendKey) private var askBeforeSend = false
     @AppStorage(MacPointer.enabledKey) private var phoneControlsMac = false
     @AppStorage(ScreenLock.enabledKey) private var lockWhenPhoneLeaves = false
@@ -943,6 +952,23 @@ private struct AccountPane: View {
 
                 Panel(title: "Everyday") {
                     VStack(spacing: 0) {
+                        HStack(spacing: 12) {
+                            IconTile(symbol: "circle.lefthalf.filled")
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Appearance").font(.system(size: 13, weight: .medium)).foregroundStyle(FuseColor.ink)
+                                Text("System follows macOS.").font(.system(size: 11.5)).foregroundStyle(FuseColor.muted)
+                            }
+                            Spacer(minLength: 12)
+                            Picker("Appearance", selection: $appearance) {
+                                ForEach(AppearanceMode.allCases) { Text($0.rawValue).tag($0) }
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                            .fixedSize()
+                        }
+                        .padding(.vertical, 9)
+                        .onChange(of: appearance) { $0.apply() }
+                        Divider().opacity(0.5)
                         SettingSwitch(
                             symbol: "power",
                             title: "Start at login",
@@ -1209,11 +1235,12 @@ private struct SettingSwitch: View {
             HStack(spacing: 12) {
                 if let symbol {
                     IconTile(symbol: symbol, tint: isOn ? FuseColor.accent : FuseColor.muted)
-                        .animation(.easeOut(duration: 0.2), value: isOn)
+                        .animation(FuseMotion.quick, value: isOn)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.system(size: 13, weight: .medium)).foregroundStyle(FuseColor.ink)
                     Text(detail).font(.system(size: 11.5)).foregroundStyle(FuseColor.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1441,7 +1468,7 @@ private struct FileDropZone: View {
             shape.stroke(targeted ? FuseColor.accent : FuseColor.outline.opacity(0.8),
                          style: StrokeStyle(lineWidth: 1, dash: [5, 4])),
         )
-        .animation(.easeOut(duration: 0.15), value: targeted)
+        .animation(FuseMotion.quick, value: targeted)
         .dropDestination(for: URL.self) { urls, _ in
             let files = urls.filter(\.isFileURL)
             guard !files.isEmpty else { return false }
@@ -1500,7 +1527,7 @@ private struct TransferRow: View {
                         .frame(width: 22, height: 22)
                         .background(Circle().fill(FuseColor.surfaceAlt))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
                 .foregroundStyle(FuseColor.muted)
                 .help("Cancel")
             } else if !transfer.outgoing && transfer.state == .done {
@@ -1654,7 +1681,7 @@ struct ClipRow: View {
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(FuseColor.outline.opacity(0.5), lineWidth: 1))
                 } else {
-                    IconTile(symbol: symbol, tint: entry.fromSelf ? FuseColor.muted : FuseColor.accent)
+                    IconTile(symbol: entry.symbol, tint: entry.fromSelf ? FuseColor.muted : FuseColor.accent)
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(preview)
@@ -1681,10 +1708,10 @@ struct ClipRow: View {
                     if let onSend {
                         Button {
                             let ok = onSend()
-                            withAnimation(.easeOut(duration: 0.15)) { sent = ok }
+                            withAnimation(FuseMotion.quick) { sent = ok }
                             Task {
                                 try? await Task.sleep(nanoseconds: 1_600_000_000)
-                                withAnimation { sent = nil }
+                                withAnimation(FuseMotion.standard) { sent = nil }
                             }
                         } label: {
                             Label("Send", systemImage: "arrow.up.right")
@@ -1694,7 +1721,7 @@ struct ClipRow: View {
                                 .frame(height: 24)
                                 .background(Capsule().fill(FuseColor.accent))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.pressable)
                         .help("Send to \(peerName ?? "your phone")")
                     }
                 } else {
@@ -1713,14 +1740,8 @@ struct ClipRow: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-    }
-
-    private var symbol: String {
-        guard let text = entry.text else { return "photo" }
-        if text.hasPrefix("http://") || text.hasPrefix("https://") { return "link" }
-        return "text.alignleft"
+        .buttonStyle(.pressable(scale: 0.99))
+        .onHover { inside in withAnimation(FuseMotion.quick) { hovering = inside } }
     }
 
     private var thumbnail: NSImage? { entry.imageData.flatMap(NSImage.init(data:)) }
@@ -1732,6 +1753,16 @@ struct ClipRow: View {
         }
         // A two-line preview reads as one thought; raw newlines made it a ragged fragment.
         return (entry.text ?? "").split(whereSeparator: \.isNewline).joined(separator: "  ")
+    }
+}
+
+extension ClipEntry {
+    /// The row's leading glyph — one rule for the window and the menu bar, so a link looks
+    /// like a link in both.
+    var symbol: String {
+        guard let text else { return "photo" }
+        if text.hasPrefix("http://") || text.hasPrefix("https://") { return "link" }
+        return "text.alignleft"
     }
 }
 

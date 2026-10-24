@@ -69,13 +69,13 @@ export function Hero() {
           <div className="hero-fade mt-9 flex flex-wrap gap-3">
             <a
               href="/download"
-              className="group inline-flex items-center gap-2.5 rounded-2xl bg-gradient-to-b from-ember to-ember-deep px-6 py-4 font-semibold text-white shadow-[0_10px_40px_-10px_rgb(255_122_69/0.8),inset_0_1px_0_rgb(255_255_255/0.25)] transition-transform hover:-translate-y-0.5"
+              className="group inline-flex items-center gap-2.5 rounded-2xl bg-gradient-to-b from-ember to-ember-deep px-6 py-4 font-semibold text-white shadow-[0_10px_40px_-10px_rgb(255_122_69/0.8),inset_0_1px_0_rgb(255_255_255/0.25)] press transition-transform hover:-translate-y-0.5"
             >
               <IconBrandApple size={19} /> <IconBrandAndroid size={19} /> Download the preview
             </a>
             <a
               href="#story"
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-4 font-semibold text-ink backdrop-blur transition-colors hover:border-white/30"
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-4 font-semibold text-ink backdrop-blur transition-[border-color,scale] hover:border-white/30 press"
             >
               See it move
             </a>

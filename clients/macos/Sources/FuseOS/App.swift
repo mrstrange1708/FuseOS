@@ -74,6 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Self.startSentry()
         Analytics.start()
         DockIcon.watch()
+        AppearanceMode.saved.apply()
         if let directory = DemoMode.directory {
             Task { @MainActor in await DemoMode.snapshot(to: directory) }
         }

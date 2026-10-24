@@ -127,7 +127,7 @@ struct ConnectView: View {
                     .foregroundStyle(FuseColor.muted)
                 Spacer()
                 Button("Link manually") { showPairing = true }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
                     .font(.system(size: 12))
                     .foregroundStyle(FuseColor.accent)
             }

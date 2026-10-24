@@ -64,7 +64,7 @@ struct FuseTextField: View {
                         Image(systemName: revealed ? "eye.slash" : "eye")
                             .foregroundStyle(FuseColor.muted)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
                     .help(revealed ? "Hide password" : "Show password")
                 }
             }
@@ -108,7 +108,7 @@ struct PrimaryButton: View {
             .background(FuseColor.accent)
             .clipShape(RoundedRectangle(cornerRadius: 10))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
         .disabled(loading)
     }
 }
@@ -128,7 +128,7 @@ struct SecondaryButton: View {
                     RoundedRectangle(cornerRadius: 10).stroke(FuseColor.outline, lineWidth: 1),
                 )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
     }
 }
 
@@ -159,7 +159,7 @@ struct SwitchRow: View {
             Button(action: onTap) {
                 Text(action).font(.system(size: 14, weight: .semibold)).foregroundStyle(FuseColor.accent)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressable)
             Spacer(minLength: 0)
         }
     }
@@ -208,7 +208,7 @@ struct CapsuleButtonStyle: ButtonStyle {
             .overlay(Capsule().stroke(prominent ? Color.clear : FuseColor.outline.opacity(0.7), lineWidth: 1))
             .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.45)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .animation(FuseMotion.quick, value: configuration.isPressed)
     }
 }
 
@@ -367,7 +367,7 @@ struct ProgressBar: View {
                 Capsule()
                     .fill(FuseColor.accent)
                     .frame(width: geo.size.width * min(max(fraction, 0), 1))
-                    .animation(.easeOut(duration: 0.25), value: fraction)
+                    .animation(FuseMotion.standard, value: fraction)
             }
         }
         .frame(height: 4)

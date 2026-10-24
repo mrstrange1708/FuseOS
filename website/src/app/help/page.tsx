@@ -28,7 +28,7 @@ export default function HelpPage() {
           <a
             key={t.id}
             href={`#${t.id}`}
-            className="rounded-full border border-white/10 px-4 py-2 text-sm text-muted transition-colors hover:border-ember/50 hover:text-ink"
+            className="rounded-full border border-white/10 px-4 py-2 text-sm text-muted transition-[color,border-color,scale] hover:border-ember/50 hover:text-ink press"
           >
             {t.label}
           </a>

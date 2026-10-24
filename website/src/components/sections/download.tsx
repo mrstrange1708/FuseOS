@@ -95,7 +95,7 @@ export function Download() {
                 <CardItem translateZ={60} className="mt-6 w-full">
                   <a
                     href={p.href}
-                    className="flex w-full items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-b from-ember to-ember-deep px-6 py-4 font-semibold text-white shadow-[0_14px_40px_-12px_rgb(255_122_69/0.8),inset_0_1px_0_rgb(255_255_255/0.25)] transition-[filter] hover:brightness-110"
+                    className="flex w-full items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-b from-ember to-ember-deep px-6 py-4 font-semibold text-white shadow-[0_14px_40px_-12px_rgb(255_122_69/0.8),inset_0_1px_0_rgb(255_255_255/0.25)] transition-[filter,scale] hover:brightness-110 press"
                   >
                     <IconDownload size={19} /> Download for {p.name === 'macOS' ? 'Mac' : 'Android'}
                   </a>

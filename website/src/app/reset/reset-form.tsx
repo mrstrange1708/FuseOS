@@ -90,7 +90,7 @@ export function ResetForm() {
       <button
         type="submit"
         disabled={state.kind === 'saving'}
-        className="mt-2 rounded-2xl bg-gradient-to-b from-ember to-ember-deep px-6 py-3.5 font-semibold text-white transition-[filter] hover:brightness-110 disabled:opacity-60"
+        className="mt-2 rounded-2xl bg-gradient-to-b from-ember to-ember-deep px-6 py-3.5 font-semibold text-white transition-[filter,scale] hover:brightness-110 press disabled:opacity-60"
       >
         {state.kind === 'saving' ? 'Saving…' : 'Save password'}
       </button>

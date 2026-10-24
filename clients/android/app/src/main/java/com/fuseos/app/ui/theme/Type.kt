@@ -7,19 +7,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 // System UI face for all app text (native feel); monospace only for the wordmark and
-// pairing codes, where the "OS / firmware" character is the point.
+// pairing codes, where the "OS / firmware" character is the point. Tracking is per size —
+// Roboto has no optical sizing, so headlines are tightened by hand and small labels opened.
 val FuseTypography = Typography(
     headlineMedium = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Bold,
         fontSize = 26.sp,
         lineHeight = 30.sp,
+        letterSpacing = (-0.5).sp,
     ),
     titleLarge = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.SemiBold,
         fontSize = 20.sp,
         lineHeight = 26.sp,
+        letterSpacing = (-0.3).sp,
     ),
     bodyLarge = TextStyle(
         fontFamily = FontFamily.Default,
