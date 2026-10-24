@@ -43,3 +43,6 @@ deploy/server.env
 
 # oh-my-claudecode (a local Claude Code plugin) keeps its session state here
 .omc/
+
+# Brainstorm mockups (superpowers visual companion)
+.superpowers/

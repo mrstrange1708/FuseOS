@@ -124,6 +124,29 @@ fun HomeScreen(
             relayed = connect.peerId != null && connect.peerId in state.relayed,
         )
 
+        Panel(
+            title = "Clipboard",
+            action = {
+                Text(
+                    "See all",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.pressable(onSeeAll, shape = RoundedCornerShape(8.dp)).padding(4.dp),
+                )
+            },
+        ) {
+            if (history.isEmpty()) {
+                Text(
+                    "Copy something on either device and it shows up here.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(4.dp),
+                )
+            } else {
+                // Five proves sync is alive without turning Home into History.
+                history.take(5).forEach { entry -> ClipListRow(entry, peerName, onCopy, onSend) }
+            }
+        }
         Panel(title = "Files") {
             Row(
                 modifier = Modifier
@@ -191,29 +214,6 @@ fun HomeScreen(
             }
         }
 
-        Panel(
-            title = "Clipboard",
-            action = {
-                Text(
-                    "See all",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.pressable(onSeeAll, shape = RoundedCornerShape(8.dp)).padding(4.dp),
-                )
-            },
-        ) {
-            if (history.isEmpty()) {
-                Text(
-                    "Copy something on either device and it shows up here.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(4.dp),
-                )
-            } else {
-                // Five proves sync is alive without turning Home into History.
-                history.take(5).forEach { entry -> ClipListRow(entry, peerName, onCopy, onSend) }
-            }
-        }
         Spacer(Modifier.height(110.dp)) // clears the floating nav bar
     }
 }
