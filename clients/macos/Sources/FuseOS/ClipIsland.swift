@@ -147,7 +147,7 @@ final class ClipIsland {
     func dismiss() {
         dismissTask?.cancel()
         dismissTask = nil
-        withAnimation(.spring(response: 0.34, dampingFraction: 0.9)) { model.expanded = false }
+        withAnimation(FuseMotion.standard) { model.expanded = false }
         // Ordering out mid-animation would cut it off, so the panel outlives it briefly.
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: 320_000_000)
@@ -168,7 +168,7 @@ final class ClipIsland {
         // than a static badge that never changed.
         model.expanded = false
         DispatchQueue.main.async { [model] in
-            withAnimation(.spring(response: 0.46, dampingFraction: 0.74)) { model.expanded = true }
+            withAnimation(FuseMotion.arrive) { model.expanded = true }
         }
     }
 
@@ -377,7 +377,7 @@ private struct IslandView: View {
                         .frame(height: 28)
                         .background(Capsule().fill(Color(red: 0.91, green: 0.36, blue: 0.16)))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
                 .fixedSize()
             }
         case let .call(call):
@@ -430,7 +430,7 @@ private struct IslandView: View {
                                 .frame(width: 28, height: 28)
                                 .background(Circle().fill(Color.white.opacity(0.12)))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.pressable)
                         .help("Cancel (Esc)")
                         TextField("Reply…", text: Binding(get: { model.replyDraft ?? "" }, set: { model.replyDraft = $0 }))
                             .textFieldStyle(.plain)
@@ -466,7 +466,7 @@ private struct IslandView: View {
                                     startPoint: .leading, endPoint: .trailing,
                                 ))
                                 .frame(width: geo.size.width * CGFloat(percent(t)) / 100)
-                                .animation(.easeOut(duration: 0.25), value: percent(t))
+                                .animation(FuseMotion.standard, value: percent(t))
                         }
                     }
                     .frame(height: 5)
@@ -537,7 +537,7 @@ private struct IslandView: View {
                 .frame(height: 28)
                 .background(Capsule().fill(Color(red: 0.91, green: 0.36, blue: 0.16)))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
         .fixedSize()
     }
 
@@ -549,7 +549,7 @@ private struct IslandView: View {
                 .frame(width: 34, height: 34)
                 .background(Circle().fill(color))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
     }
 
     private func clipTitle(_ entry: ClipEntry) -> String {

@@ -1,8 +1,11 @@
 package com.fuseos.app.ui.shell
 
+import androidx.compose.foundation.LocalIndication
+import com.fuseos.app.ui.theme.FuseMotion
+import com.fuseos.app.ui.components.pressScale
+import com.fuseos.app.ui.components.pressable
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -106,20 +109,19 @@ private fun NavItem(
     val isSelected = tab == selected
     val tint by animateColorAsState(
         if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        FuseMotion.standard(),
         label = "nav-tint",
     )
     // The open tab's icon sits in an ember pill — the same mark the Mac's glass bar uses.
     val pill by animateColorAsState(
         if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent,
+        FuseMotion.standard(),
         label = "nav-pill",
     )
     Column(
+        // No ripple across a glass bar — the icon dips under the finger instead.
         modifier = modifier
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = { onSelect(tab) },
-            )
+            .pressable({ onSelect(tab) }, scale = 0.9f, ripple = false)
             .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -147,14 +149,16 @@ private fun NavItem(
 private fun CentreButton(enabled: Boolean, onTap: () -> Unit, modifier: Modifier = Modifier) {
     val scale by animateFloatAsState(
         if (enabled) 1f else 0.92f,
-        spring(dampingRatio = 0.6f),
+        FuseMotion.standard(),
         label = "centre-scale",
     )
     val ring = MaterialTheme.colorScheme.primary
+    val source = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
             .size(60.dp)
             .scale(scale)
+            .pressScale(source, 0.92f)
             .semantics { contentDescription = "Send clipboard to your other device" }
             .clip(CircleShape)
             .background(
@@ -172,7 +176,7 @@ private fun CentreButton(enabled: Boolean, onTap: () -> Unit, modifier: Modifier
                 },
             )
             .border(3.dp, MaterialTheme.colorScheme.background, CircleShape)
-            .clickable(enabled = enabled, onClick = onTap),
+            .clickable(source, LocalIndication.current, enabled = enabled, onClick = onTap),
         contentAlignment = Alignment.Center,
     ) {
         // The mark itself: two devices joined by a link — the app's whole idea, and the

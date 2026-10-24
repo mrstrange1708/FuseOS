@@ -1,6 +1,12 @@
 package com.fuseos.app.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.InteractionSource
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -40,6 +46,9 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +59,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.fuseos.app.ui.theme.FuseMotion
 
 /** The FuseOS mark: a wired-through node and a lit ember node joined by a filament. */
 @Composable
@@ -153,11 +163,13 @@ fun FusePrimaryButton(
     enabled: Boolean = true,
     loading: Boolean = false,
 ) {
+    val source = remember { MutableInteractionSource() }
     Button(
         onClick = onClick,
         enabled = enabled && !loading,
         shape = RoundedCornerShape(12.dp),
-        modifier = modifier.fillMaxWidth().height(52.dp),
+        interactionSource = source,
+        modifier = modifier.pressScale(source).fillMaxWidth().height(52.dp),
     ) {
         if (loading) {
             CircularProgressIndicator(
@@ -174,11 +186,13 @@ fun FusePrimaryButton(
 /** "Continue with Google", under the primary action on both auth screens. */
 @Composable
 fun FuseGoogleButton(onClick: () -> Unit, enabled: Boolean = true) {
+    val source = remember { MutableInteractionSource() }
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().height(52.dp),
+        interactionSource = source,
+        modifier = Modifier.pressScale(source).fillMaxWidth().height(52.dp),
     ) {
         Text("Continue with Google", style = MaterialTheme.typography.labelLarge)
     }
@@ -257,4 +271,35 @@ fun Modifier.fuseBackground(): Modifier = composed {
             ),
         )
     }
+}
+
+/**
+ * Feedback on the press itself, not the release: the element dips the moment a finger
+ * lands and springs back when it lifts. Pass the same source the control reports to.
+ */
+fun Modifier.pressScale(source: InteractionSource, scale: Float = 0.97f): Modifier = composed {
+    val pressed by source.collectIsPressedAsState()
+    val s by animateFloatAsState(if (pressed) scale else 1f, FuseMotion.quick(), label = "press")
+    graphicsLayer {
+        scaleX = s
+        scaleY = s
+    }
+}
+
+/**
+ * `clickable` with [pressScale]: the scale goes outside the clip and background so the
+ * whole tile dips, and the ripple stays inside [shape]. Put it before the background in the
+ * chain. Full-width rows pass a gentler [scale] — 3% of a row is a lurch, not a dip.
+ */
+fun Modifier.pressable(
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    shape: Shape = RectangleShape,
+    scale: Float = 0.97f,
+    ripple: Boolean = true,
+): Modifier = composed {
+    val source = remember { MutableInteractionSource() }
+    pressScale(source, scale)
+        .clip(shape)
+        .clickable(source, if (ripple) LocalIndication.current else null, enabled = enabled, onClick = onClick)
 }

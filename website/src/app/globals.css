@@ -64,6 +64,14 @@ h3 {
   text-wrap: balance;
 }
 
+/* Feedback on the press, not the release: a control dips the moment it is touched. Pair it
+   with a transition that includes scale. */
+@utility press {
+  &:active {
+    scale: 0.97;
+  }
+}
+
 /* Fine grain over everything, so large flat blacks read as material, not as empty. */
 .grain::after {
   content: '';

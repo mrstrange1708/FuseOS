@@ -1,11 +1,17 @@
 package com.fuseos.app.ui.shell
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.Role
+import androidx.compose.animation.animateColorAsState
+import com.fuseos.app.ui.theme.FuseMotion
+import com.fuseos.app.ui.components.pressable
 import com.fuseos.app.ui.components.glassCard
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -77,7 +83,7 @@ fun HistoryScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             HistoryWindow.entries.forEach { option ->
-                WindowChip(option.label, option == window) { window = option }
+                FuseChip(option.label, option == window) { window = option }
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -114,19 +120,22 @@ private fun days(entries: List<ClipEntry>): List<Pair<String, List<ClipEntry>>> 
     }
 }
 
+/** A pill in a one-of-several row: History's time windows, the appearance choice. */
 @Composable
-private fun WindowChip(label: String, selected: Boolean, onClick: () -> Unit) {
+fun FuseChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val fill by animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        FuseMotion.standard(),
+        label = "chip",
+    )
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                if (selected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant
-                },
-            )
-            .clickable(onClick = onClick)
+            .semantics {
+                this.selected = selected
+                role = Role.RadioButton
+            }
+            .pressable(onClick, shape = RoundedCornerShape(20.dp))
+            .background(fill)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     ) {
         Text(

@@ -1,5 +1,16 @@
 package com.fuseos.app.ui.theme
 
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.SystemBarStyle
+import androidx.activity.ComponentActivity
+import android.content.Context
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -48,14 +59,63 @@ private val DarkColors = darkColorScheme(
     onError = Color(0xFF3A0D06),
 )
 
+/** You → Appearance. System follows the phone, and is the default. */
+enum class ThemeMode { System, Light, Dark }
+
+/** The saved [ThemeMode], as a flow so every window — app, trackpad, island — follows a change at once. */
+object ThemePreference {
+    private const val PREFS = "appearance"
+    private const val KEY = "mode"
+    private var mode: MutableStateFlow<ThemeMode>? = null
+
+    fun flow(context: Context): StateFlow<ThemeMode> = mode ?: MutableStateFlow(
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)
+            ?.let { saved -> ThemeMode.entries.firstOrNull { it.name == saved } } ?: ThemeMode.System,
+    ).also { mode = it }
+
+    fun set(context: Context, value: ThemeMode) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, value.name).apply()
+        (flow(context) as MutableStateFlow).value = value
+    }
+}
+
 @Composable
-fun FuseOSTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    content: @Composable () -> Unit,
-) {
+fun FuseOSTheme(content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    val mode by ThemePreference.flow(context).collectAsState()
+    val darkTheme = when (mode) {
+        ThemeMode.System -> isSystemInDarkTheme()
+        ThemeMode.Light -> false
+        ThemeMode.Dark -> true
+    }
+    // The system bars follow the app's choice, not the phone's: dark icons on a light app.
+    (context as? ComponentActivity)?.let { activity ->
+        LaunchedEffect(activity, darkTheme) {
+            val bars = SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT) { darkTheme }
+            activity.enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
+        }
+    }
     MaterialTheme(
         colorScheme = if (darkTheme) DarkColors else LightColors,
         typography = FuseTypography,
         content = content,
     )
+}
+
+/**
+ * One motion vocabulary, in Apple's terms: a spring's *response* (seconds to reach the
+ * target) and *damping* (1 = no overshoot). Compose takes stiffness, which for a unit mass
+ * is (2π / response)². Critically damped by default; a little bounce only where something
+ * arrives with momentum. Springs start from the current value, so all of these interrupt
+ * cleanly mid-flight. The twin of `FuseMotion` on macOS.
+ */
+object FuseMotion {
+    /** Moves and state changes: response 0.35 s, no overshoot. */
+    fun <T> standard() = spring<T>(dampingRatio = 1f, stiffness = 322f)
+
+    /** Press feedback: response 0.2 s — quick enough to read as contact. */
+    fun <T> quick() = spring<T>(dampingRatio = 1f, stiffness = 987f)
+
+    /** Something landed — a clip crossed, a device answered: response 0.4 s, damping 0.8. */
+    fun <T> arrive() = spring<T>(dampingRatio = 0.8f, stiffness = 247f)
 }

@@ -158,7 +158,7 @@ export function ReportForm() {
       <button
         type="submit"
         disabled={state.kind === 'sending'}
-        className="justify-self-start rounded-2xl bg-gradient-to-b from-ember to-ember-deep px-7 py-3.5 font-semibold text-white transition-[filter] hover:brightness-110 disabled:opacity-60"
+        className="justify-self-start rounded-2xl bg-gradient-to-b from-ember to-ember-deep px-7 py-3.5 font-semibold text-white transition-[filter,scale] hover:brightness-110 press disabled:opacity-60"
       >
         {state.kind === 'sending' ? 'Sending…' : 'Send'}
       </button>

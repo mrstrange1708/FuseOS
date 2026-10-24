@@ -4,11 +4,15 @@ import com.fuseos.app.clipboard.SendOutcome
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
+import com.fuseos.app.ui.theme.FuseMotion
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +34,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -94,7 +102,7 @@ fun FuseShell() {
             Transfers.SendResult.Unreadable -> "Couldn't read that file."
             Transfers.SendResult.TooLarge -> "That file is over the 1 GB limit."
         }
-        message?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+        message?.let { ServiceLocator.clipIsland.error("File not sent", it) }
     }
 
     var tab by remember { mutableStateOf(FuseTab.Home) }
@@ -135,7 +143,26 @@ fun FuseShell() {
                 Spacer(Modifier.height(12.dp))
             }
 
-            Crossfade(targetState = tab, animationSpec = tween(180), label = "tab") { current ->
+            // The old tab leaves at once and the new one rises in on the spring, so two
+            // pages never sit on top of each other half-faded.
+            AnimatedContent(
+                targetState = tab,
+                // Scrolled content softens into the header instead of being sliced off by it.
+                modifier = Modifier
+                    .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+                    .drawWithContent {
+                        drawContent()
+                        drawRect(
+                            Brush.verticalGradient(listOf(Color.Transparent, Color.Black), endY = 16.dp.toPx()),
+                            blendMode = BlendMode.DstIn,
+                        )
+                    },
+                transitionSpec = {
+                    (fadeIn(tween(140, delayMillis = 40)) + slideInVertically(FuseMotion.standard()) { it / 80 })
+                        .togetherWith(fadeOut(tween(60)))
+                },
+                label = "tab",
+            ) { current ->
                 when (current) {
                     FuseTab.Home -> HomeScreen(
                         state = state,
@@ -161,7 +188,7 @@ fun FuseShell() {
                         },
                         onOpenTransfer = { id ->
                             if (!ServiceLocator.transfers.open(id)) {
-                                Toast.makeText(context, "That file has moved or been deleted.", Toast.LENGTH_SHORT).show()
+                                ServiceLocator.clipIsland.error("Can't open it", "That file has moved or been deleted.")
                             }
                         },
                     )
@@ -269,15 +296,18 @@ fun FuseShell() {
             }
         }
 
-        // Content fades out before it reaches the bar, rather than running into it.
+        // Content fades out before it reaches the bar, rather than running into it: solid
+        // by the bar's top edge, where the raised button would otherwise sit on text.
         Box(
             Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .height(120.dp)
+                .height(150.dp)
                 .background(
                     Brush.verticalGradient(
-                        listOf(Color.Transparent, MaterialTheme.colorScheme.background),
+                        0f to Color.Transparent,
+                        0.4f to MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
+                        1f to MaterialTheme.colorScheme.background,
                     ),
                 ),
         )
@@ -286,15 +316,11 @@ fun FuseShell() {
             onSelect = { tab = it },
             centreEnabled = linked,
             onCentreTap = {
-                Toast.makeText(
-                    context,
-                    when (viewModel.sendCurrentClipboard()) {
-                        SendOutcome.Sent -> "Sent to your Mac"
-                        SendOutcome.NotLinked -> "Your Mac isn't linked. Kept in History."
-                        SendOutcome.Nothing -> "Nothing on the clipboard to send"
-                    },
-                    Toast.LENGTH_SHORT,
-                ).show()
+                // Sent and Not linked are already said in the island, by the clip's own
+                // event (FuseConnectionService); only "nothing to send" has no event.
+                if (viewModel.sendCurrentClipboard() == SendOutcome.Nothing) {
+                    ServiceLocator.clipIsland.error("Nothing to send", "Your clipboard is empty.")
+                }
             },
             modifier = Modifier
                 .align(Alignment.BottomCenter)

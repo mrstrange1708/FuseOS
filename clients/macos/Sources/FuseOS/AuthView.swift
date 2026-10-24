@@ -48,7 +48,7 @@ struct LoginView: View {
             HStack {
                 Spacer()
                 Button("Forgot password?") { viewModel.forgotPassword() }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(FuseColor.accent)
                     .disabled(viewModel.isSubmitting)

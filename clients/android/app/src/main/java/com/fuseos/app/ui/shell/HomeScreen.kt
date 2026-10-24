@@ -1,11 +1,12 @@
 package com.fuseos.app.ui.shell
 
+import com.fuseos.app.ui.theme.FuseMotion
+import com.fuseos.app.ui.components.pressable
 import com.fuseos.app.ui.components.glassCard
 import androidx.compose.foundation.background
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.spring
 import androidx.compose.material3.Button
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -32,7 +33,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -128,9 +128,8 @@ fun HomeScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
+                    .pressable(onSendFile, enabled = linked, shape = RoundedCornerShape(14.dp))
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = if (linked) 0.10f else 0.04f))
-                    .clickable(enabled = linked, onClick = onSendFile)
                     .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -154,15 +153,16 @@ fun HomeScreen(
                     )
                 }
             }
+            // The two actions are two tiles, not one slab: a gap keeps their edges apart.
+            Spacer(Modifier.height(8.dp))
             // Handoff, phone → Mac, right under the send row — the list of transfers follows.
             // the link on this phone's clipboard, in the Mac's browser.
             // Enabled even unlinked, so a tap is answered (in the island) rather than ignored.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
+                    .pressable(onOpenLinkOnMac, shape = RoundedCornerShape(14.dp))
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = if (linked) 0.10f else 0.04f))
-                    .clickable(onClick = onOpenLinkOnMac)
                     .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -198,7 +198,7 @@ fun HomeScreen(
                     "See all",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onSeeAll).padding(4.dp),
+                    modifier = Modifier.pressable(onSeeAll, shape = RoundedCornerShape(8.dp)).padding(4.dp),
                 )
             },
         ) {
@@ -379,7 +379,7 @@ private fun Endpoint(icon: ImageVector, name: String, lit: Boolean, catchKey: An
     LaunchedEffect(catchKey) {
         if (catchKey == null) return@LaunchedEffect
         bump.snapTo(1.16f)
-        bump.animateTo(1f, spring(dampingRatio = 0.35f, stiffness = 500f))
+        bump.animateTo(1f, FuseMotion.arrive())
     }
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(92.dp)) {
         Box(

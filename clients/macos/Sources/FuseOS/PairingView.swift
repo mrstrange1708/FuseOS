@@ -31,7 +31,7 @@ struct PairingView: View {
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(FuseColor.ink)
                 Spacer()
-                Button("Close") { dismiss() }.buttonStyle(.plain).foregroundStyle(FuseColor.muted)
+                Button("Close") { dismiss() }.buttonStyle(.pressable).foregroundStyle(FuseColor.muted)
             }
             Spacer().frame(height: 18)
 

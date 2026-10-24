@@ -94,7 +94,7 @@ struct MenuBarContent: View {
         } isTargeted: { dropTargeted = $0 }
         // A link coming up ends the search, whichever way it came.
         .onChange(of: viewModel.connected) { connected in
-            if !connected.isEmpty { withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { search = .idle } }
+            if !connected.isEmpty { withAnimation(FuseMotion.standard) { search = .idle } }
         }
         // Gives up after 12 s: long enough for a dial and a TLS-free LAN handshake, short
         // enough that someone watching the radar is not left wondering.
@@ -102,7 +102,7 @@ struct MenuBarContent: View {
             guard search == .searching else { return }
             try? await Task.sleep(nanoseconds: 12_000_000_000)
             guard !Task.isCancelled, search == .searching, viewModel.connected.isEmpty else { return }
-            withAnimation { search = .notFound }
+            withAnimation(FuseMotion.standard) { search = .notFound }
         }
     }
 
@@ -210,7 +210,7 @@ struct MenuBarContent: View {
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(FuseColor.outline.opacity(0.5), lineWidth: 1))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
     }
 
     private func nowPlayingCard(_ track: NowPlaying) -> some View {
@@ -237,12 +237,12 @@ struct MenuBarContent: View {
                         .font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
                         .frame(width: 30, height: 30).background(Circle().fill(FuseColor.accent))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
                 Button { viewModel.media.next() } label: {
                     Image(systemName: "forward.fill").font(.system(size: 11, weight: .bold))
                         .foregroundStyle(FuseColor.ink).frame(width: 26, height: 26)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
             }
         }
     }
@@ -379,7 +379,7 @@ struct MenuBarContent: View {
     }
 
     private func startSearch() {
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { search = .searching }
+        withAnimation(FuseMotion.standard) { search = .searching }
         Task { await viewModel.connect() }
     }
 
@@ -401,7 +401,7 @@ struct MenuBarContent: View {
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.pressable)
                             .foregroundStyle(FuseColor.muted)
                             .help("Cancel")
                         }
@@ -432,16 +432,16 @@ struct MenuBarContent: View {
                             onSend: { viewModel.sendToPhone(entry) },
                         ) {
                             viewModel.copyToClipboard(entry)
-                            withAnimation(.easeOut(duration: 0.15)) { copiedId = entry.id }
+                            withAnimation(FuseMotion.quick) { copiedId = entry.id }
                             Task {
                                 try? await Task.sleep(nanoseconds: 1_300_000_000)
-                                if copiedId == entry.id { withAnimation { copiedId = nil } }
+                                if copiedId == entry.id { withAnimation(FuseMotion.standard) { copiedId = nil } }
                             }
                         }
                         .transition(.asymmetric(insertion: .move(edge: .top).combined(with: .opacity), removal: .opacity))
                     }
                 }
-                .animation(.spring(response: 0.45, dampingFraction: 0.8), value: viewModel.history.first?.id)
+                .animation(FuseMotion.arrive, value: viewModel.history.first?.id)
             }
         }
     }
@@ -607,11 +607,12 @@ private struct ClipRowButton: View {
                         .frame(width: 26, height: 26)
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                 } else {
-                    Image(systemName: "text.alignleft")
+                    let tint = entry.fromSelf ? FuseColor.muted : FuseColor.accent
+                    Image(systemName: entry.symbol)
                         .font(.system(size: 11))
-                        .foregroundStyle(FuseColor.accent)
+                        .foregroundStyle(tint)
                         .frame(width: 26, height: 26)
-                        .background(FuseColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(summary)
@@ -635,10 +636,10 @@ private struct ClipRowButton: View {
                 } else if hovering, let onSend {
                     Button {
                         let ok = onSend()
-                        withAnimation(.easeOut(duration: 0.15)) { sent = ok }
+                        withAnimation(FuseMotion.quick) { sent = ok }
                         Task {
                             try? await Task.sleep(nanoseconds: 1_600_000_000)
-                            withAnimation { sent = nil }
+                            withAnimation(FuseMotion.standard) { sent = nil }
                         }
                     } label: {
                         Label("Send", systemImage: "arrow.up.right")
@@ -648,7 +649,7 @@ private struct ClipRowButton: View {
                             .frame(height: 22)
                             .background(Capsule().fill(FuseColor.accent))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
                     .help("Send to \(peerName ?? "your phone")")
                     .transition(.opacity)
                 } else {
@@ -662,8 +663,8 @@ private struct ClipRowButton: View {
             .background(hovering ? FuseColor.surfaceAlt : .clear, in: RoundedRectangle(cornerRadius: 8))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .onHover { inside in withAnimation(.easeOut(duration: 0.12)) { hovering = inside } }
+        .buttonStyle(.pressable(scale: 0.99))
+        .onHover { inside in withAnimation(FuseMotion.quick) { hovering = inside } }
         .help("Copy to this Mac's clipboard")
     }
 

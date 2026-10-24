@@ -48,21 +48,21 @@ export function Navbar() {
           {LINKS.map((l) => (
             <a
               key={l.href}
-              className="hidden rounded-full px-3 py-2 transition-colors hover:bg-white/5 hover:text-ink md:inline"
+              className="press hidden rounded-full px-3 py-2 transition-[color,background-color,scale] hover:bg-white/5 hover:text-ink md:inline"
               href={l.href}
             >
               {l.label}
             </a>
           ))}
           <a
-            className="rounded-full p-2 transition-colors hover:bg-white/5 hover:text-ink"
+            className="press rounded-full p-2 transition-[color,background-color,scale] hover:bg-white/5 hover:text-ink"
             href={GITHUB}
             aria-label="Source on GitHub"
           >
             <IconBrandGithub size={19} />
           </a>
           <a
-            className="rounded-full bg-gradient-to-b from-ember to-ember-deep px-4 py-2 font-semibold text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.25)] transition-[filter] hover:brightness-110"
+            className="rounded-full bg-gradient-to-b from-ember to-ember-deep px-4 py-2 font-semibold text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.25)] transition-[filter,scale] hover:brightness-110 press"
             href="/download"
           >
             Download
